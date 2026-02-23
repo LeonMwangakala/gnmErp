@@ -21,6 +21,7 @@ import {
   AudioWaveform,
   Command,
   GalleryVerticalEnd,
+  UserCircle,
 } from 'lucide-react'
 import { ClerkLogo } from '@/assets/clerk-logo'
 import { type SidebarData } from '../types'
@@ -33,9 +34,9 @@ export const sidebarData: SidebarData = {
   },
   teams: [
     {
-      name: 'Shadcn Admin',
+      name: 'ERP System',
       logo: Command,
-      plan: 'Vite + ShadcnUI',
+      plan: 'Enterprise Resource Planning',
     },
     {
       name: 'Acme Inc',
@@ -54,8 +55,13 @@ export const sidebarData: SidebarData = {
       items: [
         {
           title: 'Dashboard',
-          url: '/',
+          url: '/home',
           icon: LayoutDashboard,
+        },
+        {
+          title: 'Customers',
+          url: '/customers',
+          icon: UserCircle,
         },
         {
           title: 'Tasks',

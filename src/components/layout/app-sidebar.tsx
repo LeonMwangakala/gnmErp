@@ -10,17 +10,17 @@ import {
 import { sidebarData } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
-import { TeamSwitcher } from './team-switcher'
+import { CompanySwitcher } from './company-switcher'
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
-        <TeamSwitcher teams={sidebarData.teams} />
+        <CompanySwitcher />
 
-        {/* Replace <TeamSwitch /> with the following <AppTitle />
-         /* if you want to use the normal app title instead of TeamSwitch dropdown */}
+        {/* Replace <CompanySwitcher /> with the following <AppTitle />
+         /* if you want to use the normal app title instead of Company Switcher dropdown */}
         {/* <AppTitle /> */}
       </SidebarHeader>
       <SidebarContent>
