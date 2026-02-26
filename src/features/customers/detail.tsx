@@ -148,7 +148,7 @@ export function CustomerDetail() {
       case 0:
         return <Badge variant='secondary'>Draft</Badge>
       case 1:
-        return <Badge variant='warning'>Sent</Badge>
+        return <Badge variant='outline' className='bg-yellow-500 text-white border-yellow-500'>Sent</Badge>
       case 2:
         return <Badge variant='destructive'>Unpaid</Badge>
       case 3:

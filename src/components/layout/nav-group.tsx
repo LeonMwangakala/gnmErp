@@ -106,20 +106,71 @@ function SidebarMenuCollapsible({
         </CollapsibleTrigger>
         <CollapsibleContent className='CollapsibleContent'>
           <SidebarMenuSub>
-            {item.items.map((subItem) => (
-              <SidebarMenuSubItem key={subItem.title}>
-                <SidebarMenuSubButton
-                  asChild
-                  isActive={checkIsActive(href, subItem)}
-                >
-                  <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
-                    {subItem.icon && <subItem.icon />}
-                    <span>{subItem.title}</span>
-                    {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
-                  </Link>
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            ))}
+            {item.items.map((subItem) => {
+              // Check if subItem has nested items (3rd level)
+              if (subItem.items && subItem.items.length > 0) {
+                return (
+                  <SidebarMenuSubItem key={subItem.title}>
+                    <Collapsible
+                      asChild
+                      defaultOpen={checkIsActive(href, subItem as NavItem, true)}
+                      className='group/collapsible-sub'
+                    >
+                      <>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuSubButton
+                            isActive={checkIsActive(href, subItem as NavItem)}
+                          >
+                            {subItem.icon && <subItem.icon />}
+                            <span>{subItem.title}</span>
+                            {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
+                            <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/collapsible-sub:rotate-90 rtl:rotate-180' />
+                          </SidebarMenuSubButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className='CollapsibleContent pl-4'>
+                          <SidebarMenuSub>
+                            {subItem.items.map((nestedItem) => (
+                              <SidebarMenuSubItem key={nestedItem.title}>
+                                <SidebarMenuSubButton
+                                  asChild
+                                  isActive={checkIsActive(href, nestedItem as NavItem)}
+                                >
+                                  <Link
+                                    to={nestedItem.url!}
+                                    onClick={() => setOpenMobile(false)}
+                                  >
+                                    {nestedItem.icon && <nestedItem.icon />}
+                                    <span>{nestedItem.title}</span>
+                                    {nestedItem.badge && (
+                                      <NavBadge>{nestedItem.badge}</NavBadge>
+                                    )}
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      </>
+                    </Collapsible>
+                  </SidebarMenuSubItem>
+                )
+              }
+              // Regular sub-item with URL
+              return (
+                <SidebarMenuSubItem key={subItem.title}>
+                  <SidebarMenuSubButton
+                    asChild
+                    isActive={checkIsActive(href, subItem as NavItem)}
+                  >
+                    <Link to={subItem.url!} onClick={() => setOpenMobile(false)}>
+                      {subItem.icon && <subItem.icon />}
+                      <span>{subItem.title}</span>
+                      {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
+                    </Link>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              )
+            })}
           </SidebarMenuSub>
         </CollapsibleContent>
       </SidebarMenuItem>

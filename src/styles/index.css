@@ -85,3 +85,21 @@
     height: 0;
   }
 }
+
+/* React Select styling to match Shadcn UI Select */
+.react-select-container {
+  width: 100%;
+}
+
+.react-select__control {
+  width: 100% !important;
+}
+
+.react-select__value-container {
+  padding: 0 12px !important;
+}
+
+.react-select__input-container {
+  margin: 0 !important;
+  padding: 0 !important;
+}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Eye, Download, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Eye, Download, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -26,29 +26,39 @@ import {
 } from '@/components/ui/select'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { customerApi, PaginationMeta } from '@/lib/api'
+import { invoiceApi, PaginationMeta } from '@/lib/api'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
-import { CustomerDetailModal } from './customer-detail-modal'
+import { Badge } from '@/components/ui/badge'
+import { InvoiceDetailModal } from './invoice-detail-modal'
 
-export interface Customer {
+export interface Invoice {
   id: number
-  customer_number: string
-  name: string
-  short_name: string
-  contact: string
-  email: string
-  tax_number: string
-  vrn: string
-  balance: number
-  balance_formatted: string
+  invoice_number: string
+  subject: string
+  customer_id: number
+  customer_name: string
+  issue_date: string
+  issue_date_raw: string
+  due_date: string
+  due_date_raw: string
+  is_overdue: boolean
+  amount: number
+  amount_formatted: string
+  tax: number
+  tax_formatted: string
+  discount: number
+  discount_formatted: string
+  due: number
+  due_formatted: string
+  status: number
+  status_label: string
 }
 
-export function Customers() {
-  const [customers, setCustomers] = useState<Customer[]>([])
+export function Invoices() {
+  const [invoices, setInvoices] = useState<Invoice[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedCustomers, setSelectedCustomers] = useState<number[]>([])
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null)
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [pagination, setPagination] = useState<PaginationMeta>({
     current_page: 1,
@@ -59,7 +69,7 @@ export function Customers() {
     to: null,
   })
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState('created_at')
+  const [sortBy, setSortBy] = useState('id')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [searchInput, setSearchInput] = useState('')
 
@@ -74,15 +84,15 @@ export function Customers() {
     }, 500)
 
     return () => clearTimeout(timer)
-  }, [searchInput]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchInput, search]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch customers when pagination, sort, or search changes
+  // Fetch invoices when pagination, sort, or search changes
   useEffect(() => {
-    fetchCustomers()
+    fetchInvoices()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.current_page, pagination.per_page, sortBy, sortOrder, search])
 
-  const fetchCustomers = async (
+  const fetchInvoices = async (
     page?: number,
     perPage?: number,
     searchTerm?: string
@@ -93,17 +103,17 @@ export function Customers() {
       const currentPerPage = perPage ?? pagination.per_page
       const currentSearch = searchTerm ?? search
 
-      const response = await customerApi.getCustomers({
+      const response = await invoiceApi.getInvoices({
         page: currentPage,
         per_page: currentPerPage,
         search: currentSearch || undefined,
         sort_by: sortBy,
         sort_order: sortOrder,
       })
-      setCustomers(response.data)
+      setInvoices(response.data)
       setPagination(response.pagination)
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to load customers')
+      toast.error(error.response?.data?.message || 'Failed to load invoices')
     } finally {
       setIsLoading(false)
     }
@@ -128,19 +138,38 @@ export function Customers() {
     }
   }
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedCustomers(customers.map((c) => c.id))
-    } else {
-      setSelectedCustomers([])
+  const renderSortIcon = (field: string) => {
+    if (sortBy === field) {
+      return sortOrder === 'asc' ? '↑' : '↓'
     }
+    return null
   }
 
-  const handleSelectCustomer = (id: number, checked: boolean) => {
-    if (checked) {
-      setSelectedCustomers([...selectedCustomers, id])
-    } else {
-      setSelectedCustomers(selectedCustomers.filter((cid) => cid !== id))
+  const getStatusBadge = (status: number, isOverdue: boolean) => {
+    if (isOverdue) {
+      return <Badge variant='destructive'>Overdue</Badge>
+    }
+    switch (status) {
+      case 0:
+        return <Badge variant='secondary'>Draft</Badge>
+      case 1:
+        return (
+          <Badge variant='outline' className='bg-yellow-500 text-white border-yellow-500'>
+            Sent
+          </Badge>
+        )
+      case 2:
+        return <Badge variant='destructive'>Unpaid</Badge>
+      case 3:
+        return <Badge variant='default'>Partial Paid</Badge>
+      case 4:
+        return (
+          <Badge variant='default' className='bg-green-500 text-white'>
+            Paid
+          </Badge>
+        )
+      default:
+        return <Badge variant='secondary'>Unknown</Badge>
     }
   }
 
@@ -149,16 +178,12 @@ export function Customers() {
       <Header>
         <div className='flex items-center justify-between w-full'>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>Customers</h1>
+            <h1 className='text-2xl font-bold tracking-tight'>Invoices</h1>
             <p className='text-muted-foreground'>
-              Manage your customers and their information
+              Manage your invoices and billing information
             </p>
           </div>
           <div className='flex items-center gap-2'>
-            <Button variant='outline' size='sm'>
-              <RefreshCw className='mr-2 h-4 w-4' />
-              Synchronize
-            </Button>
             <Button variant='outline' size='sm'>
               <Download className='mr-2 h-4 w-4' />
               Export
@@ -172,9 +197,9 @@ export function Customers() {
           <CardHeader>
             <div className='flex items-center justify-between'>
               <div>
-                <CardTitle>Customer List</CardTitle>
+                <CardTitle>Invoice List</CardTitle>
                 <CardDescription>
-                  View and manage all your customers
+                  View and manage all your invoices
                   {pagination.total > 0 && (
                     <span className='ml-2'>
                       ({pagination.from}-{pagination.to} of {pagination.total})
@@ -186,7 +211,7 @@ export function Customers() {
                 <div className='relative'>
                   <Search className='absolute left-2 top-2.5 h-4 w-4 text-muted-foreground' />
                   <Input
-                    placeholder='Search customers...'
+                    placeholder='Search invoices...'
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     className='pl-8 w-64'
@@ -196,15 +221,15 @@ export function Customers() {
                   value={pagination.per_page.toString()}
                   onValueChange={(value) => handlePerPageChange(Number(value))}
                 >
-                  <SelectTrigger className='w-32'>
-                    <SelectValue />
+                  <SelectTrigger className='h-8 w-[100px]'>
+                    <SelectValue placeholder='Per Page' />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='10'>10 per page</SelectItem>
-                    <SelectItem value='15'>15 per page</SelectItem>
-                    <SelectItem value='25'>25 per page</SelectItem>
-                    <SelectItem value='50'>50 per page</SelectItem>
-                    <SelectItem value='100'>100 per page</SelectItem>
+                  <SelectContent side='top'>
+                    {[10, 15, 25, 50, 100].map((pageSize) => (
+                      <SelectItem key={pageSize} value={String(pageSize)}>
+                        {pageSize} per page
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -215,96 +240,76 @@ export function Customers() {
               <div className='flex items-center justify-center py-8'>
                 <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
               </div>
-            ) : customers.length === 0 ? (
+            ) : invoices.length === 0 ? (
               <div className='text-center py-8 text-muted-foreground'>
-                No customers found
+                No invoices found
               </div>
             ) : (
               <div className='rounded-md border'>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className='w-12'>
-                        <input
-                          type='checkbox'
-                          checked={
-                            selectedCustomers.length === customers.length &&
-                            customers.length > 0
-                          }
-                          onChange={(e) => handleSelectAll(e.target.checked)}
-                          className='rounded border-gray-300'
-                        />
-                      </TableHead>
                       <TableHead>S/N</TableHead>
                       <TableHead
                         className='cursor-pointer hover:bg-muted'
-                        onClick={() => handleSort('customer_number')}
+                        onClick={() => handleSort('invoice_number')}
                       >
-                        Customer Number
-                        {sortBy === 'customer_number' && (
-                          <span className='ml-1'>{sortOrder === 'asc' ? '↑' : '↓'}</span>
-                        )}
+                        Invoice # {renderSortIcon('invoice_number')}
+                      </TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead
+                        className='cursor-pointer hover:bg-muted'
+                        onClick={() => handleSort('issue_date')}
+                      >
+                        Issue Date {renderSortIcon('issue_date')}
+                      </TableHead>
+                      <TableHead
+                        className='cursor-pointer hover:bg-muted text-right'
+                        onClick={() => handleSort('amount')}
+                      >
+                        Amount {renderSortIcon('amount')}
+                      </TableHead>
+                      <TableHead
+                        className='cursor-pointer hover:bg-muted text-right'
+                        onClick={() => handleSort('due')}
+                      >
+                        Due {renderSortIcon('due')}
                       </TableHead>
                       <TableHead
                         className='cursor-pointer hover:bg-muted'
-                        onClick={() => handleSort('name')}
+                        onClick={() => handleSort('due_date')}
                       >
-                        Customer Name
-                        {sortBy === 'name' && (
-                          <span className='ml-1'>{sortOrder === 'asc' ? '↑' : '↓'}</span>
-                        )}
+                        Due Date {renderSortIcon('due_date')}
                       </TableHead>
-                      <TableHead>Short Name</TableHead>
-                      <TableHead>Phone Number</TableHead>
-                      <TableHead
-                        className='cursor-pointer hover:bg-muted'
-                        onClick={() => handleSort('email')}
-                      >
-                        Email
-                        {sortBy === 'email' && (
-                          <span className='ml-1'>{sortOrder === 'asc' ? '↑' : '↓'}</span>
-                        )}
-                      </TableHead>
-                      <TableHead>TIN</TableHead>
-                      <TableHead>VRN</TableHead>
-                      <TableHead
-                        className='cursor-pointer hover:bg-muted'
-                        onClick={() => handleSort('balance')}
-                      >
-                        Balance
-                        {sortBy === 'balance' && (
-                          <span className='ml-1'>{sortOrder === 'asc' ? '↑' : '↓'}</span>
-                        )}
-                      </TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead className='text-right'>Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {customers.map((customer, index) => (
-                      <TableRow key={customer.id}>
-                        <TableCell>
-                          <input
-                            type='checkbox'
-                            checked={selectedCustomers.includes(customer.id)}
-                            onChange={(e) =>
-                              handleSelectCustomer(customer.id, e.target.checked)
-                            }
-                            className='rounded border-gray-300'
-                          />
-                        </TableCell>
+                    {invoices.map((invoice, index) => (
+                      <TableRow key={invoice.id}>
                         <TableCell>
                           {(pagination.current_page - 1) * pagination.per_page + index + 1}
                         </TableCell>
                         <TableCell className='font-medium'>
-                          {customer.customer_number}
+                          {invoice.invoice_number}
                         </TableCell>
-                        <TableCell>{customer.name}</TableCell>
-                        <TableCell>{customer.short_name}</TableCell>
-                        <TableCell>{customer.contact}</TableCell>
-                        <TableCell>{customer.email}</TableCell>
-                        <TableCell>{customer.tax_number || '-'}</TableCell>
-                        <TableCell>{customer.vrn || '-'}</TableCell>
-                        <TableCell>{customer.balance_formatted}</TableCell>
+                        <TableCell>{invoice.customer_name}</TableCell>
+                        <TableCell>{invoice.issue_date || '-'}</TableCell>
+                        <TableCell className='text-right'>
+                          {invoice.amount_formatted}
+                        </TableCell>
+                        <TableCell className='text-right'>
+                          {invoice.due_formatted}
+                        </TableCell>
+                        <TableCell>
+                          {invoice.is_overdue ? (
+                            <span className='text-destructive'>{invoice.due_date}</span>
+                          ) : (
+                            invoice.due_date
+                          )}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(invoice.status, invoice.is_overdue)}</TableCell>
                         <TableCell className='text-right' onClick={(e) => e.stopPropagation()}>
                           <div className='flex items-center justify-end gap-2'>
                             <Button
@@ -316,7 +321,7 @@ export function Customers() {
                               onClick={(e) => {
                                 e.preventDefault()
                                 e.stopPropagation()
-                                setSelectedCustomerId(customer.id)
+                                setSelectedInvoiceId(invoice.id)
                                 setIsModalOpen(true)
                               }}
                             >
@@ -335,7 +340,7 @@ export function Customers() {
             {!isLoading && pagination.total > 0 && (
               <div className='flex items-center justify-between mt-4 pt-4 border-t'>
                 <div className='text-sm text-muted-foreground'>
-                  Showing {pagination.from} to {pagination.to} of {pagination.total} customers
+                  Showing {pagination.from} to {pagination.to} of {pagination.total} invoices
                 </div>
                 <div className='flex items-center gap-2'>
                   <Button
@@ -388,8 +393,8 @@ export function Customers() {
         </Card>
       </Main>
 
-      <CustomerDetailModal
-        customerId={selectedCustomerId}
+      <InvoiceDetailModal
+        invoiceId={selectedInvoiceId}
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
       />

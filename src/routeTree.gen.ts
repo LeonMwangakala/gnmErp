@@ -11,8 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as PaymentsRouteImport } from './routes/payments'
+import { Route as InvoicesRouteImport } from './routes/invoices'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as CustomersRouteImport } from './routes/customers'
+import { Route as CreditNotesRouteImport } from './routes/credit-notes'
 import { Route as ClerkRouteRouteImport } from './routes/clerk/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
@@ -39,6 +42,12 @@ import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authentica
 import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/clerk/_authenticated/user-management'
 import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-up'
 import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
+import { Route as AccountingIncomeRevenueRouteImport } from './routes/accounting.income.revenue'
+import { Route as AccountingExpensesPaymentsRouteImport } from './routes/accounting.expenses.payments'
+import { Route as AccountingExpensesDebitNotesRouteImport } from './routes/accounting.expenses.debit-notes'
+import { Route as AccountingExpensesBillsRouteImport } from './routes/accounting.expenses.bills'
+import { Route as AccountingBankingTransferRouteImport } from './routes/accounting.banking.transfer'
+import { Route as AccountingBankingAccountRouteImport } from './routes/accounting.banking.account'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
@@ -55,6 +64,16 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PaymentsRoute = PaymentsRouteImport.update({
+  id: '/payments',
+  path: '/payments',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvoicesRoute = InvoicesRouteImport.update({
+  id: '/invoices',
+  path: '/invoices',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
@@ -63,6 +82,11 @@ const HomeRoute = HomeRouteImport.update({
 const CustomersRoute = CustomersRouteImport.update({
   id: '/customers',
   path: '/customers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CreditNotesRoute = CreditNotesRouteImport.update({
+  id: '/credit-notes',
+  path: '/credit-notes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClerkRouteRoute = ClerkRouteRouteImport.update({
@@ -196,6 +220,40 @@ const ClerkauthSignInRoute = ClerkauthSignInRouteImport.update({
   path: '/sign-in',
   getParentRoute: () => ClerkauthRouteRoute,
 } as any)
+const AccountingIncomeRevenueRoute = AccountingIncomeRevenueRouteImport.update({
+  id: '/accounting/income/revenue',
+  path: '/accounting/income/revenue',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountingExpensesPaymentsRoute =
+  AccountingExpensesPaymentsRouteImport.update({
+    id: '/accounting/expenses/payments',
+    path: '/accounting/expenses/payments',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AccountingExpensesDebitNotesRoute =
+  AccountingExpensesDebitNotesRouteImport.update({
+    id: '/accounting/expenses/debit-notes',
+    path: '/accounting/expenses/debit-notes',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AccountingExpensesBillsRoute = AccountingExpensesBillsRouteImport.update({
+  id: '/accounting/expenses/bills',
+  path: '/accounting/expenses/bills',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountingBankingTransferRoute =
+  AccountingBankingTransferRouteImport.update({
+    id: '/accounting/banking/transfer',
+    path: '/accounting/banking/transfer',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AccountingBankingAccountRoute =
+  AccountingBankingAccountRouteImport.update({
+    id: '/accounting/banking/account',
+    path: '/accounting/banking/account',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedSettingsNotificationsRoute =
   AuthenticatedSettingsNotificationsRouteImport.update({
     id: '/notifications',
@@ -230,8 +288,11 @@ const AuthenticatedErrorsErrorRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
+  '/credit-notes': typeof CreditNotesRoute
   '/customers': typeof CustomersRouteWithChildren
   '/home': typeof HomeRoute
+  '/invoices': typeof InvoicesRoute
+  '/payments': typeof PaymentsRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
@@ -251,6 +312,12 @@ export interface FileRoutesByFullPath {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/accounting/banking/account': typeof AccountingBankingAccountRoute
+  '/accounting/banking/transfer': typeof AccountingBankingTransferRoute
+  '/accounting/expenses/bills': typeof AccountingExpensesBillsRoute
+  '/accounting/expenses/debit-notes': typeof AccountingExpensesDebitNotesRoute
+  '/accounting/expenses/payments': typeof AccountingExpensesPaymentsRoute
+  '/accounting/income/revenue': typeof AccountingIncomeRevenueRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
@@ -263,8 +330,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
+  '/credit-notes': typeof CreditNotesRoute
   '/customers': typeof CustomersRouteWithChildren
   '/home': typeof HomeRoute
+  '/invoices': typeof InvoicesRoute
+  '/payments': typeof PaymentsRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
   '/forgot-password': typeof authForgotPasswordRoute
@@ -284,6 +354,12 @@ export interface FileRoutesByTo {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/accounting/banking/account': typeof AccountingBankingAccountRoute
+  '/accounting/banking/transfer': typeof AccountingBankingTransferRoute
+  '/accounting/expenses/bills': typeof AccountingExpensesBillsRoute
+  '/accounting/expenses/debit-notes': typeof AccountingExpensesDebitNotesRoute
+  '/accounting/expenses/payments': typeof AccountingExpensesPaymentsRoute
+  '/accounting/income/revenue': typeof AccountingIncomeRevenueRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
@@ -298,8 +374,11 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/clerk': typeof ClerkRouteRouteWithChildren
+  '/credit-notes': typeof CreditNotesRoute
   '/customers': typeof CustomersRouteWithChildren
   '/home': typeof HomeRoute
+  '/invoices': typeof InvoicesRoute
+  '/payments': typeof PaymentsRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
@@ -322,6 +401,12 @@ export interface FileRoutesById {
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/accounting/banking/account': typeof AccountingBankingAccountRoute
+  '/accounting/banking/transfer': typeof AccountingBankingTransferRoute
+  '/accounting/expenses/bills': typeof AccountingExpensesBillsRoute
+  '/accounting/expenses/debit-notes': typeof AccountingExpensesDebitNotesRoute
+  '/accounting/expenses/payments': typeof AccountingExpensesPaymentsRoute
+  '/accounting/income/revenue': typeof AccountingIncomeRevenueRoute
   '/clerk/(auth)/sign-in': typeof ClerkauthSignInRoute
   '/clerk/(auth)/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/_authenticated/user-management': typeof ClerkAuthenticatedUserManagementRoute
@@ -337,8 +422,11 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/clerk'
+    | '/credit-notes'
     | '/customers'
     | '/home'
+    | '/invoices'
+    | '/payments'
     | '/privacy'
     | '/terms'
     | '/settings'
@@ -358,6 +446,12 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/notifications'
+    | '/accounting/banking/account'
+    | '/accounting/banking/transfer'
+    | '/accounting/expenses/bills'
+    | '/accounting/expenses/debit-notes'
+    | '/accounting/expenses/payments'
+    | '/accounting/income/revenue'
     | '/clerk/sign-in'
     | '/clerk/sign-up'
     | '/clerk/user-management'
@@ -370,8 +464,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/clerk'
+    | '/credit-notes'
     | '/customers'
     | '/home'
+    | '/invoices'
+    | '/payments'
     | '/privacy'
     | '/terms'
     | '/forgot-password'
@@ -391,6 +488,12 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/notifications'
+    | '/accounting/banking/account'
+    | '/accounting/banking/transfer'
+    | '/accounting/expenses/bills'
+    | '/accounting/expenses/debit-notes'
+    | '/accounting/expenses/payments'
+    | '/accounting/income/revenue'
     | '/clerk/sign-in'
     | '/clerk/sign-up'
     | '/clerk/user-management'
@@ -404,8 +507,11 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authenticated'
     | '/clerk'
+    | '/credit-notes'
     | '/customers'
     | '/home'
+    | '/invoices'
+    | '/payments'
     | '/privacy'
     | '/terms'
     | '/_authenticated/settings'
@@ -428,6 +534,12 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/notifications'
+    | '/accounting/banking/account'
+    | '/accounting/banking/transfer'
+    | '/accounting/expenses/bills'
+    | '/accounting/expenses/debit-notes'
+    | '/accounting/expenses/payments'
+    | '/accounting/income/revenue'
     | '/clerk/(auth)/sign-in'
     | '/clerk/(auth)/sign-up'
     | '/clerk/_authenticated/user-management'
@@ -442,8 +554,11 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ClerkRouteRoute: typeof ClerkRouteRouteWithChildren
+  CreditNotesRoute: typeof CreditNotesRoute
   CustomersRoute: typeof CustomersRouteWithChildren
   HomeRoute: typeof HomeRoute
+  InvoicesRoute: typeof InvoicesRoute
+  PaymentsRoute: typeof PaymentsRoute
   PrivacyRoute: typeof PrivacyRoute
   TermsRoute: typeof TermsRoute
   authForgotPasswordRoute: typeof authForgotPasswordRoute
@@ -456,6 +571,12 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  AccountingBankingAccountRoute: typeof AccountingBankingAccountRoute
+  AccountingBankingTransferRoute: typeof AccountingBankingTransferRoute
+  AccountingExpensesBillsRoute: typeof AccountingExpensesBillsRoute
+  AccountingExpensesDebitNotesRoute: typeof AccountingExpensesDebitNotesRoute
+  AccountingExpensesPaymentsRoute: typeof AccountingExpensesPaymentsRoute
+  AccountingIncomeRevenueRoute: typeof AccountingIncomeRevenueRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -474,6 +595,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/payments': {
+      id: '/payments'
+      path: '/payments'
+      fullPath: '/payments'
+      preLoaderRoute: typeof PaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invoices': {
+      id: '/invoices'
+      path: '/invoices'
+      fullPath: '/invoices'
+      preLoaderRoute: typeof InvoicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/home': {
       id: '/home'
       path: '/home'
@@ -486,6 +621,13 @@ declare module '@tanstack/react-router' {
       path: '/customers'
       fullPath: '/customers'
       preLoaderRoute: typeof CustomersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/credit-notes': {
+      id: '/credit-notes'
+      path: '/credit-notes'
+      fullPath: '/credit-notes'
+      preLoaderRoute: typeof CreditNotesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clerk': {
@@ -670,6 +812,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClerkauthSignInRouteImport
       parentRoute: typeof ClerkauthRouteRoute
     }
+    '/accounting/income/revenue': {
+      id: '/accounting/income/revenue'
+      path: '/accounting/income/revenue'
+      fullPath: '/accounting/income/revenue'
+      preLoaderRoute: typeof AccountingIncomeRevenueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accounting/expenses/payments': {
+      id: '/accounting/expenses/payments'
+      path: '/accounting/expenses/payments'
+      fullPath: '/accounting/expenses/payments'
+      preLoaderRoute: typeof AccountingExpensesPaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accounting/expenses/debit-notes': {
+      id: '/accounting/expenses/debit-notes'
+      path: '/accounting/expenses/debit-notes'
+      fullPath: '/accounting/expenses/debit-notes'
+      preLoaderRoute: typeof AccountingExpensesDebitNotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accounting/expenses/bills': {
+      id: '/accounting/expenses/bills'
+      path: '/accounting/expenses/bills'
+      fullPath: '/accounting/expenses/bills'
+      preLoaderRoute: typeof AccountingExpensesBillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accounting/banking/transfer': {
+      id: '/accounting/banking/transfer'
+      path: '/accounting/banking/transfer'
+      fullPath: '/accounting/banking/transfer'
+      preLoaderRoute: typeof AccountingBankingTransferRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accounting/banking/account': {
+      id: '/accounting/banking/account'
+      path: '/accounting/banking/account'
+      fullPath: '/accounting/banking/account'
+      preLoaderRoute: typeof AccountingBankingAccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/settings/notifications': {
       id: '/_authenticated/settings/notifications'
       path: '/notifications'
@@ -814,8 +998,11 @@ const CustomersRouteWithChildren = CustomersRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ClerkRouteRoute: ClerkRouteRouteWithChildren,
+  CreditNotesRoute: CreditNotesRoute,
   CustomersRoute: CustomersRouteWithChildren,
   HomeRoute: HomeRoute,
+  InvoicesRoute: InvoicesRoute,
+  PaymentsRoute: PaymentsRoute,
   PrivacyRoute: PrivacyRoute,
   TermsRoute: TermsRoute,
   authForgotPasswordRoute: authForgotPasswordRoute,
@@ -828,6 +1015,12 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  AccountingBankingAccountRoute: AccountingBankingAccountRoute,
+  AccountingBankingTransferRoute: AccountingBankingTransferRoute,
+  AccountingExpensesBillsRoute: AccountingExpensesBillsRoute,
+  AccountingExpensesDebitNotesRoute: AccountingExpensesDebitNotesRoute,
+  AccountingExpensesPaymentsRoute: AccountingExpensesPaymentsRoute,
+  AccountingIncomeRevenueRoute: AccountingIncomeRevenueRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

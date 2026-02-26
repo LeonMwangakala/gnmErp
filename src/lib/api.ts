@@ -149,4 +149,401 @@ export const customerApi = {
       },
     }
   },
+  searchCustomers: async (search: string, limit: number = 20): Promise<any[]> => {
+    const response = await api.get('/customers/search', {
+      params: { search, limit },
+    })
+    return response.data.data || []
+  },
 }
+
+export const invoiceApi = {
+  getInvoices: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/invoices', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getInvoice: async (id: number) => {
+    const response = await api.get(`/invoices/${id}`)
+    return response.data.data
+  },
+  getInvoicePayments: async (invoiceId: number) => {
+    const response = await api.get(`/invoices/${invoiceId}/payments`)
+    return {
+      data: response.data.data || [],
+      total_paid: response.data.total_paid || 0,
+      total_paid_formatted: response.data.total_paid_formatted || '0.00',
+    }
+  },
+  getInvoiceCreditNotes: async (invoiceId: number) => {
+    const response = await api.get(`/invoices/${invoiceId}/credit-notes`)
+    return {
+      data: response.data.data || [],
+      total_credit_note: response.data.total_credit_note || 0,
+      total_credit_note_formatted: response.data.total_credit_note_formatted || '0.00',
+    }
+  },
+}
+
+export const paymentApi = {
+  getPayments: async (params?: PaginationParams & { invoice_id?: number }): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/payments', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+
+  getPaymentFormData: async () => {
+    const response = await api.get('/payment/form-data')
+    return response.data.data || { currencies: [], accounts: [], invoices: [] }
+  },
+
+  createPayment: async (formData: FormData) => {
+    const response = await api.post('/invoice-payments', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+  searchInvoices: async (search: string, limit: number = 20): Promise<any[]> => {
+    const response = await api.get('/payments/search-invoices', {
+      params: { search, limit },
+    })
+    return response.data.data || []
+  },
+}
+
+export const creditNoteApi = {
+  getCreditNotes: async (params?: PaginationParams & { invoice_id?: number }): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/credit-notes', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getCreditNoteFormData: async (): Promise<any> => {
+    const response = await api.get('/credit-note/form-data')
+    return response.data.data || { currencies: [] }
+  },
+  createCreditNote: async (data: FormData): Promise<any> => {
+    const response = await api.post('/credit-notes', data, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+  searchInvoices: async (params: { search: string; limit?: number }): Promise<any> => {
+    const response = await api.get('/payments/search-invoices', { params })
+    return response.data
+  },
+}
+
+export const bankAccountApi = {
+  getBankAccounts: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/bank-accounts', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getBankAccount: async (id: number): Promise<any> => {
+    const response = await api.get(`/bank-accounts/${id}`)
+    return response.data.data
+  },
+  createBankAccount: async (data: {
+    holder_name: string
+    bank_name: string
+    account_number: string
+    opening_balance: number
+    contact_number: string
+    bank_address?: string
+  }): Promise<any> => {
+    const response = await api.post('/bank-accounts', data)
+    return response.data
+  },
+  updateBankAccount: async (
+    id: number,
+    data: {
+      holder_name: string
+      bank_name: string
+      account_number: string
+      opening_balance: number
+      contact_number: string
+      bank_address?: string
+    }
+  ): Promise<any> => {
+    const response = await api.put(`/bank-accounts/${id}`, data)
+    return response.data
+  },
+  deleteBankAccount: async (id: number): Promise<any> => {
+    const response = await api.delete(`/bank-accounts/${id}`)
+    return response.data
+  },
+}
+
+export const bankTransferApi = {
+  getBankTransfers: async (params?: PaginationParams & {
+    date?: string
+    from_account?: number
+    to_account?: number
+  }): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/bank-transfers', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getBankAccounts: async (): Promise<any[]> => {
+    try {
+      const response = await api.get('/bank-transfers/accounts')
+      return response.data.data || []
+    } catch (error: any) {
+      console.error('Error fetching bank accounts:', error)
+      return []
+    }
+  },
+  getBankTransfer: async (id: number): Promise<any> => {
+    const response = await api.get(`/bank-transfers/${id}`)
+    return response.data.data
+  },
+  createBankTransfer: async (data: {
+    from_account: number
+    to_account: number
+    amount: number
+    date: string
+    reference?: string
+    description?: string
+  }): Promise<any> => {
+    const response = await api.post('/bank-transfers', data)
+    return response.data
+  },
+  updateBankTransfer: async (
+    id: number,
+    data: {
+      from_account: number
+      to_account: number
+      amount: number
+      date: string
+      reference?: string
+      description?: string
+    }
+  ): Promise<any> => {
+    const response = await api.put(`/bank-transfers/${id}`, data)
+    return response.data
+  },
+  deleteBankTransfer: async (id: number): Promise<any> => {
+    const response = await api.delete(`/bank-transfers/${id}`)
+    return response.data
+  },
+}
+
+export const revenueApi = {
+  getRevenues: async (params?: PaginationParams & {
+    date?: string
+    customer?: number
+    account?: number
+    category?: number
+  }): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/revenues', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getFormData: async (): Promise<any> => {
+    const response = await api.get('/revenues/form-data')
+    return response.data.data || { accounts: [], categories: [], currencies: [] }
+  },
+  getRevenue: async (id: number): Promise<any> => {
+    const response = await api.get(`/revenues/${id}`)
+    return response.data.data
+  },
+  createRevenue: async (data: FormData): Promise<any> => {
+    const response = await api.post('/revenues', data, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+  updateRevenue: async (id: number, data: FormData): Promise<any> => {
+    const response = await api.put(`/revenues/${id}`, data, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+  deleteRevenue: async (id: number): Promise<any> => {
+    const response = await api.delete(`/revenues/${id}`)
+    return response.data
+  },
+}
+
+export const billApi = {
+  getBills: async (params?: PaginationParams & {
+    status?: number | string
+    vender_id?: number
+    bill_date?: string
+  }): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/bills', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getFormData: async (): Promise<any> => {
+    const response = await api.get('/bills/form-data')
+    return response.data.data || { vendors: [], categories: [], products: [], bill_number: '' }
+  },
+  getBill: async (id: number): Promise<any> => {
+    const response = await api.get(`/bills/${id}`)
+    return response.data.data
+  },
+  createBill: async (data: any): Promise<any> => {
+    const response = await api.post('/bills', data)
+    return response.data
+  },
+  exportBills: async (): Promise<any> => {
+    const response = await api.get('/bills/export')
+    return response.data
+  },
+}
+
+export const expensePaymentApi = {
+  getExpensePayments: async (params?: PaginationParams & {
+    vender_id?: number
+    account_id?: number
+    category_id?: number
+    date?: string
+  }): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/expense-payments', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getFormData: async (): Promise<any> => {
+    const response = await api.get('/expense-payments/form-data')
+    return response.data.data || { vendors: [], categories: [], accounts: [] }
+  },
+  getExpensePayment: async (id: number): Promise<any> => {
+    const response = await api.get(`/expense-payments/${id}`)
+    return response.data.data
+  },
+  createExpensePayment: async (data: FormData): Promise<any> => {
+    const response = await api.post('/expense-payments', data, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+  updateExpensePayment: async (id: number, data: FormData): Promise<any> => {
+    const response = await api.put(`/expense-payments/${id}`, data, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+  deleteExpensePayment: async (id: number): Promise<any> => {
+    const response = await api.delete(`/expense-payments/${id}`)
+    return response.data
+  },
+}
+
+export const debitNoteApi = {
+  getDebitNotes: async (params?: PaginationParams & {
+    bill_id?: number
+    vendor_id?: number
+    date?: string
+  }): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/debit-notes', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getFormData: async (): Promise<any> => {
+    const response = await api.get('/debit-notes/form-data')
+    return response.data.data || { bills: [] }
+  },
+  createDebitNote: async (data: any): Promise<any> => {
+    const response = await api.post('/debit-notes', data)
+    return response.data
+  },
+  deleteDebitNote: async (id: number): Promise<any> => {
+    const response = await api.delete(`/debit-notes/${id}`)
+    return response.data
+  },
+}
+
