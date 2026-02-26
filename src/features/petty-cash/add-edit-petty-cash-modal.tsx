@@ -333,7 +333,7 @@ export function AddEditPettyCashModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[900px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="!max-w-[1100px] sm:!max-w-[1100px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {expense ? 'Edit Petty Cash Expense' : 'New Petty Cash Expense'}
@@ -373,7 +373,7 @@ export function AddEditPettyCashModal({
             </div>
 
             {/* Basic Fields */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="date">
                   Date <span className="text-red-500">*</span>
@@ -395,7 +395,7 @@ export function AddEditPettyCashModal({
                   onValueChange={(value) => setForm({ ...form, currency: value })}
                   required
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select Currency" />
                   </SelectTrigger>
                   <SelectContent>
@@ -425,7 +425,7 @@ export function AddEditPettyCashModal({
                   onValueChange={handleReceiverForChange}
                   required
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -447,7 +447,7 @@ export function AddEditPettyCashModal({
                     onValueChange={handleReceiverChange}
                     required
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select receiver" />
                     </SelectTrigger>
                     <SelectContent>

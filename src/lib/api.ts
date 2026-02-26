@@ -635,3 +635,40 @@ export const pettyCashApi = {
   },
 }
 
+export const vendorApi = {
+  getVendors: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/vendors', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getVendor: async (id: number): Promise<any> => {
+    const response = await api.get(`/vendors/${id}`)
+    return response.data.data
+  },
+  createVendor: async (data: any): Promise<any> => {
+    const response = await api.post('/vendors', data)
+    return response.data
+  },
+  updateVendor: async (id: number, data: any): Promise<any> => {
+    const response = await api.put(`/vendors/${id}`, data)
+    return response.data
+  },
+  deleteVendor: async (id: number): Promise<any> => {
+    const response = await api.delete(`/vendors/${id}`)
+    return response.data
+  },
+  exportVendors: async (): Promise<any> => {
+    const response = await api.get('/vendors/export', { responseType: 'blob' })
+    return response.data
+  },
+}
+

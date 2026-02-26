@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VendorsRouteImport } from './routes/vendors'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PaymentsRouteImport } from './routes/payments'
@@ -56,6 +57,11 @@ import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_a
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 
+const VendorsRoute = VendorsRouteImport.update({
+  id: '/vendors',
+  path: '/vendors',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -309,6 +315,7 @@ export interface FileRoutesByFullPath {
   '/payments': typeof PaymentsRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
+  '/vendors': typeof VendorsRoute
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
@@ -353,6 +360,7 @@ export interface FileRoutesByTo {
   '/payments': typeof PaymentsRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
+  '/vendors': typeof VendorsRoute
   '/forgot-password': typeof authForgotPasswordRoute
   '/otp': typeof authOtpRoute
   '/sign-in': typeof authSignInRoute
@@ -399,6 +407,7 @@ export interface FileRoutesById {
   '/payments': typeof PaymentsRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
+  '/vendors': typeof VendorsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/clerk/(auth)': typeof ClerkauthRouteRouteWithChildren
   '/clerk/_authenticated': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -449,6 +458,7 @@ export interface FileRouteTypes {
     | '/payments'
     | '/privacy'
     | '/terms'
+    | '/vendors'
     | '/settings'
     | '/forgot-password'
     | '/otp'
@@ -493,6 +503,7 @@ export interface FileRouteTypes {
     | '/payments'
     | '/privacy'
     | '/terms'
+    | '/vendors'
     | '/forgot-password'
     | '/otp'
     | '/sign-in'
@@ -538,6 +549,7 @@ export interface FileRouteTypes {
     | '/payments'
     | '/privacy'
     | '/terms'
+    | '/vendors'
     | '/_authenticated/settings'
     | '/clerk/(auth)'
     | '/clerk/_authenticated'
@@ -587,6 +599,7 @@ export interface RootRouteChildren {
   PaymentsRoute: typeof PaymentsRoute
   PrivacyRoute: typeof PrivacyRoute
   TermsRoute: typeof TermsRoute
+  VendorsRoute: typeof VendorsRoute
   authForgotPasswordRoute: typeof authForgotPasswordRoute
   authOtpRoute: typeof authOtpRoute
   authSignInRoute: typeof authSignInRoute
@@ -609,6 +622,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/vendors': {
+      id: '/vendors'
+      path: '/vendors'
+      fullPath: '/vendors'
+      preLoaderRoute: typeof VendorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -1047,6 +1067,7 @@ const rootRouteChildren: RootRouteChildren = {
   PaymentsRoute: PaymentsRoute,
   PrivacyRoute: PrivacyRoute,
   TermsRoute: TermsRoute,
+  VendorsRoute: VendorsRoute,
   authForgotPasswordRoute: authForgotPasswordRoute,
   authOtpRoute: authOtpRoute,
   authSignInRoute: authSignInRoute,

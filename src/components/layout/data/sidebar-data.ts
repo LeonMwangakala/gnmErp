@@ -35,6 +35,7 @@ import {
   TrendingDown,
   Clipboard,
   FileCheck,
+  Store,
 } from 'lucide-react'
 import { ClerkLogo } from '@/assets/clerk-logo'
 import { type SidebarData } from '../types'
@@ -75,6 +76,11 @@ export const sidebarData: SidebarData = {
           title: 'Customers',
           url: '/customers',
           icon: UserCircle,
+        },
+        {
+          title: 'Vendors',
+          url: '/vendors',
+          icon: Store,
         },
         {
           title: 'Invoices',
