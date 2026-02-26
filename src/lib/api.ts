@@ -547,3 +547,46 @@ export const debitNoteApi = {
   },
 }
 
+export const pettyCashRequestApi = {
+  getPettyCashRequests: async (params?: PaginationParams & {
+    status?: string
+  }): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/petty-cash-requests', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getFormData: async (): Promise<any> => {
+    const response = await api.get('/petty-cash-requests/form-data')
+    return response.data.data || { bank_accounts: [] }
+  },
+  getPettyCashRequest: async (id: number): Promise<any> => {
+    const response = await api.get(`/petty-cash-requests/${id}`)
+    return response.data.data
+  },
+  createPettyCashRequest: async (data: any): Promise<any> => {
+    const response = await api.post('/petty-cash-requests', data)
+    return response.data
+  },
+  updatePettyCashRequest: async (id: number, data: any): Promise<any> => {
+    const response = await api.post('/petty-cash-requests', { ...data, hidden_id: id })
+    return response.data
+  },
+  approvePettyCashRequest: async (id: number, data: any): Promise<any> => {
+    const response = await api.post(`/petty-cash-requests/${id}/approve`, data)
+    return response.data
+  },
+  deletePettyCashRequest: async (id: number): Promise<any> => {
+    const response = await api.delete(`/petty-cash-requests/${id}`)
+    return response.data
+  },
+}
+
