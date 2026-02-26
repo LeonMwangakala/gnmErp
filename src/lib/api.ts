@@ -590,3 +590,48 @@ export const pettyCashRequestApi = {
   },
 }
 
+export const pettyCashApi = {
+  getPettyCashExpenses: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
+    const response = await api.get('/petty-cash', { params })
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 15,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+  getFormData: async (): Promise<any> => {
+    const response = await api.get('/petty-cash/form-data')
+    return response.data.data || { balance: 0, currencies: [], categories: [], petty_number: '' }
+  },
+  getReceiverNames: async (receiver_for: string): Promise<any> => {
+    const response = await api.get('/petty-cash/receiver-names', { params: { receiver_for } })
+    return response.data.data || []
+  },
+  getReceiverDetails: async (receiver: number, receiver_for: string): Promise<any> => {
+    const response = await api.get('/petty-cash/receiver-details', { params: { receiver, receiver_for } })
+    return response.data.data
+  },
+  getPettyCash: async (id: number): Promise<any> => {
+    const response = await api.get(`/petty-cash/${id}`)
+    return response.data.data
+  },
+  createPettyCash: async (data: any): Promise<any> => {
+    const response = await api.post('/petty-cash', data)
+    return response.data
+  },
+  updatePettyCash: async (id: number, data: any): Promise<any> => {
+    const response = await api.post('/petty-cash', { ...data, hidden_id: id })
+    return response.data
+  },
+  deletePettyCash: async (id: number): Promise<any> => {
+    const response = await api.delete(`/petty-cash/${id}`)
+    return response.data
+  },
+}
+

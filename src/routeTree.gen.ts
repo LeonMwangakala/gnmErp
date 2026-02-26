@@ -44,6 +44,7 @@ import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-
 import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
 import { Route as AccountingIncomeRevenueRouteImport } from './routes/accounting.income.revenue'
 import { Route as AccountingExpensesPettyCashRequestsRouteImport } from './routes/accounting.expenses.petty-cash-requests'
+import { Route as AccountingExpensesPettyCashRouteImport } from './routes/accounting.expenses.petty-cash'
 import { Route as AccountingExpensesPaymentsRouteImport } from './routes/accounting.expenses.payments'
 import { Route as AccountingExpensesDebitNotesRouteImport } from './routes/accounting.expenses.debit-notes'
 import { Route as AccountingExpensesBillsRouteImport } from './routes/accounting.expenses.bills'
@@ -232,6 +233,12 @@ const AccountingExpensesPettyCashRequestsRoute =
     path: '/accounting/expenses/petty-cash-requests',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AccountingExpensesPettyCashRoute =
+  AccountingExpensesPettyCashRouteImport.update({
+    id: '/accounting/expenses/petty-cash',
+    path: '/accounting/expenses/petty-cash',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AccountingExpensesPaymentsRoute =
   AccountingExpensesPaymentsRouteImport.update({
     id: '/accounting/expenses/payments',
@@ -324,6 +331,7 @@ export interface FileRoutesByFullPath {
   '/accounting/expenses/bills': typeof AccountingExpensesBillsRoute
   '/accounting/expenses/debit-notes': typeof AccountingExpensesDebitNotesRoute
   '/accounting/expenses/payments': typeof AccountingExpensesPaymentsRoute
+  '/accounting/expenses/petty-cash': typeof AccountingExpensesPettyCashRoute
   '/accounting/expenses/petty-cash-requests': typeof AccountingExpensesPettyCashRequestsRoute
   '/accounting/income/revenue': typeof AccountingIncomeRevenueRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
@@ -367,6 +375,7 @@ export interface FileRoutesByTo {
   '/accounting/expenses/bills': typeof AccountingExpensesBillsRoute
   '/accounting/expenses/debit-notes': typeof AccountingExpensesDebitNotesRoute
   '/accounting/expenses/payments': typeof AccountingExpensesPaymentsRoute
+  '/accounting/expenses/petty-cash': typeof AccountingExpensesPettyCashRoute
   '/accounting/expenses/petty-cash-requests': typeof AccountingExpensesPettyCashRequestsRoute
   '/accounting/income/revenue': typeof AccountingIncomeRevenueRoute
   '/clerk/sign-in': typeof ClerkauthSignInRoute
@@ -415,6 +424,7 @@ export interface FileRoutesById {
   '/accounting/expenses/bills': typeof AccountingExpensesBillsRoute
   '/accounting/expenses/debit-notes': typeof AccountingExpensesDebitNotesRoute
   '/accounting/expenses/payments': typeof AccountingExpensesPaymentsRoute
+  '/accounting/expenses/petty-cash': typeof AccountingExpensesPettyCashRoute
   '/accounting/expenses/petty-cash-requests': typeof AccountingExpensesPettyCashRequestsRoute
   '/accounting/income/revenue': typeof AccountingIncomeRevenueRoute
   '/clerk/(auth)/sign-in': typeof ClerkauthSignInRoute
@@ -461,6 +471,7 @@ export interface FileRouteTypes {
     | '/accounting/expenses/bills'
     | '/accounting/expenses/debit-notes'
     | '/accounting/expenses/payments'
+    | '/accounting/expenses/petty-cash'
     | '/accounting/expenses/petty-cash-requests'
     | '/accounting/income/revenue'
     | '/clerk/sign-in'
@@ -504,6 +515,7 @@ export interface FileRouteTypes {
     | '/accounting/expenses/bills'
     | '/accounting/expenses/debit-notes'
     | '/accounting/expenses/payments'
+    | '/accounting/expenses/petty-cash'
     | '/accounting/expenses/petty-cash-requests'
     | '/accounting/income/revenue'
     | '/clerk/sign-in'
@@ -551,6 +563,7 @@ export interface FileRouteTypes {
     | '/accounting/expenses/bills'
     | '/accounting/expenses/debit-notes'
     | '/accounting/expenses/payments'
+    | '/accounting/expenses/petty-cash'
     | '/accounting/expenses/petty-cash-requests'
     | '/accounting/income/revenue'
     | '/clerk/(auth)/sign-in'
@@ -589,6 +602,7 @@ export interface RootRouteChildren {
   AccountingExpensesBillsRoute: typeof AccountingExpensesBillsRoute
   AccountingExpensesDebitNotesRoute: typeof AccountingExpensesDebitNotesRoute
   AccountingExpensesPaymentsRoute: typeof AccountingExpensesPaymentsRoute
+  AccountingExpensesPettyCashRoute: typeof AccountingExpensesPettyCashRoute
   AccountingExpensesPettyCashRequestsRoute: typeof AccountingExpensesPettyCashRequestsRoute
   AccountingIncomeRevenueRoute: typeof AccountingIncomeRevenueRoute
 }
@@ -840,6 +854,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountingExpensesPettyCashRequestsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/accounting/expenses/petty-cash': {
+      id: '/accounting/expenses/petty-cash'
+      path: '/accounting/expenses/petty-cash'
+      fullPath: '/accounting/expenses/petty-cash'
+      preLoaderRoute: typeof AccountingExpensesPettyCashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/accounting/expenses/payments': {
       id: '/accounting/expenses/payments'
       path: '/accounting/expenses/payments'
@@ -1041,6 +1062,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccountingExpensesBillsRoute: AccountingExpensesBillsRoute,
   AccountingExpensesDebitNotesRoute: AccountingExpensesDebitNotesRoute,
   AccountingExpensesPaymentsRoute: AccountingExpensesPaymentsRoute,
+  AccountingExpensesPettyCashRoute: AccountingExpensesPettyCashRoute,
   AccountingExpensesPettyCashRequestsRoute:
     AccountingExpensesPettyCashRequestsRoute,
   AccountingIncomeRevenueRoute: AccountingIncomeRevenueRoute,
