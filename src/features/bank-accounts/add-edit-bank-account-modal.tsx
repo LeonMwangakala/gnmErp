@@ -20,6 +20,10 @@ export interface BankAccount {
   opening_balance_formatted: string
   contact_number: string
   bank_address: string
+  currency_id?: number | null
+  currency_code?: string | null
+  currency_name?: string | null
+  currency_symbol?: string | null
 }
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
@@ -45,10 +49,18 @@ export function AddEditBankAccountModal({
     opening_balance: '',
     contact_number: '',
     bank_address: '',
+    currency: '',
   })
+  const [currencies, setCurrencies] = useState<
+    { id: number; currency_name: string; currency_code: string; currency_symbol: string; base: number }[]
+  >([])
+  const [isLoadingCurrencies, setIsLoadingCurrencies] = useState(false)
 
   useEffect(() => {
     if (open) {
+      // Load currencies when modal opens
+      loadFormData()
+
       if (account) {
         // Edit mode - populate form with account data
         setForm({
@@ -58,6 +70,7 @@ export function AddEditBankAccountModal({
           opening_balance: String(account.opening_balance || 0),
           contact_number: account.contact_number || '',
           bank_address: account.bank_address || '',
+          currency: account.currency_id ? String(account.currency_id) : '',
         })
       } else {
         // Add mode - reset form
@@ -68,10 +81,23 @@ export function AddEditBankAccountModal({
           opening_balance: '',
           contact_number: '',
           bank_address: '',
+          currency: '',
         })
       }
     }
   }, [open, account])
+
+  const loadFormData = async () => {
+    try {
+      setIsLoadingCurrencies(true)
+      const data = await bankAccountApi.getFormData()
+      setCurrencies(data.currencies || [])
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to load bank account form data')
+    } finally {
+      setIsLoadingCurrencies(false)
+    }
+  }
 
   const handleInputChange = (field: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -81,7 +107,14 @@ export function AddEditBankAccountModal({
     e.preventDefault()
 
     // Validation
-    if (!form.holder_name || !form.bank_name || !form.account_number || !form.opening_balance || !form.contact_number) {
+    if (
+      !form.holder_name ||
+      !form.bank_name ||
+      !form.account_number ||
+      !form.opening_balance ||
+      !form.contact_number ||
+      !form.currency
+    ) {
       toast.error('Please fill in all required fields.')
       return
     }
@@ -109,6 +142,7 @@ export function AddEditBankAccountModal({
         opening_balance: openingBalance,
         contact_number: form.contact_number,
         bank_address: form.bank_address || '',
+      currency: Number(form.currency),
       }
 
       let response
@@ -198,6 +232,33 @@ export function AddEditBankAccountModal({
                 placeholder='0.00'
                 required
               />
+            </div>
+
+            <div className='md:col-span-2'>
+              <label className='block text-sm font-medium mb-1'>
+                Currency <span className='text-destructive'>*</span>
+              </label>
+              {isLoadingCurrencies ? (
+                <div className='flex items-center gap-2 text-sm text-muted-foreground'>
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                  Loading currencies...
+                </div>
+              ) : (
+                <select
+                  className='block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                  value={form.currency}
+                  onChange={(e) => handleInputChange('currency', e.target.value)}
+                  required
+                >
+                  <option value=''>Select currency</option>
+                  {currencies.map((currency) => (
+                    <option key={currency.id} value={currency.id}>
+                      {currency.currency_name} ({currency.currency_code}){' '}
+                      {currency.base === 1 ? '- Base' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className='md:col-span-2'>

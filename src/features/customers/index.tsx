@@ -24,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { customerApi, PaginationMeta } from '@/lib/api'
 import { toast } from 'sonner'
@@ -47,7 +46,6 @@ export interface Customer {
 export function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedCustomers, setSelectedCustomers] = useState<number[]>([])
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [pagination, setPagination] = useState<PaginationMeta>({
@@ -128,26 +126,10 @@ export function Customers() {
     }
   }
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedCustomers(customers.map((c) => c.id))
-    } else {
-      setSelectedCustomers([])
-    }
-  }
-
-  const handleSelectCustomer = (id: number, checked: boolean) => {
-    if (checked) {
-      setSelectedCustomers([...selectedCustomers, id])
-    } else {
-      setSelectedCustomers(selectedCustomers.filter((cid) => cid !== id))
-    }
-  }
-
   return (
     <>
-      <Header>
-        <div className='flex items-center justify-between w-full'>
+      <Main>
+        <div className='mb-4 flex items-center justify-between'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>Customers</h1>
             <p className='text-muted-foreground'>
@@ -165,9 +147,6 @@ export function Customers() {
             </Button>
           </div>
         </div>
-      </Header>
-
-      <Main>
         <Card>
           <CardHeader>
             <div className='flex items-center justify-between'>
@@ -224,17 +203,6 @@ export function Customers() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className='w-12'>
-                        <input
-                          type='checkbox'
-                          checked={
-                            selectedCustomers.length === customers.length &&
-                            customers.length > 0
-                          }
-                          onChange={(e) => handleSelectAll(e.target.checked)}
-                          className='rounded border-gray-300'
-                        />
-                      </TableHead>
                       <TableHead>S/N</TableHead>
                       <TableHead
                         className='cursor-pointer hover:bg-muted'
@@ -282,16 +250,6 @@ export function Customers() {
                   <TableBody>
                     {customers.map((customer, index) => (
                       <TableRow key={customer.id}>
-                        <TableCell>
-                          <input
-                            type='checkbox'
-                            checked={selectedCustomers.includes(customer.id)}
-                            onChange={(e) =>
-                              handleSelectCustomer(customer.id, e.target.checked)
-                            }
-                            className='rounded border-gray-300'
-                          />
-                        </TableCell>
                         <TableCell>
                           {(pagination.current_page - 1) * pagination.per_page + index + 1}
                         </TableCell>

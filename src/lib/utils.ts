@@ -5,6 +5,26 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Get the full URL for an avatar image
+ * @param avatarPath - Avatar path from API (can be '/profile/filename' or 'filename')
+ * @returns Full URL to the avatar image
+ */
+export function getAvatarUrl(avatarPath: string | null | undefined): string | null {
+  if (!avatarPath) return null
+  
+  // Normalize avatar path
+  let normalizedPath = avatarPath
+  if (!normalizedPath.startsWith('/')) {
+    normalizedPath = `/profile/${normalizedPath}`
+  }
+  
+  // Get base URL without /api
+  const baseUrl = (import.meta.env.VITE_API_BASE_URL || 'https://torchlight.africa/api').replace('/api', '')
+  
+  return `${baseUrl}/storage${normalizedPath}`
+}
+
 export function sleep(ms: number = 1000) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }

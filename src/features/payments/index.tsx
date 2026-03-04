@@ -47,6 +47,9 @@ export interface Payment {
   description: string
   receipt: string
   receipt_url: string | null
+  currency_id?: number | null
+  currency_code?: string | null
+  currency_symbol?: string | null
 }
 
 export function Payments() {
@@ -231,6 +234,7 @@ export function Payments() {
                       >
                         Amount {renderSortIcon('amount')}
                       </TableHead>
+                      <TableHead>Currency</TableHead>
                       <TableHead
                         className='cursor-pointer hover:bg-muted'
                         onClick={() => handleSort('payment_type')}
@@ -282,6 +286,11 @@ export function Payments() {
                         </TableCell>
                         <TableCell>{payment.date}</TableCell>
                         <TableCell className='text-right'>{payment.amount_formatted}</TableCell>
+                        <TableCell>
+                          {payment.currency_code
+                            ? payment.currency_code
+                            : 'Base'}
+                        </TableCell>
                         <TableCell>{payment.payment_type || '-'}</TableCell>
                         <TableCell>{payment.account_name}</TableCell>
                         <TableCell>{payment.reference}</TableCell>

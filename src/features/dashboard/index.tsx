@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -7,37 +8,196 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { TopNav } from '@/components/layout/top-nav'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
+import { customerApi, invoiceApi, paymentApi, revenueApi, expensePaymentApi, bankAccountApi, type PaginationMeta } from '@/lib/api'
 import { Analytics } from './components/analytics'
-import { Overview } from './components/overview'
+import { Overview, type OverviewDatum } from './components/overview'
 import { RecentSales } from './components/recent-sales'
+import { Reports } from './components/reports'
+
+type DashboardMetrics = {
+  totalRevenue: number
+  totalExpenses: number
+  openInvoicesCount: number
+  openInvoicesAmount: number
+  customerCount: number
+}
+
+type DashboardInvoice = {
+  id: number
+  invoice_number: string
+  customer_name: string
+  issue_date: string
+  issue_date_raw?: string
+  amount_formatted: string
+  due_formatted: string
+  due: number
+  is_overdue?: boolean
+  status: number
+  status_label?: string
+}
+
+type DashboardPayment = {
+  id: number
+  invoice_number: string
+  amount_formatted: string
+  date: string
+}
+
+type DashboardExpensePayment = {
+  id: number
+  vender_name: string
+  amount_formatted: string
+  date: string
+}
 
 export function Dashboard() {
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
+  const [overviewData, setOverviewData] = useState<OverviewDatum[]>([])
+  const [recentInvoices, setRecentInvoices] = useState<DashboardInvoice[]>([])
+  const [recentPayments, setRecentPayments] = useState<DashboardPayment[]>([])
+  const [recentExpensePayments, setRecentExpensePayments] = useState<DashboardExpensePayment[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const now = useMemo(() => new Date(), [])
+
+  useEffect(() => {
+    void loadDashboardData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const loadDashboardData = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      const formatDate = (d: Date) => d.toISOString().slice(0, 10)
+      const monthRange = `${formatDate(startOfMonth)} to ${formatDate(endOfMonth)}`
+      const monthPrefix = formatDate(startOfMonth).slice(0, 7) // YYYY-MM
+
+      const [
+        revenuesRes,
+        expensePaymentsRes,
+        invoicesRes,
+        paymentsRes,
+        bankAccountsRes,
+        customersRes,
+      ] = await Promise.all([
+        revenueApi.getRevenues({ per_page: 500, date: monthRange }),
+        expensePaymentApi.getExpensePayments({ per_page: 500, date: monthRange }),
+        invoiceApi.getInvoices({ per_page: 500, sort_by: 'issue_date', sort_order: 'desc' }),
+        paymentApi.getPayments({ per_page: 5, sort_by: 'date', sort_order: 'desc' }),
+        bankAccountApi.getBankAccounts({ per_page: 500 }),
+        customerApi.getCustomers({ per_page: 1 }),
+      ])
+
+      const revenues = revenuesRes.data as any[]
+      const expensePayments = expensePaymentsRes.data as any[]
+      const invoices = invoicesRes.data as DashboardInvoice[]
+      const payments = paymentsRes.data as DashboardPayment[]
+      const customersPagination: PaginationMeta = customersRes.pagination
+
+      const totalRevenue = revenues.reduce(
+        (sum, r) => sum + (typeof r.amount === 'number' ? r.amount : Number(r.amount || 0)),
+        0,
+      )
+
+      const totalExpenses = expensePayments.reduce(
+        (sum, ep) => sum + (typeof ep.amount === 'number' ? ep.amount : Number(ep.amount || 0)),
+        0,
+      )
+
+      const invoicesThisMonth = invoices.filter((inv) => {
+        const raw = inv.issue_date_raw || inv.issue_date || ''
+        return raw.startsWith(monthPrefix)
+      })
+
+      const openInvoices = invoicesThisMonth.filter((inv) => inv.due > 0)
+      const openInvoicesCount = openInvoices.length
+      const openInvoicesAmount = openInvoices.reduce(
+        (sum, inv) => sum + (typeof inv.due === 'number' ? inv.due : Number(inv.due || 0)),
+        0,
+      )
+
+      const customerCount = customersPagination?.total ?? 0
+
+      const revenueByDate = new Map<string, number>()
+      const expensesByDate = new Map<string, number>()
+
+      revenues.forEach((r) => {
+        const key = (r.date_raw || r.date || '').slice(0, 10)
+        if (!key) return
+        const value = typeof r.amount === 'number' ? r.amount : Number(r.amount || 0)
+        revenueByDate.set(key, (revenueByDate.get(key) || 0) + value)
+      })
+
+      expensePayments.forEach((ep) => {
+        const key = (ep.date_raw || ep.date || '').slice(0, 10)
+        if (!key) return
+        const value = typeof ep.amount === 'number' ? ep.amount : Number(ep.amount || 0)
+        expensesByDate.set(key, (expensesByDate.get(key) || 0) + value)
+      })
+
+      const allDates = Array.from(
+        new Set<string>([...revenueByDate.keys(), ...expensesByDate.keys()]),
+      ).sort()
+
+      const overview: OverviewDatum[] = allDates.map((date) => ({
+        name: date.slice(5), // MM-DD
+        revenue: revenueByDate.get(date) || 0,
+        expenses: expensesByDate.get(date) || 0,
+      }))
+
+      const recentInvoicesList = invoices.slice(0, 5)
+      const recentExpensePaymentsList = expensePayments.slice(0, 5) as DashboardExpensePayment[]
+
+      setMetrics({
+        totalRevenue,
+        totalExpenses,
+        openInvoicesCount,
+        openInvoicesAmount,
+        customerCount,
+      })
+      setOverviewData(overview)
+      setRecentInvoices(recentInvoicesList)
+      setRecentPayments(payments.slice(0, 5))
+      setRecentExpensePayments(recentExpensePaymentsList)
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to load dashboard data', err)
+      setError(err?.response?.data?.message || err?.message || 'Failed to load dashboard data')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <>
-      {/* ===== Top Heading ===== */}
-      <Header>
-        <TopNav links={topNav} />
-        <div className='ms-auto flex items-center space-x-4'>
-          <Search />
-          <ThemeSwitch />
-          <ConfigDrawer />
-          <ProfileDropdown />
-        </div>
-      </Header>
-
       {/* ===== Main ===== */}
       <Main>
         <div className='mb-2 flex items-center justify-between space-y-2'>
-          <h1 className='text-2xl font-bold tracking-tight'>Dashboard</h1>
+          <div>
+            <h1 className='text-2xl font-bold tracking-tight'>Dashboard</h1>
+            {error && (
+              <p className='mt-1 text-xs text-destructive'>
+                {error}
+              </p>
+            )}
+          </div>
           <div className='flex items-center space-x-2'>
-            <Button>Download</Button>
+            <Button
+              variant='outline'
+              size='sm'
+              disabled={isLoading}
+              onClick={() => {
+                void loadDashboardData()
+              }}
+            >
+              Refresh
+            </Button>
           </div>
         </div>
         <Tabs
@@ -49,12 +209,7 @@ export function Dashboard() {
             <TabsList>
               <TabsTrigger value='overview'>Overview</TabsTrigger>
               <TabsTrigger value='analytics'>Analytics</TabsTrigger>
-              <TabsTrigger value='reports' disabled>
-                Reports
-              </TabsTrigger>
-              <TabsTrigger value='notifications' disabled>
-                Notifications
-              </TabsTrigger>
+              <TabsTrigger value='reports'>Reports</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value='overview' className='space-y-4'>
@@ -62,7 +217,7 @@ export function Dashboard() {
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>
-                    Total Revenue
+                    Total revenue (this month)
                   </CardTitle>
                   <svg
                     xmlns='http://www.w3.org/2000/svg'
@@ -78,16 +233,22 @@ export function Dashboard() {
                   </svg>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold'>$45,231.89</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +20.1% from last month
-                  </p>
+                  <div className='text-2xl font-bold tabular-nums'>
+                    {metrics
+                      ? metrics.totalRevenue.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        })
+                      : isLoading
+                        ? '...'
+                        : '0'}
+                  </div>
+                  <p className='text-xs text-muted-foreground'>Summed from revenue records</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>
-                    Subscriptions
+                    Total expenses (this month)
                   </CardTitle>
                   <svg
                     xmlns='http://www.w3.org/2000/svg'
@@ -105,15 +266,23 @@ export function Dashboard() {
                   </svg>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold'>+2350</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +180.1% from last month
-                  </p>
+                  <div className='text-2xl font-bold tabular-nums'>
+                    {metrics
+                      ? metrics.totalExpenses.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        })
+                      : isLoading
+                        ? '...'
+                        : '0'}
+                  </div>
+                  <p className='text-xs text-muted-foreground'>From expense payments</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Sales</CardTitle>
+                  <CardTitle className='text-sm font-medium'>
+                    Open invoices (this month)
+                  </CardTitle>
                   <svg
                     xmlns='http://www.w3.org/2000/svg'
                     viewBox='0 0 24 24'
@@ -129,16 +298,27 @@ export function Dashboard() {
                   </svg>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold'>+12,234</div>
+                  <div className='text-2xl font-bold tabular-nums'>
+                    {metrics ? metrics.openInvoicesCount : isLoading ? '...' : '0'}
+                  </div>
                   <p className='text-xs text-muted-foreground'>
-                    +19% from last month
+                    Due amount:{' '}
+                    <span className='font-semibold'>
+                      {metrics
+                        ? metrics.openInvoicesAmount.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })
+                        : isLoading
+                          ? '...'
+                          : '0'}
+                    </span>
                   </p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>
-                    Active Now
+                    Customers
                   </CardTitle>
                   <svg
                     xmlns='http://www.w3.org/2000/svg'
@@ -154,10 +334,10 @@ export function Dashboard() {
                   </svg>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold'>+573</div>
-                  <p className='text-xs text-muted-foreground'>
-                    +201 since last hour
-                  </p>
+                  <div className='text-2xl font-bold tabular-nums'>
+                    {metrics ? metrics.customerCount : isLoading ? '...' : '0'}
+                  </div>
+                  <p className='text-xs text-muted-foreground'>Total active customers</p>
                 </CardContent>
               </Card>
             </div>
@@ -167,18 +347,23 @@ export function Dashboard() {
                   <CardTitle>Overview</CardTitle>
                 </CardHeader>
                 <CardContent className='ps-2'>
-                  <Overview />
+                  <Overview data={overviewData} />
                 </CardContent>
               </Card>
               <Card className='col-span-1 lg:col-span-3'>
                 <CardHeader>
-                  <CardTitle>Recent Sales</CardTitle>
+                  <CardTitle>Recent activity</CardTitle>
                   <CardDescription>
-                    You made 265 sales this month.
+                    Latest invoices, invoice payments and expense payments.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <RecentSales />
+                  <RecentSales
+                    invoices={recentInvoices}
+                    payments={recentPayments}
+                    expensePayments={recentExpensePayments}
+                    isLoading={isLoading}
+                  />
                 </CardContent>
               </Card>
             </div>
@@ -186,35 +371,13 @@ export function Dashboard() {
           <TabsContent value='analytics' className='space-y-4'>
             <Analytics />
           </TabsContent>
+          <TabsContent value='reports' className='space-y-4'>
+            <Reports />
+          </TabsContent>
         </Tabs>
       </Main>
     </>
   )
 }
 
-const topNav = [
-  {
-    title: 'Overview',
-    href: 'dashboard/overview',
-    isActive: true,
-    disabled: false,
-  },
-  {
-    title: 'Customers',
-    href: 'dashboard/customers',
-    isActive: false,
-    disabled: true,
-  },
-  {
-    title: 'Products',
-    href: 'dashboard/products',
-    isActive: false,
-    disabled: true,
-  },
-  {
-    title: 'Settings',
-    href: 'dashboard/settings',
-    isActive: false,
-    disabled: true,
-  },
-]
+// topNav will be computed inside Dashboard component to use pathname

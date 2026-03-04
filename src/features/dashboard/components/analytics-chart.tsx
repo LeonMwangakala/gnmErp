@@ -1,44 +1,34 @@
-import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
-const data = [
-  {
-    name: 'Mon',
-    clicks: Math.floor(Math.random() * 900) + 100,
-    uniques: Math.floor(Math.random() * 700) + 80,
-  },
-  {
-    name: 'Tue',
-    clicks: Math.floor(Math.random() * 900) + 100,
-    uniques: Math.floor(Math.random() * 700) + 80,
-  },
-  {
-    name: 'Wed',
-    clicks: Math.floor(Math.random() * 900) + 100,
-    uniques: Math.floor(Math.random() * 700) + 80,
-  },
-  {
-    name: 'Thu',
-    clicks: Math.floor(Math.random() * 900) + 100,
-    uniques: Math.floor(Math.random() * 700) + 80,
-  },
-  {
-    name: 'Fri',
-    clicks: Math.floor(Math.random() * 900) + 100,
-    uniques: Math.floor(Math.random() * 700) + 80,
-  },
-  {
-    name: 'Sat',
-    clicks: Math.floor(Math.random() * 900) + 100,
-    uniques: Math.floor(Math.random() * 700) + 80,
-  },
-  {
-    name: 'Sun',
-    clicks: Math.floor(Math.random() * 900) + 100,
-    uniques: Math.floor(Math.random() * 700) + 80,
-  },
-]
+export type AnalyticsDatum = {
+  /**
+   * Label like 'Jan', 'Feb', ...
+   */
+  name: string
+  /**
+   * Total revenue for the period.
+   */
+  revenue: number
+  /**
+   * Total expenses for the period.
+   */
+  expenses: number
+}
 
-export function AnalyticsChart() {
+interface AnalyticsChartProps {
+  data: AnalyticsDatum[]
+  isLoading: boolean
+}
+
+export function AnalyticsChart({ data, isLoading }: AnalyticsChartProps) {
+  if (isLoading) {
+    return (
+      <div className='flex h-[300px] items-center justify-center'>
+        <div className='h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-transparent' />
+      </div>
+    )
+  }
+
   return (
     <ResponsiveContainer width='100%' height={300}>
       <AreaChart data={data}>
@@ -54,10 +44,18 @@ export function AnalyticsChart() {
           fontSize={12}
           tickLine={false}
           axisLine={false}
+          tickFormatter={(value) => `${value}`}
+        />
+        <Tooltip
+          formatter={(value: number, key: string) => {
+            const label = key === 'revenue' ? 'Revenue' : 'Expenses'
+            return [`${value.toLocaleString()}`, label]
+          }}
         />
         <Area
           type='monotone'
-          dataKey='clicks'
+          dataKey='revenue'
+          name='Revenue'
           stroke='currentColor'
           className='text-primary'
           fill='currentColor'
@@ -65,7 +63,8 @@ export function AnalyticsChart() {
         />
         <Area
           type='monotone'
-          dataKey='uniques'
+          dataKey='expenses'
+          name='Expenses'
           stroke='currentColor'
           className='text-muted-foreground'
           fill='currentColor'

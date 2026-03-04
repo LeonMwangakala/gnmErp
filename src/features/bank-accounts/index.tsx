@@ -40,6 +40,10 @@ export interface BankAccount {
   opening_balance_formatted: string
   contact_number: string
   bank_address: string
+  currency_id?: number | null
+  currency_code?: string | null
+  currency_name?: string | null
+  currency_symbol?: string | null
 }
 
 export function BankAccounts() {
@@ -220,6 +224,7 @@ export function BankAccounts() {
                       >
                         Current Balance {renderSortIcon('opening_balance')}
                       </TableHead>
+                      <TableHead>Currency</TableHead>
                       <TableHead
                         className='cursor-pointer hover:bg-muted'
                         onClick={() => handleSort('contact_number')}
@@ -246,6 +251,11 @@ export function BankAccounts() {
                         <TableCell>{account.account_number}</TableCell>
                         <TableCell className='text-right'>
                           {account.opening_balance_formatted}
+                        </TableCell>
+                        <TableCell>
+                          {account.currency_code
+                            ? `${account.currency_code}`
+                            : 'Base'}
                         </TableCell>
                         <TableCell>{account.contact_number}</TableCell>
                         <TableCell>{account.bank_address || '-'}</TableCell>

@@ -49,6 +49,10 @@ export interface PettyCashRequest {
   request_number: string
   amount: number
   amount_formatted: string
+  currency_id?: number | null
+  currency_code?: string | null
+  currency_symbol?: string | null
+  currency_exchange_rate?: number | null
   comment: string
   request_user_id: number
   request_user_name: string
@@ -260,6 +264,7 @@ export function PettyCashRequests() {
                       <TableRow>
                         <TableHead>S/N</TableHead>
                         <TableHead>Request Number</TableHead>
+                        <TableHead>Currency</TableHead>
                         <TableHead>Requested Amount</TableHead>
                         <TableHead>Requested By</TableHead>
                         <TableHead>Requested On</TableHead>
@@ -277,6 +282,7 @@ export function PettyCashRequests() {
                             {(pagination.current_page - 1) * pagination.per_page + index + 1}
                           </TableCell>
                           <TableCell className="font-medium">{request.request_number}</TableCell>
+                          <TableCell>{request.currency_code || 'Base'}</TableCell>
                           <TableCell>{request.amount_formatted}</TableCell>
                           <TableCell>{request.request_user_name}</TableCell>
                           <TableCell>{request.requested_on_formatted}</TableCell>

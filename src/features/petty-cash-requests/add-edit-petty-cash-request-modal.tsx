@@ -11,10 +11,25 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { pettyCashRequestApi } from '@/lib/api'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import type { PettyCashRequest } from './index'
+
+interface CurrencyOption {
+  id: number
+  currency_name: string
+  currency_symbol: string
+  currency_code: string
+  base: number
+}
 
 interface AddEditPettyCashRequestModalProps {
   open: boolean
@@ -33,21 +48,47 @@ export function AddEditPettyCashRequestModal({
   const [form, setForm] = useState({
     amount: '',
     comment: '',
+    currency: '',
+    currency_exchange_rate: '1',
   })
+  const [currencies, setCurrencies] = useState<CurrencyOption[]>([])
 
   useEffect(() => {
-    if (open) {
-      if (request) {
-        setForm({
-          amount: request.amount.toString(),
-          comment: request.comment || '',
-        })
-      } else {
-        setForm({
-          amount: '',
-          comment: '',
-        })
+    const loadFormData = async () => {
+      try {
+        const data = await pettyCashRequestApi.getFormData()
+        const loadedCurrencies: CurrencyOption[] = data.currencies || []
+        setCurrencies(loadedCurrencies)
+
+        // Determine default currency (base) if available
+        const baseCurrency = loadedCurrencies.find((c) => c.base === 1) || loadedCurrencies[0]
+
+        if (request) {
+          setForm({
+            amount: request.amount.toString(),
+            comment: request.comment || '',
+            currency: request.currency_id ? request.currency_id.toString() : baseCurrency ? baseCurrency.id.toString() : '',
+            currency_exchange_rate:
+              request.currency_exchange_rate !== null && request.currency_exchange_rate !== undefined
+                ? request.currency_exchange_rate.toString()
+                : '1',
+          })
+        } else {
+          setForm({
+            amount: '',
+            comment: '',
+            currency: baseCurrency ? baseCurrency.id.toString() : '',
+            currency_exchange_rate: '1',
+          })
+        }
+      } catch (error: any) {
+        // If loading form data fails, still allow basic amount/comment submission
+        console.error('Failed to load petty cash request form data', error)
       }
+    }
+
+    if (open) {
+      void loadFormData()
     }
   }, [open, request])
 
@@ -102,6 +143,50 @@ export function AddEditPettyCashRequestModal({
                 placeholder="Enter amount"
               />
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="currency">
+                  Currency <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={form.currency}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, currency: value }))}
+                >
+                  <SelectTrigger id="currency">
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((currency) => (
+                      <SelectItem key={currency.id} value={currency.id.toString()}>
+                        {currency.currency_code} - {currency.currency_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="currency_exchange_rate">
+                  Exchange Rate <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="currency_exchange_rate"
+                  type="number"
+                  step="0.00000001"
+                  min="0"
+                  value={form.currency_exchange_rate}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      currency_exchange_rate: e.target.value || '1',
+                    }))
+                  }
+                  required
+                  placeholder="Enter exchange rate"
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="comment">
                 Comments <span className="text-red-500">*</span>

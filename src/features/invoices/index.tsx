@@ -24,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { invoiceApi, PaginationMeta } from '@/lib/api'
 import { toast } from 'sonner'
@@ -175,8 +174,8 @@ export function Invoices() {
 
   return (
     <>
-      <Header>
-        <div className='flex items-center justify-between w-full'>
+      <Main>
+        <div className='mb-4 flex items-center justify-between'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>Invoices</h1>
             <p className='text-muted-foreground'>
@@ -190,9 +189,6 @@ export function Invoices() {
             </Button>
           </div>
         </div>
-      </Header>
-
-      <Main>
         <Card>
           <CardHeader>
             <div className='flex items-center justify-between'>

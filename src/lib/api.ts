@@ -72,6 +72,21 @@ export const authApi = {
     const response = await api.get('/getProfile')
     return response.data
   },
+  updateProfile: async (data: { name: string; email: string; phone: string; avatar?: File }) => {
+    const formData = new FormData()
+    formData.append('name', data.name)
+    formData.append('email', data.email)
+    formData.append('phone', data.phone)
+    if (data.avatar) {
+      formData.append('avatar', data.avatar)
+    }
+    const response = await api.post('/updateProfile', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
 }
 
 export const companyApi = {
@@ -283,6 +298,10 @@ export const bankAccountApi = {
     const response = await api.get(`/bank-accounts/${id}`)
     return response.data.data
   },
+  getFormData: async (): Promise<any> => {
+    const response = await api.get('/bank-accounts/form-data')
+    return response.data.data || { currencies: [] }
+  },
   createBankAccount: async (data: {
     holder_name: string
     bank_name: string
@@ -290,6 +309,7 @@ export const bankAccountApi = {
     opening_balance: number
     contact_number: string
     bank_address?: string
+    currency: number
   }): Promise<any> => {
     const response = await api.post('/bank-accounts', data)
     return response.data
@@ -303,6 +323,7 @@ export const bankAccountApi = {
       opening_balance: number
       contact_number: string
       bank_address?: string
+      currency: number
     }
   ): Promise<any> => {
     const response = await api.put(`/bank-accounts/${id}`, data)
@@ -566,7 +587,7 @@ export const pettyCashRequestApi = {
   },
   getFormData: async (): Promise<any> => {
     const response = await api.get('/petty-cash-requests/form-data')
-    return response.data.data || { bank_accounts: [] }
+    return response.data.data || { bank_accounts: [], currencies: [] }
   },
   getPettyCashRequest: async (id: number): Promise<any> => {
     const response = await api.get(`/petty-cash-requests/${id}`)

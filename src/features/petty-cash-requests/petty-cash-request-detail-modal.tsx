@@ -56,15 +56,19 @@ export function PettyCashRequestDetailModal({
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <p className="text-sm text-muted-foreground">Currency</p>
+                  <p className="font-medium">{request.currency_code || 'Base'}</p>
+                </div>
+                <div>
                   <p className="text-sm text-muted-foreground">Requested Amount</p>
                   <p className="font-medium">{request.amount_formatted}</p>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Requested By</p>
                   <p className="font-medium">{request.request_user_name}</p>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Requested On</p>
                   <p className="font-medium">{request.requested_on_formatted}</p>
