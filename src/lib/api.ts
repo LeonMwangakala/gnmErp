@@ -16,6 +16,15 @@ export const api: AxiosInstance = axios.create({
   timeout: 30000, // 30 seconds
 })
 
+// Create separate axios instance for external APIs (without auth token)
+const externalApi: AxiosInstance = axios.create({
+  headers: {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  },
+  timeout: 30000, // 30 seconds
+})
+
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
@@ -206,6 +215,13 @@ export const invoiceApi = {
       total_credit_note: response.data.total_credit_note || 0,
       total_credit_note_formatted: response.data.total_credit_note_formatted || '0.00',
     }
+  },
+  getInvoiceContainerDetails: async (invoiceNo: string) => {
+    // Call external API for container details
+    const response = await externalApi.get('https://api.gnmcargo.com/api/v1/invoice-container-details', {
+      params: { invoice_no: invoiceNo },
+    })
+    return response.data
   },
 }
 

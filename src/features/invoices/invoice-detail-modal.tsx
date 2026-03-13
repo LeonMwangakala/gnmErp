@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Package } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -103,6 +103,24 @@ interface CreditNote {
   description: string
 }
 
+interface Container {
+  id: number
+  uid: string
+  shipping_status: number
+  container_no: string
+  shipping_line: string
+  destination: string
+  origin: string
+  seal_no: string
+  volume: string
+  shipping_date: string
+  arrival_date: string
+  created_at: string
+  updated_at: string
+  created_by: number
+  updated_by: number | null
+}
+
 interface InvoiceDetailModalProps {
   invoiceId: number | null
   open: boolean
@@ -120,6 +138,8 @@ export function InvoiceDetailModal({
   const [isLoading, setIsLoading] = useState(false)
   const [paymentsLoading, setPaymentsLoading] = useState(false)
   const [creditNotesLoading, setCreditNotesLoading] = useState(false)
+  const [containersLoading, setContainersLoading] = useState(false)
+  const [containers, setContainers] = useState<Container[]>([])
   const [activeTab, setActiveTab] = useState('overview')
   const [totalPaid, setTotalPaid] = useState(0)
   const [totalPaidFormatted, setTotalPaidFormatted] = useState('0.00')
@@ -135,6 +155,7 @@ export function InvoiceDetailModal({
       setInvoice(null)
       setPayments([])
       setCreditNotes([])
+      setContainers([])
       setTotalPaid(0)
       setTotalPaidFormatted('0.00')
       setTotalCreditNote(0)
@@ -153,6 +174,12 @@ export function InvoiceDetailModal({
       fetchCreditNotes()
     }
   }, [open, invoiceId, activeTab])
+
+  useEffect(() => {
+    if (open && invoice && activeTab === 'containers') {
+      fetchContainerDetails()
+    }
+  }, [open, invoice, activeTab])
 
   const fetchInvoice = async () => {
     if (!invoiceId) return
@@ -198,6 +225,42 @@ export function InvoiceDetailModal({
     }
   }
 
+  const fetchContainerDetails = async () => {
+    if (!invoice) return
+    try {
+      setContainersLoading(true)
+      const response = await invoiceApi.getInvoiceContainerDetails(invoice.invoice_number)
+      if (response.status && response.containers) {
+        setContainers(response.containers)
+      } else {
+        setContainers([])
+      }
+    } catch (error: any) {
+      // Don't show error toast if no containers found (might be expected)
+      if (error.response?.status !== 404) {
+        toast.error(error.response?.data?.message || 'Failed to load container details')
+      }
+      setContainers([])
+    } finally {
+      setContainersLoading(false)
+    }
+  }
+
+  const getShippingStatusBadge = (status: number) => {
+    switch (status) {
+      case 0:
+        return <Badge variant='secondary'>Pending</Badge>
+      case 1:
+        return <Badge variant='outline'>In Transit</Badge>
+      case 2:
+        return <Badge variant='default' className='bg-blue-500 text-white'>Shipped</Badge>
+      case 3:
+        return <Badge variant='default' className='bg-green-500 text-white'>Delivered</Badge>
+      default:
+        return <Badge variant='secondary'>Unknown</Badge>
+    }
+  }
+
   const getStatusBadge = (status: number, isOverdue: boolean) => {
     if (isOverdue) {
       return <Badge variant='destructive'>Overdue</Badge>
@@ -228,7 +291,7 @@ export function InvoiceDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='!max-w-[95vw] !w-[95vw] max-h-[90vh] overflow-y-auto !sm:max-w-[95vw] !md:max-w-[95vw] !lg:max-w-[90vw] !xl:max-w-[85vw]'>
+      <DialogContent className='max-h-[90vh] overflow-y-auto' style={{ maxWidth: '95vw', width: '95vw' }}>
         <DialogHeader>
           <DialogTitle>
             {invoice ? `Invoice #${invoice.invoice_number}` : 'Invoice Details'}
@@ -246,6 +309,10 @@ export function InvoiceDetailModal({
           <Tabs value={activeTab} onValueChange={setActiveTab} className='space-y-4'>
             <TabsList>
               <TabsTrigger value='overview'>Overview</TabsTrigger>
+              <TabsTrigger value='containers'>
+                <Package className='mr-2 h-4 w-4' />
+                Container ({containers.length})
+              </TabsTrigger>
               <TabsTrigger value='payments'>
                 Payments ({payments.length})
               </TabsTrigger>
@@ -260,7 +327,7 @@ export function InvoiceDetailModal({
                 <CardHeader>
                   <CardTitle>Invoice Information</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className='space-y-4'>
                   <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
                     <div>
                       <p className='text-sm text-muted-foreground'>Invoice Number</p>
@@ -284,6 +351,14 @@ export function InvoiceDetailModal({
                       <p className='text-sm text-muted-foreground'>Status</p>
                       <div className='mt-1'>{getStatusBadge(invoice.status, invoice.is_overdue)}</div>
                     </div>
+                    {invoice.subject && (
+                      <div className='col-span-2 md:col-span-3'>
+                        <p className='text-sm text-muted-foreground mb-1'>Description</p>
+                        <p className='text-sm font-medium whitespace-pre-wrap'>
+                          {invoice.subject}
+                        </p>
+                      </div>
+                    )}
                     {invoice.ref_number && (
                       <div>
                         <p className='text-sm text-muted-foreground'>Reference Number</p>
@@ -492,6 +567,68 @@ export function InvoiceDetailModal({
                               <TableCell>{creditNote.date}</TableCell>
                               <TableCell className='text-right'>{creditNote.amount_formatted}</TableCell>
                               <TableCell>{creditNote.description || '-'}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value='containers' className='space-y-4'>
+              <Card>
+                <CardHeader>
+                  <CardTitle className='flex items-center gap-2'>
+                    <Package className='h-5 w-5' />
+                    Container Details
+                  </CardTitle>
+                  <CardDescription>
+                    Shipping container information for invoice {invoice.invoice_number}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {containersLoading ? (
+                    <div className='flex items-center justify-center py-8'>
+                      <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
+                    </div>
+                  ) : containers.length === 0 ? (
+                    <div className='text-center py-8 text-muted-foreground'>
+                      No container details found for this invoice
+                    </div>
+                  ) : (
+                    <div className='rounded-md border'>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>S/N</TableHead>
+                            <TableHead>Container No</TableHead>
+                            <TableHead>Shipping Line</TableHead>
+                            <TableHead>Origin</TableHead>
+                            <TableHead>Destination</TableHead>
+                            <TableHead>Volume</TableHead>
+                            <TableHead>Seal No</TableHead>
+                            <TableHead>Shipping Date</TableHead>
+                            <TableHead>Arrival Date</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {containers.map((container, index) => (
+                            <TableRow key={container.id}>
+                              <TableCell>{index + 1}</TableCell>
+                              <TableCell className='font-mono font-medium'>{container.container_no}</TableCell>
+                              <TableCell>{container.shipping_line}</TableCell>
+                              <TableCell>{container.origin}</TableCell>
+                              <TableCell>{container.destination}</TableCell>
+                              <TableCell>
+                                <Badge variant='outline'>{container.volume}</Badge>
+                              </TableCell>
+                              <TableCell className='font-mono text-sm'>{container.seal_no}</TableCell>
+                              <TableCell>{container.shipping_date || '-'}</TableCell>
+                              <TableCell>{container.arrival_date || '-'}</TableCell>
+                              <TableCell>{getShippingStatusBadge(container.shipping_status)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
