@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Eye, Download, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Eye, Download, Search, ChevronLeft, ChevronRight, Send, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -30,6 +30,15 @@ import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { InvoiceDetailModal } from './invoice-detail-modal'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export interface Invoice {
   id: number
@@ -71,6 +80,8 @@ export function Invoices() {
   const [sortBy, setSortBy] = useState('id')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [searchInput, setSearchInput] = useState('')
+  const [isPosting, setIsPosting] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<number[]>([])
 
   // Debounce search
   useEffect(() => {
@@ -85,11 +96,11 @@ export function Invoices() {
     return () => clearTimeout(timer)
   }, [searchInput, search]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch invoices when pagination, sort, or search changes
+  // Fetch invoices when pagination, sort, search, or status filter changes
   useEffect(() => {
     fetchInvoices()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.current_page, pagination.per_page, sortBy, sortOrder, search])
+  }, [pagination.current_page, pagination.per_page, sortBy, sortOrder, search, statusFilter])
 
   const fetchInvoices = async (
     page?: number,
@@ -108,6 +119,7 @@ export function Invoices() {
         search: currentSearch || undefined,
         sort_by: sortBy,
         sort_order: sortOrder,
+        status: statusFilter.length > 0 ? statusFilter : undefined,
       })
       setInvoices(response.data)
       setPagination(response.pagination)
@@ -143,6 +155,52 @@ export function Invoices() {
     }
     return null
   }
+
+  const handleBulkPost = async () => {
+    try {
+      setIsPosting(true)
+      const response = await invoiceApi.bulkPost()
+      
+      if (response.status === 200) {
+        toast.success(
+          `Successfully posted ${response.data.posted_count} invoice(s). ${response.data.skipped_count > 0 ? `${response.data.skipped_count} skipped.` : ''}`
+        )
+        // Refresh the invoice list
+        await fetchInvoices()
+      } else {
+        toast.error(response.message || 'Failed to post invoices')
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to post invoices')
+    } finally {
+      setIsPosting(false)
+    }
+  }
+
+  const handleStatusFilterChange = (status: number) => {
+    setStatusFilter((prev) => {
+      if (prev.includes(status)) {
+        return prev.filter((s) => s !== status)
+      } else {
+        return [...prev, status]
+      }
+    })
+    // Reset to page 1 when filter changes
+    setPagination((prev) => ({ ...prev, current_page: 1 }))
+  }
+
+  const clearStatusFilter = () => {
+    setStatusFilter([])
+    setPagination((prev) => ({ ...prev, current_page: 1 }))
+  }
+
+  const statusOptions = [
+    { value: 0, label: 'Draft' },
+    { value: 1, label: 'Sent' },
+    { value: 2, label: 'Unpaid' },
+    { value: 3, label: 'Partial Paid' },
+    { value: 4, label: 'Paid' },
+  ]
 
   const getStatusBadge = (status: number, isOverdue: boolean) => {
     if (isOverdue) {
@@ -183,12 +241,68 @@ export function Invoices() {
             </p>
           </div>
           <div className='flex items-center gap-2'>
+            <Button
+              variant='default'
+              size='sm'
+              onClick={handleBulkPost}
+              disabled={isPosting}
+            >
+              {isPosting ? (
+                <>
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  Posting...
+                </>
+              ) : (
+                <>
+                  <Send className='mr-2 h-4 w-4' />
+                  Post All Draft Invoices
+                </>
+              )}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant='outline' size='sm'>
+                  <Filter className='mr-2 h-4 w-4' />
+                  Filter by Status
+                  {statusFilter.length > 0 && (
+                    <Badge variant='secondary' className='ml-2'>
+                      {statusFilter.length}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align='end' className='w-48'>
+                <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {statusOptions.map((option) => (
+                  <DropdownMenuCheckboxItem
+                    key={option.value}
+                    checked={statusFilter.includes(option.value)}
+                    onCheckedChange={() => handleStatusFilterChange(option.value)}
+                  >
+                    {option.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                {statusFilter.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={clearStatusFilter}
+                      className='text-muted-foreground cursor-pointer'
+                    >
+                      Clear Filters
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant='outline' size='sm'>
               <Download className='mr-2 h-4 w-4' />
               Export
             </Button>
           </div>
         </div>
+
         <Card>
           <CardHeader>
             <div className='flex items-center justify-between'>
