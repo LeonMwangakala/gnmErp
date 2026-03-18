@@ -30,6 +30,7 @@ import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { InvoiceDetailModal } from './invoice-detail-modal'
+import { PostInvoicesModal } from './post-invoices-modal'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,8 +81,8 @@ export function Invoices() {
   const [sortBy, setSortBy] = useState('id')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [searchInput, setSearchInput] = useState('')
-  const [isPosting, setIsPosting] = useState(false)
   const [statusFilter, setStatusFilter] = useState<number[]>([])
+  const [isPostInvoicesModalOpen, setIsPostInvoicesModalOpen] = useState(false)
 
   // Debounce search
   useEffect(() => {
@@ -156,27 +157,6 @@ export function Invoices() {
     return null
   }
 
-  const handleBulkPost = async () => {
-    try {
-      setIsPosting(true)
-      const response = await invoiceApi.bulkPost()
-      
-      if (response.status === 200) {
-        toast.success(
-          `Successfully posted ${response.data.posted_count} invoice(s). ${response.data.skipped_count > 0 ? `${response.data.skipped_count} skipped.` : ''}`
-        )
-        // Refresh the invoice list
-        await fetchInvoices()
-      } else {
-        toast.error(response.message || 'Failed to post invoices')
-      }
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to post invoices')
-    } finally {
-      setIsPosting(false)
-    }
-  }
-
   const handleStatusFilterChange = (status: number) => {
     setStatusFilter((prev) => {
       if (prev.includes(status)) {
@@ -244,20 +224,10 @@ export function Invoices() {
             <Button
               variant='default'
               size='sm'
-              onClick={handleBulkPost}
-              disabled={isPosting}
+              onClick={() => setIsPostInvoicesModalOpen(true)}
             >
-              {isPosting ? (
-                <>
-                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                  Posting...
-                </>
-              ) : (
-                <>
-                  <Send className='mr-2 h-4 w-4' />
-                  Post All Draft Invoices
-                </>
-              )}
+              <Send className='mr-2 h-4 w-4' />
+              Post Invoices
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -507,6 +477,12 @@ export function Invoices() {
         invoiceId={selectedInvoiceId}
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
+      />
+
+      <PostInvoicesModal
+        open={isPostInvoicesModalOpen}
+        onOpenChange={setIsPostInvoicesModalOpen}
+        onPosted={() => fetchInvoices()}
       />
     </>
   )

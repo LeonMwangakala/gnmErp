@@ -228,6 +228,18 @@ export const invoiceApi = {
     const response = await api.post('/invoices/bulk-post', payload)
     return response.data
   },
+  getInvoiceByInvoiceNumber: async (invoiceNo: string) => {
+    const response = await api.get('/invoices/by-invoice-number', {
+      params: { invoice_no: invoiceNo },
+    })
+    return response.data.data
+  },
+  getInvoiceNosByContainer: async (containerNo: string) => {
+    const response = await externalApi.get('https://api.gnmcargo.com/api/v1/invoice-nos-by-container', {
+      params: { container_no: containerNo },
+    })
+    return response.data
+  },
 }
 
 export const paymentApi = {
