@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Loader2, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Loader2, ChevronLeft, ChevronRight, X, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -28,6 +28,7 @@ import { customerApi, PaginationMeta } from '@/lib/api'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { EMPTY_INVOICE_REFS, useInvoiceContainers } from './use-invoice-containers'
+import { InvoiceConsignmentsGoodsModal } from '@/features/invoices/invoice-consignments-goods-modal'
 
 interface CustomerDetail {
   id: number
@@ -113,6 +114,8 @@ export function CustomerDetailModal({
     to: null,
   })
   const [activeTab, setActiveTab] = useState('info')
+  const [cargoModalOpen, setCargoModalOpen] = useState(false)
+  const [cargoInvoiceNo, setCargoInvoiceNo] = useState<string | null>(null)
 
   const { containerByInvoiceId, containersLoading } = useInvoiceContainers(
     activeTab === 'invoices' ? invoices : EMPTY_INVOICE_REFS
@@ -203,6 +206,7 @@ export function CustomerDetailModal({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='!max-w-[95vw] !w-[95vw] max-h-[90vh] overflow-y-auto !sm:max-w-[95vw] !md:max-w-[95vw] !lg:max-w-[90vw] !xl:max-w-[85vw]'>
         <DialogHeader>
@@ -397,6 +401,9 @@ export function CustomerDetailModal({
                             <TableHead className='text-right'>Amount</TableHead>
                             <TableHead className='text-right'>Due Amount</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead className='text-right w-[52px]'>
+                              <span className='sr-only'>CMTS details</span>
+                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -429,6 +436,21 @@ export function CustomerDetailModal({
                               </TableCell>
                               <TableCell>
                                 {getStatusBadge(invoice.status, invoice.is_overdue)}
+                              </TableCell>
+                              <TableCell className='text-right' onClick={(e) => e.stopPropagation()}>
+                                <Button
+                                  type='button'
+                                  variant='ghost'
+                                  size='sm'
+                                  className='h-8 w-8 p-0'
+                                  title='CMTS consignment & goods'
+                                  onClick={() => {
+                                    setCargoInvoiceNo(invoice.invoice_number)
+                                    setCargoModalOpen(true)
+                                  }}
+                                >
+                                  <Info className='h-4 w-4' />
+                                </Button>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -517,5 +539,15 @@ export function CustomerDetailModal({
         ) : null}
       </DialogContent>
     </Dialog>
+
+    <InvoiceConsignmentsGoodsModal
+      open={cargoModalOpen}
+      onOpenChange={(o) => {
+        setCargoModalOpen(o)
+        if (!o) setCargoInvoiceNo(null)
+      }}
+      invoiceNo={cargoInvoiceNo}
+    />
+    </>
   )
 }

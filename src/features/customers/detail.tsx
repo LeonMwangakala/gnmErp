@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Loader2, ChevronLeft, ChevronRight, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -24,6 +24,7 @@ import { customerApi, PaginationMeta } from '@/lib/api'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { EMPTY_INVOICE_REFS, useInvoiceContainers } from './use-invoice-containers'
+import { InvoiceConsignmentsGoodsModal } from '@/features/invoices/invoice-consignments-goods-modal'
 
 interface CustomerDetail {
   id: number
@@ -101,6 +102,8 @@ export function CustomerDetail() {
     to: null,
   })
   const [activeTab, setActiveTab] = useState('info')
+  const [cargoModalOpen, setCargoModalOpen] = useState(false)
+  const [cargoInvoiceNo, setCargoInvoiceNo] = useState<string | null>(null)
 
   const { containerByInvoiceId, containersLoading } = useInvoiceContainers(
     activeTab === 'invoices' ? invoices : EMPTY_INVOICE_REFS
@@ -395,6 +398,9 @@ export function CustomerDetail() {
                           <TableHead className='text-right'>Amount</TableHead>
                           <TableHead className='text-right'>Due Amount</TableHead>
                           <TableHead>Status</TableHead>
+                          <TableHead className='text-right w-[52px]'>
+                            <span className='sr-only'>CMTS details</span>
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -426,6 +432,21 @@ export function CustomerDetail() {
                               {invoice.due_amount_formatted}
                             </TableCell>
                             <TableCell>{getStatusBadge(invoice.status, invoice.is_overdue)}</TableCell>
+                            <TableCell className='text-right' onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                type='button'
+                                variant='ghost'
+                                size='sm'
+                                className='h-8 w-8 p-0'
+                                title='CMTS consignment & goods'
+                                onClick={() => {
+                                  setCargoInvoiceNo(invoice.invoice_number)
+                                  setCargoModalOpen(true)
+                                }}
+                              >
+                                <Info className='h-4 w-4' />
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -503,6 +524,15 @@ export function CustomerDetail() {
           </TabsContent>
         </Tabs>
       </Main>
+
+      <InvoiceConsignmentsGoodsModal
+        open={cargoModalOpen}
+        onOpenChange={(o) => {
+          setCargoModalOpen(o)
+          if (!o) setCargoInvoiceNo(null)
+        }}
+        invoiceNo={cargoInvoiceNo}
+      />
     </>
   )
 }

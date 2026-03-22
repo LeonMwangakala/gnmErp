@@ -1,5 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Eye, Download, Search, ChevronLeft, ChevronRight, Send, Filter } from 'lucide-react'
+import {
+  Eye,
+  Download,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Send,
+  Filter,
+  Info,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -31,6 +40,7 @@ import { Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { InvoiceDetailModal } from './invoice-detail-modal'
 import { PostInvoicesModal } from './post-invoices-modal'
+import { InvoiceConsignmentsGoodsModal } from './invoice-consignments-goods-modal'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,6 +93,8 @@ export function Invoices() {
   const [searchInput, setSearchInput] = useState('')
   const [statusFilter, setStatusFilter] = useState<number[]>([])
   const [isPostInvoicesModalOpen, setIsPostInvoicesModalOpen] = useState(false)
+  const [cargoModalOpen, setCargoModalOpen] = useState(false)
+  const [cargoInvoiceNo, setCargoInvoiceNo] = useState<string | null>(null)
 
   // Debounce search
   useEffect(() => {
@@ -407,6 +419,21 @@ export function Invoices() {
                             >
                               <Eye className='h-4 w-4' />
                             </Button>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='sm'
+                              className='h-8 w-8 p-0'
+                              title='CMTS consignment & goods'
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                setCargoInvoiceNo(invoice.invoice_number)
+                                setCargoModalOpen(true)
+                              }}
+                            >
+                              <Info className='h-4 w-4' />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -483,6 +510,15 @@ export function Invoices() {
         open={isPostInvoicesModalOpen}
         onOpenChange={setIsPostInvoicesModalOpen}
         onPosted={() => fetchInvoices()}
+      />
+
+      <InvoiceConsignmentsGoodsModal
+        open={cargoModalOpen}
+        onOpenChange={(o) => {
+          setCargoModalOpen(o)
+          if (!o) setCargoInvoiceNo(null)
+        }}
+        invoiceNo={cargoInvoiceNo}
       />
     </>
   )

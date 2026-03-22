@@ -6,6 +6,10 @@ import { useAuthStore } from '@/stores/auth-store'
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'https://torchlight.africa/api'
 
+/** CMTS / GNM billing API (consignments, containers, invoice lookups) */
+export const CMTS_BILLING_API_BASE =
+  import.meta.env.VITE_CMTS_BILLING_API_URL || 'https://api.gnmcargo.com/api/v1'
+
 // Create axios instance with default config
 export const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -217,9 +221,15 @@ export const invoiceApi = {
     }
   },
   getInvoiceContainerDetails: async (invoiceNo: string) => {
-    // Call external API for container details
-    const response = await externalApi.get('https://api.gnmcargo.com/api/v1/invoice-container-details', {
+    const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/invoice-container-details`, {
       params: { invoice_no: invoiceNo },
+    })
+    return response.data
+  },
+  /** Consignments + goods linked to bill / invoice number (CMTS) */
+  getInvoiceConsignmentsGoods: async (invoiceNo: string) => {
+    const response = await externalApi.post(`${CMTS_BILLING_API_BASE}/invoice-consignments-goods`, {
+      invoice_no: invoiceNo.trim(),
     })
     return response.data
   },
@@ -235,7 +245,7 @@ export const invoiceApi = {
     return response.data.data
   },
   getInvoiceNosByContainer: async (containerNo: string) => {
-    const response = await externalApi.get('https://api.gnmcargo.com/api/v1/invoice-nos-by-container', {
+    const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/invoice-nos-by-container`, {
       params: { container_no: containerNo },
     })
     return response.data
