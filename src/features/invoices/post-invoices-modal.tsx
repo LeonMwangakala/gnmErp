@@ -38,6 +38,7 @@ type TorchlightInvoiceDetails = {
   amount: number
   amount_formatted: string
   status: number
+  status_label?: string
 }
 
 type Row = {
@@ -45,6 +46,11 @@ type Row = {
   torchlight: TorchlightInvoiceDetails | null
   selected: boolean
   mismatch: boolean
+}
+
+/** Only Draft (0) invoices can be bulk-posted; already sent/posted must stay disabled. */
+function isRowPostable(row: Row): boolean {
+  return row.torchlight !== null && row.torchlight.status === 0
 }
 
 export function PostInvoicesModal({
@@ -70,16 +76,32 @@ export function PostInvoicesModal({
     }
   }, [open])
 
+  const postableRows = useMemo(() => rows.filter(isRowPostable), [rows])
+
   const selectedCount = useMemo(
-    () => rows.filter((r) => r.selected).length,
+    () => rows.filter((r) => r.selected && isRowPostable(r)).length,
+    [rows]
+  )
+  const mismatchCount = useMemo(
+    () => rows.filter((r) => r.mismatch).length,
+    [rows]
+  )
+  const selectedMismatchCount = useMemo(
+    () => rows.filter((r) => r.selected && isRowPostable(r) && r.mismatch).length,
     [rows]
   )
 
-  const allSelected = rows.length > 0 && rows.every((r) => r.selected)
+  const allSelected =
+    postableRows.length > 0 && postableRows.every((r) => r.selected)
 
   const formatSourceAmount = (n: number) => {
-    if (typeof n !== 'number' || Number.isNaN(n)) return '0.00'
-    return n.toFixed(2)
+    if (typeof n !== 'number' || Number.isNaN(n)) return '$0.00'
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n)
   }
 
   const loadInvoicesForContainer = async () => {
@@ -120,11 +142,15 @@ export function PostInvoicesModal({
         const mismatch =
           torchAmount === null ? false : Math.abs(sourceAmount - torchAmount) > 0.01
 
-        return {
+        const row: Row = {
           source: res.source,
           torchlight: res.torchlight,
-          selected: true,
+          selected: false,
           mismatch,
+        }
+        return {
+          ...row,
+          selected: isRowPostable(row),
         }
       })
 
@@ -138,19 +164,26 @@ export function PostInvoicesModal({
 
   const toggleRow = (index: number, value: boolean) => {
     setRows((prev) =>
-      prev.map((r, i) => (i === index ? { ...r, selected: value } : r))
+      prev.map((r, i) => {
+        if (i !== index) return r
+        if (!isRowPostable(r)) return { ...r, selected: false }
+        return { ...r, selected: value }
+      })
     )
   }
 
   const toggleAll = (value: boolean) => {
-    setRows((prev) => prev.map((r) => ({ ...r, selected: value })))
+    setRows((prev) =>
+      prev.map((r) =>
+        isRowPostable(r) ? { ...r, selected: value } : { ...r, selected: false }
+      )
+    )
   }
 
   const handleSubmit = async () => {
     const selectedIds = rows
-      .filter((r) => r.selected)
-      .map((r) => r.torchlight?.id)
-      .filter((id): id is number => typeof id === 'number')
+      .filter((r) => r.selected && isRowPostable(r))
+      .map((r) => r.torchlight!.id)
 
     if (selectedIds.length === 0) {
       toast.error('No invoices selected to post.')
@@ -185,7 +218,8 @@ export function PostInvoicesModal({
         <DialogHeader>
           <DialogTitle>Post Invoices</DialogTitle>
           <DialogDescription>
-            Enter a container number to load invoices from the source system and post matching draft invoices.
+            Load invoices by container. Only <span className='font-medium'>Draft</span> invoices in Torchlight can be
+            selected and posted; already sent or posted invoices stay visible but disabled.
           </DialogDescription>
         </DialogHeader>
 
@@ -236,8 +270,30 @@ export function PostInvoicesModal({
           </div>
 
           {rows.length > 0 && (
-            <div className='rounded-md border'>
-              <Table>
+            <>
+              {rows.length > 0 && postableRows.length === 0 && (
+                <div className='rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100'>
+                  <span className='font-medium'>No draft invoices to post.</span>{' '}
+                  <span className='text-muted-foreground'>
+                    All matching Torchlight invoices are already sent or not found. Nothing can be submitted.
+                  </span>
+                </div>
+              )}
+
+              {mismatchCount > 0 && (
+                <div className='rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm'>
+                  <span className='font-medium text-destructive'>
+                    {mismatchCount} invoice(s) have amount differences.
+                  </span>{' '}
+                  <span className='text-muted-foreground'>
+                    Review rows marked <Badge variant='destructive' className='mx-1'>Mismatch</Badge> before posting.
+                    {selectedMismatchCount > 0 && ` ${selectedMismatchCount} mismatched invoice(s) are currently selected.`}
+                  </span>
+                </div>
+              )}
+
+              <div className='rounded-md border'>
+                <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className='w-[60px]'>Post</TableHead>
@@ -245,6 +301,7 @@ export function PostInvoicesModal({
                     <TableHead>Customer name</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead className='text-right'>Amount</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -253,11 +310,17 @@ export function PostInvoicesModal({
                       <Checkbox
                         checked={allSelected}
                         onCheckedChange={(v) => toggleAll(Boolean(v))}
-                        aria-label='Select all invoices'
+                        disabled={postableRows.length === 0}
+                        aria-label='Select all draft invoices'
                       />
                     </TableCell>
-                    <TableCell colSpan={4} className='text-sm text-muted-foreground'>
-                      {selectedCount} selected
+                    <TableCell colSpan={5} className='text-sm text-muted-foreground'>
+                      {selectedCount} draft invoice(s) selected
+                      {postableRows.length < rows.length && (
+                        <span className='ml-2'>
+                          ({rows.length - postableRows.length} not postable — already sent or missing)
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                   {rows.map((row, idx) => {
@@ -265,17 +328,38 @@ export function PostInvoicesModal({
                     const sourceAmount = formatSourceAmount(row.source.source_amount)
                     const torchAmount = row.torchlight ? row.torchlight.amount : null
 
+                    const postable = isRowPostable(row)
+
                     return (
-                      <TableRow key={row.source.invoice_no}>
+                      <TableRow
+                        key={row.source.invoice_no}
+                        className={
+                          row.mismatch && postable
+                            ? 'bg-destructive/5'
+                            : !postable
+                              ? 'opacity-80'
+                              : undefined
+                        }
+                      >
                         <TableCell>
                           <Checkbox
                             checked={row.selected}
+                            disabled={!postable}
                             onCheckedChange={(v) => toggleRow(idx, Boolean(v))}
-                            aria-label={`Select invoice ${row.source.invoice_no}`}
+                            aria-label={
+                              postable
+                                ? `Select invoice ${row.source.invoice_no}`
+                                : `Invoice ${row.source.invoice_no} cannot be posted`
+                            }
                           />
                         </TableCell>
                         <TableCell className='font-mono font-medium'>
                           {row.source.invoice_no}
+                          {row.mismatch && (
+                            <Badge variant='destructive' className='ml-2'>
+                              Mismatch
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>{row.torchlight?.customer?.name || row.source.customer_name}</TableCell>
                         <TableCell>
@@ -290,17 +374,28 @@ export function PostInvoicesModal({
                                 {torchAmountFormatted || (torchAmount !== null ? torchAmount : '-')}
                               </div>
                             </div>
-                            {row.mismatch && (
-                              <Badge variant='destructive'>Mismatch</Badge>
-                            )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {!row.torchlight ? (
+                            <Badge variant='secondary'>Not in Torchlight</Badge>
+                          ) : postable ? (
+                            <Badge variant='outline' className='bg-slate-100 dark:bg-slate-800'>
+                              {row.torchlight.status_label ?? 'Draft'}
+                            </Badge>
+                          ) : (
+                            <Badge variant='secondary'>
+                              {row.torchlight.status_label ?? 'Posted'}
+                            </Badge>
+                          )}
                         </TableCell>
                       </TableRow>
                     )
                   })}
                 </TableBody>
-              </Table>
-            </div>
+                </Table>
+              </div>
+            </>
           )}
         </div>
 

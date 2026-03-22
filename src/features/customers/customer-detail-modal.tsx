@@ -27,6 +27,7 @@ import {
 import { customerApi, PaginationMeta } from '@/lib/api'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { EMPTY_INVOICE_REFS, useInvoiceContainers } from './use-invoice-containers'
 
 interface CustomerDetail {
   id: number
@@ -112,6 +113,10 @@ export function CustomerDetailModal({
     to: null,
   })
   const [activeTab, setActiveTab] = useState('info')
+
+  const { containerByInvoiceId, containersLoading } = useInvoiceContainers(
+    activeTab === 'invoices' ? invoices : EMPTY_INVOICE_REFS
+  )
 
   useEffect(() => {
     if (open && customerId) {
@@ -385,7 +390,7 @@ export function CustomerDetailModal({
                         <TableHeader>
                           <TableRow>
                             <TableHead>Invoice#</TableHead>
-                            <TableHead>Reference#</TableHead>
+                            <TableHead>Container#</TableHead>
                             <TableHead>Issue Date</TableHead>
                             <TableHead>Due Date</TableHead>
                             <TableHead className='text-right'>Total Tax</TableHead>
@@ -400,7 +405,13 @@ export function CustomerDetailModal({
                               <TableCell className='font-medium'>
                                 {invoice.invoice_number}
                               </TableCell>
-                              <TableCell>{invoice.ref_number || '-'}</TableCell>
+                              <TableCell className='max-w-[220px] font-mono text-xs'>
+                                {containersLoading ? (
+                                  <span className='text-muted-foreground'>…</span>
+                                ) : (
+                                  containerByInvoiceId[invoice.id] ?? '-'
+                                )}
+                              </TableCell>
                               <TableCell>{invoice.issue_date}</TableCell>
                               <TableCell>
                                 {invoice.is_overdue ? (
