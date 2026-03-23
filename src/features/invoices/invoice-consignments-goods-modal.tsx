@@ -82,7 +82,7 @@ export function InvoiceConsignmentsGoodsModal({
   open,
   onOpenChange,
   invoiceNo,
-  title = 'Consignment & goods',
+  title = 'Consignment & Goods',
 }: InvoiceConsignmentsGoodsModalProps) {
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -134,7 +134,7 @@ export function InvoiceConsignmentsGoodsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-h-[90vh] max-w-3xl overflow-y-auto sm:max-w-3xl'>
+      <DialogContent className='max-h-[90vh] w-full max-w-[min(95vw,80rem)] gap-4 overflow-y-auto sm:max-w-[min(95vw,80rem)]'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Package className='h-5 w-5' />
@@ -223,11 +223,9 @@ export function InvoiceConsignmentsGoodsModal({
                           <TableHeader>
                             <TableRow>
                               <TableHead>Good</TableHead>
-                              <TableHead className='text-right'>Qty (line)</TableHead>
-                              <TableHead className='text-right'>Pkgs (line)</TableHead>
+                              <TableHead className='text-right'>Qty</TableHead>
+                              <TableHead className='text-right'>Pkgs</TableHead>
                               <TableHead>Unit</TableHead>
-                              <TableHead>Qty (good)</TableHead>
-                              <TableHead>Pkgs (good)</TableHead>
                               <TableHead>Supplier</TableHead>
                               <TableHead>Receipt #</TableHead>
                             </TableRow>
@@ -243,8 +241,6 @@ export function InvoiceConsignmentsGoodsModal({
                                   <TableCell className='text-right'>{str(row.quantity)}</TableCell>
                                   <TableCell className='text-right'>{str(row.pkgs)}</TableCell>
                                   <TableCell>{str(row.unit)}</TableCell>
-                                  <TableCell className='text-sm'>{str(g.quantity)}</TableCell>
-                                  <TableCell className='text-sm'>{str(g.pkgs)}</TableCell>
                                   <TableCell className='text-sm max-w-[120px] truncate' title={str(g.supplier_name)}>
                                     {str(g.supplier_name)}
                                   </TableCell>
