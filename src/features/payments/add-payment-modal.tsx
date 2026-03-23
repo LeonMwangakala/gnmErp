@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { paymentApi } from '@/lib/api'
+import { paymentApi, bankAccountApi } from '@/lib/api'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 
@@ -27,6 +27,8 @@ interface PaymentAccountOption {
   bank_name: string
   holder_name: string
   opening_balance: number
+  account_number?: string
+  name?: string
 }
 
 interface PaymentCurrencyOption {
@@ -97,6 +99,15 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
     invoice_currency_exchange_rate: '',
   })
 
+  const normalizeAccount = (acc: any): PaymentAccountOption => ({
+    id: Number(acc.id),
+    bank_name: acc.bank_name || '',
+    holder_name: acc.holder_name || '',
+    opening_balance: Number(acc.opening_balance ?? 0),
+    account_number: acc.account_number || '',
+    name: acc.name || '',
+  })
+
   useEffect(() => {
     if (open) {
       loadFormData()
@@ -140,7 +151,15 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
       setIsLoading(true)
       const data = await paymentApi.getPaymentFormData()
       // Don't load invoices - we'll search them dynamically
-      setAccounts(data.accounts || [])
+      let normalizedAccounts: PaymentAccountOption[] = (data.accounts || []).map(normalizeAccount)
+
+      // Fallback: pull from bank-accounts endpoint if payment/form-data has no accounts
+      if (normalizedAccounts.length === 0) {
+        const bankResp = await bankAccountApi.getBankAccounts({ per_page: 100 })
+        normalizedAccounts = (bankResp.data || []).map(normalizeAccount)
+      }
+
+      setAccounts(normalizedAccounts)
       setCurrencies(data.currencies || [])
 
       // Set default currency (base) if exists
@@ -507,7 +526,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                     </div>
                   </div>
 
-                  <div>
+                  <div className='w-full'>
                     <label className='block text-sm font-medium mb-1'>
                       Account <span className='text-destructive'>*</span>
                     </label>
@@ -515,13 +534,15 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                       value={form.account_id}
                       onValueChange={(value) => handleInputChange('account_id', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className='w-full'>
                         <SelectValue placeholder='Select account' />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className='w-[var(--radix-select-trigger-width)]'>
                         {accounts.map((acc) => (
                           <SelectItem key={acc.id} value={String(acc.id)}>
-                            {acc.bank_name}{' '}
+                            {(acc.bank_name || acc.holder_name
+                              ? `${acc.bank_name} ${acc.holder_name}`.trim()
+                              : acc.name || `Account #${acc.id}`)}{' '}
                             {Number.isFinite(acc.opening_balance)
                               ? `[${acc.opening_balance.toLocaleString()}]`
                               : ''}
