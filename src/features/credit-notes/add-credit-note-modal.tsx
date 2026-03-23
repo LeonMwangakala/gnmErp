@@ -139,7 +139,11 @@ export function AddCreditNoteModal({
     }
 
     try {
-      const results = await creditNoteApi.searchInvoices({ search: inputValue, limit: 20 })
+      const results = await creditNoteApi.searchInvoices({
+        search: inputValue,
+        limit: 20,
+        usage: 'credit_note',
+      })
 
       if (!Array.isArray(results.data || results)) {
         return []

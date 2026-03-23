@@ -165,7 +165,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
     }
 
     try {
-      const results = await paymentApi.searchInvoices(inputValue, 20)
+      const results = await paymentApi.searchInvoices(inputValue, 20, 'payment')
       
       // paymentApi.searchInvoices already returns the data array
       if (!Array.isArray(results)) {

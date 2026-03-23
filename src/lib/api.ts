@@ -281,9 +281,13 @@ export const paymentApi = {
     })
     return response.data
   },
-  searchInvoices: async (search: string, limit: number = 20): Promise<any[]> => {
+  searchInvoices: async (
+    search: string,
+    limit: number = 20,
+    usage?: 'payment' | 'invoice_payment' | 'credit_note'
+  ): Promise<any[]> => {
     const response = await api.get('/payments/search-invoices', {
-      params: { search, limit },
+      params: { search, limit, usage },
     })
     return response.data.data || []
   },
@@ -316,7 +320,9 @@ export const creditNoteApi = {
     })
     return response.data
   },
-  searchInvoices: async (params: { search: string; limit?: number }): Promise<any> => {
+  searchInvoices: async (
+    params: { search: string; limit?: number; usage?: 'credit_note' | 'payment' | 'invoice_payment' }
+  ): Promise<any> => {
     const response = await api.get('/payments/search-invoices', { params })
     return response.data
   },
