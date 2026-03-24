@@ -61,6 +61,15 @@ function roundOffAmount(value: number | null | undefined): number {
   return Math.round(amount)
 }
 
+function getSyncFailureMessage(syncResp: any): string {
+  const rawMessage = String(syncResp?.message || '').trim()
+  const lower = rawMessage.toLowerCase()
+  if (lower.includes('cancel') && lower.includes('bill')) {
+    return 'Cannot sync this invoice because the source bill was canceled.'
+  }
+  return rawMessage || 'Failed to sync invoice to ERP'
+}
+
 export function PostInvoicesModal({
   open,
   onOpenChange,
@@ -279,6 +288,7 @@ export function PostInvoicesModal({
         (syncResp.synced === true || syncResp.already_posted_to_erp === true)
 
       if (!syncOk) {
+        const failureMessage = getSyncFailureMessage(syncResp)
         setRows((prev) =>
           prev.map((r) =>
             r.source.invoice_no === invoiceNo
@@ -286,12 +296,12 @@ export function PostInvoicesModal({
                   ...r,
                   syncAttempted: true,
                   syncFailed: true,
-                  syncMessage: syncResp?.message || 'Failed to sync invoice to ERP',
+                  syncMessage: failureMessage,
                 }
               : r
           )
         )
-        toast.error(syncResp?.message || `Failed to sync ${invoiceNo}`)
+        toast.error(failureMessage)
         return
       }
 
@@ -351,10 +361,11 @@ export function PostInvoicesModal({
           syncResp.status === true &&
           (syncResp.synced === true || syncResp.already_posted_to_erp === true)
         if (!syncOk) {
+          const failureMessage = getSyncFailureMessage(syncResp)
           setRows((prev) =>
             prev.map((r) =>
               r.source.invoice_no === invoiceNo
-                ? { ...r, syncAttempted: true, syncFailed: true, syncMessage: syncResp?.message || 'Failed to sync invoice to ERP' }
+                ? { ...r, syncAttempted: true, syncFailed: true, syncMessage: failureMessage }
                 : r
             )
           )
