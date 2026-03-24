@@ -46,6 +46,9 @@ type Row = {
   torchlight: TorchlightInvoiceDetails | null
   selected: boolean
   mismatch: boolean
+  syncAttempted?: boolean
+  syncFailed?: boolean
+  syncMessage?: string
 }
 
 /** Only Draft (0) invoices can be bulk-posted; already sent/posted must stay disabled. */
@@ -66,6 +69,7 @@ export function PostInvoicesModal({
   const [isFetching, setIsFetching] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [syncingInvoiceNos, setSyncingInvoiceNos] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (!open) {
@@ -73,6 +77,7 @@ export function PostInvoicesModal({
       setRows([])
       setIsFetching(false)
       setIsSubmitting(false)
+      setSyncingInvoiceNos({})
     }
   }, [open])
 
@@ -128,12 +133,58 @@ export function PostInvoicesModal({
         sourceInvoices.map(async (inv) => {
           try {
             const torch = await invoiceApi.getInvoiceByInvoiceNumber(inv.invoice_no)
-            return { source: inv, torchlight: torch as TorchlightInvoiceDetails }
+            return { source: inv, torchlight: torch as TorchlightInvoiceDetails, syncAttempted: false, syncFailed: false, syncMessage: '' }
           } catch (e) {
-            return { source: inv, torchlight: null }
+            return { source: inv, torchlight: null, syncAttempted: false, syncFailed: false, syncMessage: '' }
           }
         })
       )
+
+      // For invoices missing in Torchlight, try syncing from CMTS bill -> ERP and then refetch once.
+      const missing = torchlightResults.filter((r) => !r.torchlight)
+      if (missing.length > 0) {
+        const syncResults = await Promise.allSettled(
+          missing.map((m) => invoiceApi.syncInvoiceToERPByInvoiceNumber(m.source.invoice_no))
+        )
+
+        let syncedCount = 0
+        for (let i = 0; i < missing.length; i++) {
+          const miss = missing[i]
+          const syncRes = syncResults[i]
+          miss.syncAttempted = true
+
+          const syncOk =
+            syncRes.status === 'fulfilled' &&
+            syncRes.value &&
+            syncRes.value.status === true &&
+            (syncRes.value.synced === true || syncRes.value.already_posted_to_erp === true)
+
+          if (!syncOk) {
+            miss.syncFailed = true
+            miss.syncMessage =
+              syncRes.status === 'fulfilled'
+                ? syncRes.value?.message || 'Failed to sync invoice to ERP'
+                : 'Failed to sync invoice to ERP'
+            continue
+          }
+
+          // Refetch from Torchlight after successful sync call
+          try {
+            const torch = await invoiceApi.getInvoiceByInvoiceNumber(miss.source.invoice_no)
+            miss.torchlight = torch as TorchlightInvoiceDetails
+            miss.syncFailed = false
+            miss.syncMessage = ''
+            syncedCount += 1
+          } catch (e: any) {
+            miss.syncFailed = true
+            miss.syncMessage = 'Synced request sent, but invoice is still not available in Torchlight yet'
+          }
+        }
+
+        if (syncedCount > 0) {
+          toast.success(`Auto-synced ${syncedCount} missing invoice(s) to Torchlight.`)
+        }
+      }
 
       const nextRows: Row[] = torchlightResults.map((res) => {
         const torchAmount = res.torchlight?.amount ?? null
@@ -147,6 +198,9 @@ export function PostInvoicesModal({
           torchlight: res.torchlight,
           selected: false,
           mismatch,
+          syncAttempted: res.syncAttempted,
+          syncFailed: res.syncFailed,
+          syncMessage: res.syncMessage,
         }
         return {
           ...row,
@@ -209,6 +263,72 @@ export function PostInvoicesModal({
       toast.error(error?.response?.data?.message || 'Failed to post invoices')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const retrySyncRow = async (invoiceNo: string) => {
+    setSyncingInvoiceNos((prev) => ({ ...prev, [invoiceNo]: true }))
+    try {
+      const syncResp = await invoiceApi.syncInvoiceToERPByInvoiceNumber(invoiceNo, true)
+      const syncOk =
+        syncResp &&
+        syncResp.status === true &&
+        (syncResp.synced === true || syncResp.already_posted_to_erp === true)
+
+      if (!syncOk) {
+        setRows((prev) =>
+          prev.map((r) =>
+            r.source.invoice_no === invoiceNo
+              ? {
+                  ...r,
+                  syncAttempted: true,
+                  syncFailed: true,
+                  syncMessage: syncResp?.message || 'Failed to sync invoice to ERP',
+                }
+              : r
+          )
+        )
+        toast.error(syncResp?.message || `Failed to sync ${invoiceNo}`)
+        return
+      }
+
+      try {
+        const torch = await invoiceApi.getInvoiceByInvoiceNumber(invoiceNo)
+        const torchlight = torch as TorchlightInvoiceDetails
+        setRows((prev) =>
+          prev.map((r) => {
+            if (r.source.invoice_no !== invoiceNo) return r
+            const mismatch = Math.abs((r.source.source_amount ?? 0) - (torchlight.amount ?? 0)) > 0.01
+            const updated: Row = {
+              ...r,
+              torchlight,
+              mismatch,
+              syncAttempted: true,
+              syncFailed: false,
+              syncMessage: '',
+            }
+            return { ...updated, selected: isRowPostable(updated) ? updated.selected || true : false }
+          })
+        )
+        toast.success(`Invoice ${invoiceNo} synced successfully.`)
+      } catch (e) {
+        setRows((prev) =>
+          prev.map((r) =>
+            r.source.invoice_no === invoiceNo
+              ? {
+                  ...r,
+                  syncAttempted: true,
+                  syncFailed: true,
+                  syncMessage:
+                    'Sync request completed, but invoice is still not available in Torchlight yet',
+                }
+              : r
+          )
+        )
+        toast.error(`Invoice ${invoiceNo} not found in Torchlight yet. Try again shortly.`)
+      }
+    } finally {
+      setSyncingInvoiceNos((prev) => ({ ...prev, [invoiceNo]: false }))
     }
   }
 
@@ -378,7 +498,29 @@ export function PostInvoicesModal({
                         </TableCell>
                         <TableCell>
                           {!row.torchlight ? (
-                            <Badge variant='secondary'>Not in Torchlight</Badge>
+                            <div className='space-y-1'>
+                              <Badge variant='secondary'>Not in Torchlight</Badge>
+                              {row.syncAttempted && row.syncFailed && (
+                                <div className='text-xs text-destructive'>{row.syncMessage || 'Sync failed'}</div>
+                              )}
+                              <Button
+                                type='button'
+                                size='sm'
+                                variant='outline'
+                                className='h-7 px-2 text-xs'
+                                disabled={Boolean(syncingInvoiceNos[row.source.invoice_no]) || isSubmitting}
+                                onClick={() => void retrySyncRow(row.source.invoice_no)}
+                              >
+                                {syncingInvoiceNos[row.source.invoice_no] ? (
+                                  <>
+                                    <Loader2 className='mr-1 h-3 w-3 animate-spin' />
+                                    Syncing...
+                                  </>
+                                ) : (
+                                  'Retry Sync'
+                                )}
+                              </Button>
+                            </div>
                           ) : postable ? (
                             <Badge variant='outline' className='bg-slate-100 dark:bg-slate-800'>
                               {row.torchlight.status_label ?? 'Draft'}

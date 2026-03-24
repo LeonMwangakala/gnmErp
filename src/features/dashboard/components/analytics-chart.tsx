@@ -47,9 +47,10 @@ export function AnalyticsChart({ data, isLoading }: AnalyticsChartProps) {
           tickFormatter={(value) => `${value}`}
         />
         <Tooltip
-          formatter={(value: number, key: string) => {
+          formatter={(value: number | string | undefined, key: string | undefined) => {
             const label = key === 'revenue' ? 'Revenue' : 'Expenses'
-            return [`${value.toLocaleString()}`, label]
+            const num = typeof value === 'number' ? value : Number(value ?? 0)
+            return [`${num.toLocaleString()}`, label]
           }}
         />
         <Area

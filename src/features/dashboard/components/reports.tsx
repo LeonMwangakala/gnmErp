@@ -146,8 +146,8 @@ export function Reports() {
     setOpen(true)
   }
 
-  const handleFilterChange = (field: keyof ReportFilters, value: string) => {
-    setFilters((prev) => (prev ? { ...prev, [field]: value } as ReportFilters : prev))
+  const handleFilterChange = (field: string, value: string) => {
+    setFilters((prev) => (prev ? ({ ...prev, [field]: value } as ReportFilters) : prev))
   }
 
   const getInitialFilters = (type: ReportType): ReportFilters => {

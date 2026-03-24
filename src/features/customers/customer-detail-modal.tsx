@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Loader2, ChevronLeft, ChevronRight, X, Info } from 'lucide-react'
+import { Loader2, ChevronLeft, ChevronRight, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,

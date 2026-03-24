@@ -159,7 +159,7 @@ export function Bills() {
     return sortOrder === 'asc' ? ' ↑' : ' ↓'
   }
 
-  const getStatusBadge = (status: number, isOverdue: boolean) => {
+  const getStatusBadge = (status: number) => {
     const statusLabels: Record<number, string> = {
       0: 'Draft',
       1: 'Sent',
@@ -351,7 +351,7 @@ export function Bills() {
                           {bill.due_formatted}
                         </TableCell>
                         <TableCell>
-                          {getStatusBadge(bill.status, bill.is_overdue)}
+                          {getStatusBadge(bill.status)}
                         </TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">

@@ -141,9 +141,7 @@ export function InvoiceDetailModal({
   const [containersLoading, setContainersLoading] = useState(false)
   const [containers, setContainers] = useState<Container[]>([])
   const [activeTab, setActiveTab] = useState('overview')
-  const [totalPaid, setTotalPaid] = useState(0)
   const [totalPaidFormatted, setTotalPaidFormatted] = useState('0.00')
-  const [totalCreditNote, setTotalCreditNote] = useState(0)
   const [totalCreditNoteFormatted, setTotalCreditNoteFormatted] = useState('0.00')
 
   useEffect(() => {
@@ -156,9 +154,7 @@ export function InvoiceDetailModal({
       setPayments([])
       setCreditNotes([])
       setContainers([])
-      setTotalPaid(0)
       setTotalPaidFormatted('0.00')
-      setTotalCreditNote(0)
       setTotalCreditNoteFormatted('0.00')
     }
   }, [open, invoiceId])
@@ -201,7 +197,6 @@ export function InvoiceDetailModal({
       setPaymentsLoading(true)
       const response = await invoiceApi.getInvoicePayments(invoiceId)
       setPayments(response.data)
-      setTotalPaid(response.total_paid)
       setTotalPaidFormatted(response.total_paid_formatted)
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to load payments')
@@ -216,7 +211,6 @@ export function InvoiceDetailModal({
       setCreditNotesLoading(true)
       const response = await invoiceApi.getInvoiceCreditNotes(invoiceId)
       setCreditNotes(response.data)
-      setTotalCreditNote(response.total_credit_note)
       setTotalCreditNoteFormatted(response.total_credit_note_formatted)
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to load credit notes')

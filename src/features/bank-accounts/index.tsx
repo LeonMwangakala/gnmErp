@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, ChevronLeft, ChevronRight, Plus, Pencil, Building2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Pencil, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {

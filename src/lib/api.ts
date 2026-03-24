@@ -128,6 +128,7 @@ export interface PaginationParams {
   search?: string
   sort_by?: string
   sort_order?: 'asc' | 'desc'
+  [key: string]: any
 }
 
 export interface PaginationMeta {
@@ -247,6 +248,13 @@ export const invoiceApi = {
   getInvoiceNosByContainer: async (containerNo: string) => {
     const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/invoice-nos-by-container`, {
       params: { container_no: containerNo },
+    })
+    return response.data
+  },
+  syncInvoiceToERPByInvoiceNumber: async (invoiceNo: string, force: boolean = false) => {
+    const response = await externalApi.post(`${CMTS_BILLING_API_BASE}/sync-invoice-to-erp`, {
+      invoice_no: invoiceNo.trim(),
+      force,
     })
     return response.data
   },

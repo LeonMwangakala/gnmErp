@@ -13,7 +13,6 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 // Extract all sidebar items recursively

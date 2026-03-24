@@ -1,23 +1,12 @@
 import {
-  Construction,
   LayoutDashboard,
   Monitor,
-  Bug,
-  ListTodo,
-  FileX,
   HelpCircle,
-  Lock,
   Bell,
-  Package,
   Palette,
-  ServerOff,
   Settings,
   Wrench,
   UserCog,
-  UserX,
-  Users,
-  MessagesSquare,
-  ShieldCheck,
   AudioWaveform,
   Command,
   GalleryVerticalEnd,
@@ -34,10 +23,8 @@ import {
   DollarSign,
   TrendingDown,
   Clipboard,
-  FileCheck,
   Store,
 } from 'lucide-react'
-import { ClerkLogo } from '@/assets/clerk-logo'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {

@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
-import { customerApi, invoiceApi, paymentApi, revenueApi, expensePaymentApi, bankAccountApi, type PaginationMeta } from '@/lib/api'
+import { customerApi, invoiceApi, paymentApi, revenueApi, expensePaymentApi, type PaginationMeta } from '@/lib/api'
 import { Analytics } from './components/analytics'
 import { Overview, type OverviewDatum } from './components/overview'
 import { RecentSales } from './components/recent-sales'
@@ -83,14 +83,12 @@ export function Dashboard() {
         expensePaymentsRes,
         invoicesRes,
         paymentsRes,
-        bankAccountsRes,
         customersRes,
       ] = await Promise.all([
         revenueApi.getRevenues({ per_page: 500, date: monthRange }),
         expensePaymentApi.getExpensePayments({ per_page: 500, date: monthRange }),
         invoiceApi.getInvoices({ per_page: 500, sort_by: 'issue_date', sort_order: 'desc' }),
         paymentApi.getPayments({ per_page: 5, sort_by: 'date', sort_order: 'desc' }),
-        bankAccountApi.getBankAccounts({ per_page: 500 }),
         customerApi.getCustomers({ per_page: 1 }),
       ])
 

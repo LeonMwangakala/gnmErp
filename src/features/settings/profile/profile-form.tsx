@@ -7,7 +7,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import { getAvatarUrl } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Loader2, Upload, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -175,7 +174,7 @@ export function ProfileForm() {
             <FormField
               control={form.control}
               name='avatar'
-              render={({ field }) => (
+              render={() => (
                 <FormItem>
                   <FormLabel>Profile Picture</FormLabel>
                   <FormControl>
