@@ -190,9 +190,8 @@ export function PostInvoicesModal({
   }
 
   const handleSubmit = async () => {
-    const selectedIds = rows
-      .filter((r) => r.selected && isRowPostable(r))
-      .map((r) => r.torchlight!.id)
+    const selectedRows = rows.filter((r) => r.selected && isRowPostable(r))
+    const selectedIds = selectedRows.map((r) => r.torchlight!.id)
 
     if (selectedIds.length === 0) {
       toast.error('No invoices selected to post.')
@@ -201,6 +200,47 @@ export function PostInvoicesModal({
 
     try {
       setIsSubmitting(true)
+
+      // Align mismatched selected draft invoices to source amount before posting.
+      const mismatches = selectedRows.filter((r) => r.mismatch && r.torchlight)
+      if (mismatches.length > 0) {
+        let updatedCount = 0
+        for (const row of mismatches) {
+          const resp = await invoiceApi.syncSourceAmount(
+            row.source.invoice_no,
+            row.source.source_amount
+          )
+          if (resp?.status === 200) {
+            updatedCount += 1
+          } else {
+            throw new Error(
+              resp?.message ||
+                `Failed to sync amount for ${row.source.invoice_no}`
+            )
+          }
+        }
+
+        // Refresh updated invoice totals for accurate mismatch rendering.
+        const refreshed = await Promise.all(
+          rows.map(async (r) => {
+            if (!r.torchlight) return r
+            try {
+              const torch = await invoiceApi.getInvoiceByInvoiceNumber(r.source.invoice_no)
+              const nextTorch = torch as TorchlightInvoiceDetails
+              const mismatch =
+                Math.abs((r.source.source_amount ?? 0) - (nextTorch.amount ?? 0)) > 0.01
+              return { ...r, torchlight: nextTorch, mismatch }
+            } catch {
+              return r
+            }
+          })
+        )
+        setRows(refreshed)
+        if (updatedCount > 0) {
+          toast.success(`Updated ${updatedCount} mismatched invoice amount(s).`)
+        }
+      }
+
       const response = await invoiceApi.bulkPost(selectedIds)
 
       if (response.status === 200) {

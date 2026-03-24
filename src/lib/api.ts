@@ -239,6 +239,13 @@ export const invoiceApi = {
     const response = await api.post('/invoices/bulk-post', payload)
     return response.data
   },
+  syncSourceAmount: async (invoiceNumber: string, sourceAmount: number) => {
+    const response = await api.post('/invoices/sync-source-amount', {
+      invoice_number: invoiceNumber,
+      source_amount: sourceAmount,
+    })
+    return response.data
+  },
   getInvoiceByInvoiceNumber: async (invoiceNo: string) => {
     const response = await api.get('/invoices/by-invoice-number', {
       params: { invoice_no: invoiceNo },
