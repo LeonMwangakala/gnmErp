@@ -397,9 +397,6 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
       <DialogContent className='!max-w-[95vw] !w-[95vw] max-h-[90vh] overflow-y-auto sm:!max-w-[95vw]'>
         <DialogHeader>
           <DialogTitle>New Invoice Payment</DialogTitle>
-          <DialogDescription>
-            Record a payment received for an invoice. Fields mirror the existing ERP form.
-          </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
