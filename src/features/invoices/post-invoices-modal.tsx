@@ -82,6 +82,7 @@ export function PostInvoicesModal({
   }, [open])
 
   const postableRows = useMemo(() => rows.filter(isRowPostable), [rows])
+  const missingRows = useMemo(() => rows.filter((r) => !r.torchlight), [rows])
 
   const selectedCount = useMemo(
     () => rows.filter((r) => r.selected && isRowPostable(r)).length,
@@ -139,52 +140,6 @@ export function PostInvoicesModal({
           }
         })
       )
-
-      // For invoices missing in Torchlight, try syncing from CMTS bill -> ERP and then refetch once.
-      const missing = torchlightResults.filter((r) => !r.torchlight)
-      if (missing.length > 0) {
-        const syncResults = await Promise.allSettled(
-          missing.map((m) => invoiceApi.syncInvoiceToERPByInvoiceNumber(m.source.invoice_no))
-        )
-
-        let syncedCount = 0
-        for (let i = 0; i < missing.length; i++) {
-          const miss = missing[i]
-          const syncRes = syncResults[i]
-          miss.syncAttempted = true
-
-          const syncOk =
-            syncRes.status === 'fulfilled' &&
-            syncRes.value &&
-            syncRes.value.status === true &&
-            (syncRes.value.synced === true || syncRes.value.already_posted_to_erp === true)
-
-          if (!syncOk) {
-            miss.syncFailed = true
-            miss.syncMessage =
-              syncRes.status === 'fulfilled'
-                ? syncRes.value?.message || 'Failed to sync invoice to ERP'
-                : 'Failed to sync invoice to ERP'
-            continue
-          }
-
-          // Refetch from Torchlight after successful sync call
-          try {
-            const torch = await invoiceApi.getInvoiceByInvoiceNumber(miss.source.invoice_no)
-            miss.torchlight = torch as TorchlightInvoiceDetails
-            miss.syncFailed = false
-            miss.syncMessage = ''
-            syncedCount += 1
-          } catch (e: any) {
-            miss.syncFailed = true
-            miss.syncMessage = 'Synced request sent, but invoice is still not available in Torchlight yet'
-          }
-        }
-
-        if (syncedCount > 0) {
-          toast.success(`Auto-synced ${syncedCount} missing invoice(s) to Torchlight.`)
-        }
-      }
 
       const nextRows: Row[] = torchlightResults.map((res) => {
         const torchAmount = res.torchlight?.amount ?? null
@@ -332,6 +287,75 @@ export function PostInvoicesModal({
     }
   }
 
+  const syncMissingInvoices = async () => {
+    const targets = rows.filter((r) => !r.torchlight).map((r) => r.source.invoice_no)
+    if (targets.length === 0) return
+
+    let syncedCount = 0
+    for (const invoiceNo of targets) {
+      setSyncingInvoiceNos((prev) => ({ ...prev, [invoiceNo]: true }))
+      try {
+        const syncResp = await invoiceApi.syncInvoiceToERPByInvoiceNumber(invoiceNo, true)
+        const syncOk =
+          syncResp &&
+          syncResp.status === true &&
+          (syncResp.synced === true || syncResp.already_posted_to_erp === true)
+        if (!syncOk) {
+          setRows((prev) =>
+            prev.map((r) =>
+              r.source.invoice_no === invoiceNo
+                ? { ...r, syncAttempted: true, syncFailed: true, syncMessage: syncResp?.message || 'Failed to sync invoice to ERP' }
+                : r
+            )
+          )
+          continue
+        }
+
+        try {
+          const torch = await invoiceApi.getInvoiceByInvoiceNumber(invoiceNo)
+          const torchlight = torch as TorchlightInvoiceDetails
+          setRows((prev) =>
+            prev.map((r) => {
+              if (r.source.invoice_no !== invoiceNo) return r
+              const mismatch = Math.abs((r.source.source_amount ?? 0) - (torchlight.amount ?? 0)) > 0.01
+              const updated: Row = {
+                ...r,
+                torchlight,
+                mismatch,
+                syncAttempted: true,
+                syncFailed: false,
+                syncMessage: '',
+              }
+              return { ...updated, selected: isRowPostable(updated) ? updated.selected || true : false }
+            })
+          )
+          syncedCount += 1
+        } catch (e) {
+          setRows((prev) =>
+            prev.map((r) =>
+              r.source.invoice_no === invoiceNo
+                ? {
+                    ...r,
+                    syncAttempted: true,
+                    syncFailed: true,
+                    syncMessage: 'Sync request completed, but invoice is still not available in Torchlight yet',
+                  }
+                : r
+            )
+          )
+        }
+      } finally {
+        setSyncingInvoiceNos((prev) => ({ ...prev, [invoiceNo]: false }))
+      }
+    }
+
+    if (syncedCount > 0) {
+      toast.success(`Synced ${syncedCount} invoice(s).`)
+    } else {
+      toast.error('No missing invoices were synced.')
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='max-w-[95vw]! w-[95vw]! max-h-[90vh] overflow-y-auto sm:max-w-[95vw]!'>
@@ -397,6 +421,31 @@ export function PostInvoicesModal({
                   <span className='text-muted-foreground'>
                     All matching Torchlight invoices are already sent or not found. Nothing can be submitted.
                   </span>
+                </div>
+              )}
+
+              {missingRows.length > 0 && (
+                <div className='rounded-md border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-sm'>
+                  <div className='flex items-center justify-between gap-2'>
+                    <div>
+                      <span className='font-medium text-blue-700 dark:text-blue-300'>
+                        {missingRows.length} invoice(s) are missing in Torchlight and will be created:
+                      </span>
+                      <span className='ml-2 text-muted-foreground'>
+                        {missingRows.slice(0, 6).map((r) => r.source.invoice_no).join(', ')}
+                        {missingRows.length > 6 ? ' ...' : ''}
+                      </span>
+                    </div>
+                    <Button
+                      type='button'
+                      size='sm'
+                      variant='outline'
+                      onClick={() => void syncMissingInvoices()}
+                      disabled={missingRows.length === 0 || isSubmitting}
+                    >
+                      Sync Missing Invoices
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -475,6 +524,9 @@ export function PostInvoicesModal({
                         </TableCell>
                         <TableCell className='font-mono font-medium'>
                           {row.source.invoice_no}
+                          {!row.torchlight && (
+                            <Badge variant='outline' className='ml-2'>Will be created</Badge>
+                          )}
                           {row.mismatch && (
                             <Badge variant='destructive' className='ml-2'>
                               Mismatch
