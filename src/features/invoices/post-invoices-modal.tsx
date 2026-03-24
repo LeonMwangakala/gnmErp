@@ -56,6 +56,11 @@ function isRowPostable(row: Row): boolean {
   return row.torchlight !== null && row.torchlight.status === 0
 }
 
+function roundOffAmount(value: number | null | undefined): number {
+  const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0
+  return Math.round(amount)
+}
+
 export function PostInvoicesModal({
   open,
   onOpenChange,
@@ -143,10 +148,12 @@ export function PostInvoicesModal({
 
       const nextRows: Row[] = torchlightResults.map((res) => {
         const torchAmount = res.torchlight?.amount ?? null
-        const sourceAmount = res.source.source_amount ?? 0
+        const sourceAmount = roundOffAmount(res.source.source_amount)
 
         const mismatch =
-          torchAmount === null ? false : Math.abs(sourceAmount - torchAmount) > 0.01
+          torchAmount === null
+            ? false
+            : roundOffAmount(torchAmount) !== sourceAmount
 
         const row: Row = {
           source: res.source,
@@ -208,7 +215,7 @@ export function PostInvoicesModal({
         for (const row of mismatches) {
           const resp = await invoiceApi.syncSourceAmount(
             row.source.invoice_no,
-            row.source.source_amount
+            roundOffAmount(row.source.source_amount)
           )
           if (resp?.status === 200) {
             updatedCount += 1
@@ -228,7 +235,8 @@ export function PostInvoicesModal({
               const torch = await invoiceApi.getInvoiceByInvoiceNumber(r.source.invoice_no)
               const nextTorch = torch as TorchlightInvoiceDetails
               const mismatch =
-                Math.abs((r.source.source_amount ?? 0) - (nextTorch.amount ?? 0)) > 0.01
+                roundOffAmount(r.source.source_amount) !==
+                roundOffAmount(nextTorch.amount)
               return { ...r, torchlight: nextTorch, mismatch }
             } catch {
               return r
@@ -293,7 +301,9 @@ export function PostInvoicesModal({
         setRows((prev) =>
           prev.map((r) => {
             if (r.source.invoice_no !== invoiceNo) return r
-            const mismatch = Math.abs((r.source.source_amount ?? 0) - (torchlight.amount ?? 0)) > 0.01
+            const mismatch =
+              roundOffAmount(r.source.source_amount) !==
+              roundOffAmount(torchlight.amount)
             const updated: Row = {
               ...r,
               torchlight,
@@ -357,7 +367,9 @@ export function PostInvoicesModal({
           setRows((prev) =>
             prev.map((r) => {
               if (r.source.invoice_no !== invoiceNo) return r
-              const mismatch = Math.abs((r.source.source_amount ?? 0) - (torchlight.amount ?? 0)) > 0.01
+              const mismatch =
+                roundOffAmount(r.source.source_amount) !==
+                roundOffAmount(torchlight.amount)
               const updated: Row = {
                 ...r,
                 torchlight,
@@ -534,7 +546,9 @@ export function PostInvoicesModal({
                   </TableRow>
                   {rows.map((row, idx) => {
                     const torchAmountFormatted = row.torchlight?.amount_formatted
-                    const sourceAmount = formatSourceAmount(row.source.source_amount)
+                    const sourceAmount = formatSourceAmount(
+                      roundOffAmount(row.source.source_amount)
+                    )
                     const torchAmount = row.torchlight ? row.torchlight.amount : null
 
                     const postable = isRowPostable(row)
