@@ -420,6 +420,16 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Step 1: only move to step 2 after an invoice has been selected.
+    if (step === 1) {
+      if (!selectedInvoice) {
+        toast.error('Please select an invoice first.')
+        return
+      }
+      setStep(2)
+      return
+    }
+
     if (!form.invoice_id || !form.account_id || !form.currency || !form.amount || !form.date) {
       toast.error('Please fill in all required fields.')
       return
