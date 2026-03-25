@@ -167,7 +167,7 @@ export function Payments() {
       <Header>
         <div className='flex items-center justify-between w-full'>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>Invoice Payments</h1>
+            <h1 className='text-2xl font-bold tracking-tight'>Receive Payments</h1>
             <p className='text-muted-foreground'>
               Manage invoice payments and receipts
             </p>
@@ -181,7 +181,7 @@ export function Payments() {
             />
             <Button onClick={() => setIsAddModalOpen(true)}>
               <Plus className='mr-2 h-4 w-4' />
-              Add Payment
+              Payment
             </Button>
           </div>
         </div>

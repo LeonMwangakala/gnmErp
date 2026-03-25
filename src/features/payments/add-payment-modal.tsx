@@ -377,15 +377,30 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
       }
 
       const response = await paymentApi.createPayment(fd)
-      if (response.status === 200) {
+      if (response?.status === 200) {
         toast.success(response.message || 'Payment saved successfully.')
         onOpenChange(false)
         onSuccess()
       } else {
-        toast.error(response.message || 'Failed to save payment.')
+        const cmtsMessage =
+          response?.data?.message ||
+          response?.data?.details?.message ||
+          response?.data?.details?.error ||
+          response?.data?.message ||
+          null
+        toast.error(
+          response?.message ||
+            cmtsMessage ||
+            'Failed to save payment. Please try again.'
+        )
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to save payment.')
+      const msg =
+        error?.response?.data?.message ||
+        error?.response?.data?.data?.message ||
+        error?.message ||
+        'Failed to save payment.'
+      toast.error(msg)
     } finally {
       setIsSubmitting(false)
     }
@@ -393,9 +408,9 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='!max-w-[95vw] !w-[95vw] max-h-[90vh] overflow-y-auto sm:!max-w-[95vw]'>
+      <DialogContent className='max-w-[95vw]! w-[95vw]! max-h-[90vh] overflow-y-auto sm:max-w-[95vw]!'>
         <DialogHeader>
-          <DialogTitle>New Invoice Payment</DialogTitle>
+          <DialogTitle>Receive Payments</DialogTitle>
         </DialogHeader>
 
         {isLoading ? (
@@ -533,7 +548,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                       <SelectTrigger className='w-full'>
                         <SelectValue placeholder='Select account' />
                       </SelectTrigger>
-                      <SelectContent className='w-[var(--radix-select-trigger-width)]'>
+                      <SelectContent className='w-(--radix-select-trigger-width)'>
                         {accounts.map((acc) => (
                           <SelectItem key={acc.id} value={String(acc.id)}>
                             {(acc.bank_name || acc.holder_name

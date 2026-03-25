@@ -79,7 +79,7 @@ export const sidebarData: SidebarData = {
           icon: CreditCard,
           items: [
             {
-              title: 'Payments',
+              title: 'Receive Payments',
               url: '/payments',
               icon: Receipt,
             },
