@@ -42,7 +42,9 @@ export function CompanySwitcher({ companies = [] }: CompanySwitcherProps) {
         (company) => company.email.split('@')[1] === emailDomain
       )
       if (currentCompany) {
-        setActiveCompany(currentCompany)
+        // Company switcher shows the logged-in user's email,
+        // while keeping the matched company name/key for display and switching.
+        setActiveCompany({ ...currentCompany, email: auth.user.email })
       } else {
         // If no match found, use first company or create from email
         const companyName = emailDomain.split('.')[0].toUpperCase()
