@@ -510,8 +510,112 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
           <form className='space-y-4' onSubmit={handleSubmit}>
             <div className='grid grid-cols-1 md:grid-cols-12 gap-4'>
               <div className='md:col-span-8 space-y-4'>
+                {step === 1 && (
+                  <div className='space-y-4'>
+                    <div className='grid grid-cols-1 md:grid-cols-12 gap-4 items-end'>
+                      <div className='md:col-span-8 space-y-2'>
+                        <label className='block text-sm font-medium'>
+                          Container number <span className='text-destructive'>*</span>
+                        </label>
+                        <Input
+                          value={containerNo}
+                          onChange={(e) => setContainerNo(e.target.value)}
+                          placeholder='e.g. CAAU7968718'
+                        />
+                      </div>
+
+                      <div className='md:col-span-4 flex justify-end'>
+                        <Button
+                          type='button'
+                          variant='default'
+                          disabled={isFetchingContainerInvoices}
+                          onClick={() => void fetchContainerInvoices()}
+                        >
+                          {isFetchingContainerInvoices ? (
+                            <>
+                              <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                              Loading...
+                            </>
+                          ) : (
+                            'Fetch Invoices'
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {containerInvoices.length > 0 ? (
+                      <div className='space-y-2'>
+                        <label className='block text-sm font-medium'>
+                          Invoices <span className='text-destructive'>*</span>
+                        </label>
+
+                        <div className='rounded-md border overflow-hidden'>
+                          <div className='max-h-56 overflow-auto'>
+                            <table className='w-full text-sm'>
+                              <thead className='bg-muted/30'>
+                                <tr>
+                                  <th className='text-left px-3 py-2 font-medium'>Invoice</th>
+                                  <th className='text-left px-3 py-2 font-medium'>Customer</th>
+                                  <th className='text-right px-3 py-2 font-medium'>Total</th>
+                                  <th className='text-right px-3 py-2 font-medium'>Due</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {containerInvoices.map((inv) => {
+                                  const isSelected = inv.id === selectedInvoice?.id
+                                  return (
+                                    <tr
+                                      key={inv.id}
+                                      className={
+                                        isSelected
+                                          ? 'bg-muted/60 cursor-pointer'
+                                          : 'cursor-pointer hover:bg-muted/30'
+                                      }
+                                      onClick={() => {
+                                        handleInvoiceChange(inv)
+                                        setStep(2)
+                                      }}
+                                    >
+                                      <td className='px-3 py-2 font-medium'>
+                                        {inv.invoice_number}
+                                      </td>
+                                      <td className='px-3 py-2'>
+                                        {inv.customer_name}
+                                      </td>
+                                      <td className='px-3 py-2 text-right'>
+                                        {inv.total.toLocaleString()}
+                                      </td>
+                                      <td className='px-3 py-2 text-right'>
+                                        {inv.due.toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {selectedInvoice && (
+                          <p className='text-xs text-muted-foreground'>
+                            Selected: {selectedInvoice.invoice_number} (due{' '}
+                            {selectedInvoice.due.toLocaleString()})
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      !isFetchingContainerInvoices && (
+                        <p className='text-xs text-muted-foreground'>
+                          Enter a container number and click{' '}
+                          <span className='font-medium'>Fetch Invoices</span>.
+                        </p>
+                      )
+                    )}
+                  </div>
+                )}
                 {/* Row 1: Invoice *, Account * */}
-                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                 {step === 2 && (
+                   <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                   <div className='w-full'>
                     <label className='block text-sm font-medium mb-1'>
                       Invoice <span className='text-destructive'>*</span>
@@ -522,8 +626,9 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                       onChange={handleInvoiceChange}
                       loadOptions={loadInvoiceOptionsDebounced}
                       placeholder='Type invoice number or customer name...'
-                      isClearable
-                      isSearchable
+                      isDisabled
+                      isClearable={false}
+                      isSearchable={false}
                       noOptionsMessage={({ inputValue }) =>
                         inputValue.length < 2
                           ? 'Type at least 2 characters to search'
@@ -651,10 +756,12 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
+                   </div>
+                 )}
 
                 {/* Row 2: Currency *, Exchange Rate */}
-                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                {step === 2 && (
+                  <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                   <div>
                     <label className='block text-sm font-medium mb-1'>
                       Currency <span className='text-destructive'>*</span>
@@ -685,10 +792,12 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                       placeholder='Exchange rate'
                     />
                   </div>
-                </div>
+                  </div>
+                )}
 
                 {/* Row 3: Received Amount, Received Date */}
-                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                {step === 2 && (
+                  <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                   <div>
                     <label className='block text-sm font-medium mb-1'>
                       Received Amount <span className='text-destructive'>*</span>
@@ -715,10 +824,12 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                       placeholder='YYYY-MM-DD HH:mm:ss'
                     />
                   </div>
-                </div>
+                  </div>
+                )}
 
                 {/* Row 4: Reference, Receipt */}
-                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                {step === 2 && (
+                  <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                   <div>
                     <label className='block text-sm font-medium mb-1'>Reference</label>
                     <Input
@@ -736,21 +847,25 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                       onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
                     />
                   </div>
-                </div>
+                  </div>
+                )}
 
                 {/* Row 5: Description */}
-                <div>
-                  <label className='block text-sm font-medium mb-1'>Description</label>
-                  <Textarea
-                    value={form.description}
-                    onChange={(e) => handleInputChange('description', e.target.value)}
-                    placeholder='Description'
-                    rows={3}
-                  />
-                </div>
+                {step === 2 && (
+                  <div>
+                    <label className='block text-sm font-medium mb-1'>Description</label>
+                    <Textarea
+                      value={form.description}
+                      onChange={(e) => handleInputChange('description', e.target.value)}
+                      placeholder='Description'
+                      rows={3}
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className='md:col-span-4 space-y-3 border rounded-md p-3 bg-muted/30'>
+              {step === 2 && (
+                <div className='md:col-span-4 space-y-3 border rounded-md p-3 bg-muted/30'>
                 <h3 className='text-sm font-semibold mb-2'>Invoice Details</h3>
                 <div className='text-sm space-y-1'>
                   <p>
@@ -782,7 +897,8 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                     </span>
                   </p>
                 </div>
-              </div>
+                </div>
+              )}
             </div>
 
             <div className='flex justify-end gap-2 pt-2'>
@@ -794,9 +910,14 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
               >
                 Cancel
               </Button>
-              <Button type='submit' disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-                Save
+              <Button
+                type='submit'
+                disabled={isSubmitting || (step === 1 && !selectedInvoice)}
+              >
+                {isSubmitting ? (
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                ) : null}
+                {step === 1 ? 'Continue' : 'Save'}
               </Button>
             </div>
           </form>
