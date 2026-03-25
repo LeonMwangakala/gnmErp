@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { paymentApi, bankAccountApi } from '@/lib/api'
+import { paymentApi, bankAccountApi, invoiceApi } from '@/lib/api'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 
@@ -76,7 +76,11 @@ interface InvoiceOption {
 export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [step, setStep] = useState<1 | 2>(1)
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceOption | null>(null)
+  const [containerNo, setContainerNo] = useState('')
+  const [containerInvoices, setContainerInvoices] = useState<InvoiceOption[]>([])
+  const [isFetchingContainerInvoices, setIsFetchingContainerInvoices] = useState(false)
   const [accounts, setAccounts] = useState<PaymentAccountOption[]>([])
   const [currencies, setCurrencies] = useState<PaymentCurrencyOption[]>([])
   const [maxAmount, setMaxAmount] = useState<number | null>(null)
@@ -110,6 +114,11 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
   useEffect(() => {
     if (open) {
       loadFormData()
+      setStep(1)
+      setContainerNo('')
+      setContainerInvoices([])
+      setSelectedInvoice(null)
+      setMaxAmount(null)
       // Default date to now in YYYY-MM-DD HH:mm:ss format
       const now = new Date()
       const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
@@ -142,6 +151,9 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
       })
       setSelectedInvoice(null)
       setMaxAmount(null)
+      setStep(1)
+      setContainerNo('')
+      setContainerInvoices([])
     }
   }, [open])
 
@@ -226,6 +238,73 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
     },
     [loadInvoiceOptions]
   )
+
+  const fetchContainerInvoices = useCallback(async () => {
+    const trimmed = containerNo.trim()
+    if (!trimmed) {
+      toast.error('Container number is required.')
+      return
+    }
+
+    try {
+      setIsFetchingContainerInvoices(true)
+      setContainerInvoices([])
+      setSelectedInvoice(null)
+      setMaxAmount(null)
+
+      const sourceResp = await invoiceApi.getInvoiceNosByContainer(trimmed)
+      const invoiceNos: string[] = sourceResp?.invoice_nos || []
+      if (!invoiceNos || invoiceNos.length === 0) {
+        toast.error('No invoices found for this container.')
+        return
+      }
+
+      const results = await Promise.all(
+        invoiceNos.map(async (invoiceNo) => {
+          try {
+            const found = await paymentApi.searchInvoices(invoiceNo, 5, 'payment')
+            const match = Array.isArray(found)
+              ? found.find((x: any) => x.invoice_number === invoiceNo) || found[0]
+              : null
+
+            if (!match) return null
+
+            // Explicitly filter out drafts (status 0) even though usage='payment' already does this.
+            if (Number(match.status) === 0) return null
+
+            return {
+              value: String(match.id),
+              label: `${match.invoice_number} - ${match.customer_name}${match.subject ? ` (${match.subject})` : ''}`,
+              id: match.id,
+              invoice_number: match.invoice_number || '',
+              subject: match.subject || '',
+              customer_name: match.customer_name || '',
+              total: match.total || 0,
+              due: match.due || 0,
+              currency: match.currency,
+              currency_exchange_rate: match.currency_exchange_rate || 1,
+            } as InvoiceOption
+          } catch {
+            return null
+          }
+        })
+      )
+
+      const options = results.filter(Boolean) as InvoiceOption[]
+      if (options.length === 0) {
+        toast.error('No non-draft invoices found for this container.')
+        return
+      }
+
+      // Sort by invoice number for stability
+      options.sort((a, b) => a.invoice_number.localeCompare(b.invoice_number))
+      setContainerInvoices(options)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to load invoices for container.')
+    } finally {
+      setIsFetchingContainerInvoices(false)
+    }
+  }, [containerNo, invoiceApi])
 
   // Cleanup timeout on unmount
   useEffect(() => {
