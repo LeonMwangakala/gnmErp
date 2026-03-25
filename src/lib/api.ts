@@ -296,12 +296,8 @@ export const paymentApi = {
     return response.data.data || { currencies: [], accounts: [], invoices: [] }
   },
 
-  createPayment: async (formData: FormData) => {
-    const response = await api.post('/invoice-payments', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
+  createPayment: async (data: Record<string, any>) => {
+    const response = await api.post('/invoice-payments', data)
     return response.data
   },
   searchInvoices: async (

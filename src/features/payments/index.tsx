@@ -434,7 +434,7 @@ export function Payments() {
       />
 
       <Dialog open={isExportModalOpen} onOpenChange={setIsExportModalOpen}>
-        <DialogContent className='max-w-[95vw]! w-[95vw]! sm:max-w-[520px]'>
+        <DialogContent className='max-w-[95vw]! w-[95vw]! sm:max-w-[420px]'>
           <DialogHeader>
             <DialogTitle>Export Payments</DialogTitle>
           </DialogHeader>

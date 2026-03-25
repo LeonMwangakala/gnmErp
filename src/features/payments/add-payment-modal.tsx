@@ -407,8 +407,9 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
 
     let maximumAmount = invoiceDue
     if (invoiceCurrencyId !== selectedCurrencyId) {
-      maximumAmount = invoiceDue * invoiceRate
-      maximumAmount = maximumAmount / selectedRate
+      // Exchange rates are stored as "currency units per 1 USD" (base).
+      // So: amount_in_selected = amount_in_invoice / invoiceRate * selectedRate
+      maximumAmount = (invoiceDue / invoiceRate) * selectedRate
     }
     setMaxAmount(maximumAmount)
   }
@@ -443,29 +444,30 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
 
     try {
       setIsSubmitting(true)
-      const fd = new FormData()
-      fd.append('hidden_id', '')
-      fd.append('invoice_id', form.invoice_id)
-      fd.append('invoice_due', form.invoice_due)
-      fd.append('invoice_currency', form.invoice_currency)
-      fd.append('invoice_currency_exchange_rate', form.invoice_currency_exchange_rate)
-      fd.append('currency_symbol', form.currency_symbol)
-      fd.append('currency', form.currency)
-      fd.append('currency_exchange_rate', form.currency_exchange_rate)
-      fd.append('amount', form.amount)
-      fd.append('date', form.date)
-      fd.append('account_id', form.account_id)
-      fd.append('payment_method', 'Manual')
-      fd.append('receipt', '')
-      fd.append('txn_id', '')
-      fd.append('reference', form.reference)
-      fd.append('description', form.description)
-
       if (form.add_receipt) {
-        fd.append('add_receipt', form.add_receipt)
+        toast.info('Receipt upload is skipped when sending JSON payload.')
       }
 
-      const response = await paymentApi.createPayment(fd)
+      const payload = {
+        hidden_id: '',
+        invoice_id: form.invoice_id,
+        invoice_due: form.invoice_due,
+        invoice_currency: form.invoice_currency,
+        invoice_currency_exchange_rate: form.invoice_currency_exchange_rate,
+        currency_symbol: form.currency_symbol,
+        currency: form.currency,
+        currency_exchange_rate: form.currency_exchange_rate,
+        amount: form.amount,
+        date: form.date,
+        account_id: form.account_id,
+        payment_method: 'Manual',
+        receipt: '',
+        txn_id: '',
+        reference: form.reference,
+        description: form.description,
+      }
+
+      const response = await paymentApi.createPayment(payload)
       if (response?.status === 200) {
         toast.success(response.message || 'Payment saved successfully.')
         onOpenChange(false)
