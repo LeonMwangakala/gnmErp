@@ -283,6 +283,14 @@ export const paymentApi = {
     }
   },
 
+  exportInvoicePaymentsByDate: async (date: string): Promise<Blob> => {
+    const response = await api.get('/payments/export-by-date', {
+      params: { date },
+      responseType: 'blob',
+    })
+    return response.data
+  },
+
   getPaymentFormData: async () => {
     const response = await api.get('/payment/form-data')
     return response.data.data || { currencies: [], accounts: [], invoices: [] }

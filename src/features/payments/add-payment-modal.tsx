@@ -512,8 +512,8 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
               <div className='md:col-span-8 space-y-4'>
                 {step === 1 && (
                   <div className='space-y-4'>
-                    <div className='grid grid-cols-1 md:grid-cols-12 gap-4 items-end'>
-                      <div className='md:col-span-8 space-y-2'>
+                    <div className='grid grid-cols-1 md:grid-cols-12 gap-2 items-end'>
+                      <div className='md:col-span-9 space-y-2'>
                         <label className='block text-sm font-medium'>
                           Container number <span className='text-destructive'>*</span>
                         </label>
@@ -524,7 +524,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                         />
                       </div>
 
-                      <div className='md:col-span-4 flex justify-end'>
+                      <div className='md:col-span-3 flex justify-start'>
                         <Button
                           type='button'
                           variant='default'
@@ -583,10 +583,10 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                                         {inv.customer_name}
                                       </td>
                                       <td className='px-3 py-2 text-right'>
-                                        {inv.total.toLocaleString()}
+                                        ${inv.total.toLocaleString()}
                                       </td>
                                       <td className='px-3 py-2 text-right'>
-                                        {inv.due.toLocaleString()}
+                                        ${inv.due.toLocaleString()}
                                       </td>
                                     </tr>
                                   )
@@ -809,7 +809,12 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                     />
                     {maxAmount !== null && (
                       <p className='mt-1 text-xs text-muted-foreground'>
-                        Maximum allowed (based on due & currency): {maxAmount.toFixed(2)}
+                        Maximum allowed (based on due & currency):{' '}
+                        {(() => {
+                          const cur = currencies.find((c) => String(c.id) === form.currency)
+                          const symbol = cur?.currency_symbol || '$'
+                          return `${symbol}${maxAmount.toFixed(2)}`
+                        })()}
                       </p>
                     )}
                   </div>

@@ -30,6 +30,12 @@ import { paymentApi, PaginationMeta } from '@/lib/api'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { AddPaymentModal } from './add-payment-modal'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export interface Payment {
   id: number
@@ -39,6 +45,8 @@ export interface Payment {
   date_raw: string
   amount: number
   amount_formatted: string
+  amount_usd?: number
+  amount_usd_formatted?: string
   payment_type: string
   payment_method: string
   account_id: number | null
@@ -55,6 +63,14 @@ export interface Payment {
 export function Payments() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [exportDate, setExportDate] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+      now.getDate()
+    ).padStart(2, '0')}`
+  })
+  const [isExporting, setIsExporting] = useState(false)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
   const [pagination, setPagination] = useState<PaginationMeta>({
     current_page: 1,
     per_page: 15,
@@ -162,6 +178,31 @@ export function Payments() {
     }
   }
 
+  const handleExportByDate = async () => {
+    if (!exportDate) return
+    let success = false
+    try {
+      setIsExporting(true)
+      const blob = await paymentApi.exportInvoicePaymentsByDate(exportDate)
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `invoice-payments-${exportDate}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      success = true
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to export payments')
+    } finally {
+      setIsExporting(false)
+      if (success) {
+        setIsExportModalOpen(false)
+      }
+    }
+  }
+
   return (
     <>
       <Header>
@@ -179,6 +220,15 @@ export function Payments() {
               onChange={(e) => setSearchInput(e.target.value)}
               className='max-w-sm'
             />
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setIsExportModalOpen(true)}
+                disabled={isExporting}
+              >
+                <Download className='mr-2 h-4 w-4' />
+                Export
+              </Button>
             <Button onClick={() => setIsAddModalOpen(true)}>
               <Plus className='mr-2 h-4 w-4' />
               Payment
@@ -285,7 +335,16 @@ export function Payments() {
                           )}
                         </TableCell>
                         <TableCell>{payment.date}</TableCell>
-                        <TableCell className='text-right'>{payment.amount_formatted}</TableCell>
+                        <TableCell className='text-right'>
+                          <div className='flex flex-col items-end'>
+                            <span>{payment.amount_formatted}</span>
+                            {payment.amount_usd_formatted ? (
+                              <span className='text-xs text-muted-foreground'>
+                                USD: {payment.amount_usd_formatted}
+                              </span>
+                            ) : null}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           {payment.currency_code
                             ? payment.currency_code
@@ -373,6 +432,44 @@ export function Payments() {
           fetchPayments(1, pagination.per_page, search)
         }}
       />
+
+      <Dialog open={isExportModalOpen} onOpenChange={setIsExportModalOpen}>
+        <DialogContent className='max-w-[95vw]! w-[95vw]! sm:max-w-[520px]'>
+          <DialogHeader>
+            <DialogTitle>Export Payments</DialogTitle>
+          </DialogHeader>
+
+          <div className='space-y-2'>
+            <label className='block text-sm font-medium'>
+              Select date <span className='text-destructive'>*</span>
+            </label>
+            <Input
+              type='date'
+              value={exportDate}
+              onChange={(e) => setExportDate(e.target.value)}
+              disabled={isExporting}
+            />
+          </div>
+
+          <div className='flex justify-end gap-2 pt-4'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setIsExportModalOpen(false)}
+              disabled={isExporting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type='button'
+              onClick={() => void handleExportByDate()}
+              disabled={isExporting || !exportDate}
+            >
+              {isExporting ? 'Exporting...' : 'Export'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
