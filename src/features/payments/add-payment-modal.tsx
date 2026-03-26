@@ -316,13 +316,25 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
   }, [])
 
   const handleInputChange = (field: keyof PaymentFormData, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }))
+    const nextForm = { ...form, [field]: value }
+    setForm(nextForm)
 
     if (field === 'amount') {
       const numericAmount = parseFloat(value || '0')
       if (maxAmount !== null && numericAmount > maxAmount) {
         toast.error(`Amount cannot exceed ${maxAmount.toFixed(2)} (converted due amount).`)
       }
+    }
+
+    // Recalculate maximum allowed when exchange rate is edited manually.
+    if (field === 'currency_exchange_rate' && nextForm.invoice_due && nextForm.invoice_currency) {
+      recalculateMaxAmount(
+        Number(nextForm.invoice_due),
+        Number(nextForm.invoice_currency),
+        Number(nextForm.invoice_currency_exchange_rate || 1),
+        nextForm.currency ? Number(nextForm.currency) : null,
+        nextForm.currency_exchange_rate ? Number(nextForm.currency_exchange_rate) : null
+      )
     }
   }
 
@@ -465,6 +477,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
         txn_id: '',
         reference: form.reference,
         description: form.description,
+        sync_cmts: 0,
       }
 
       const response = await paymentApi.createPayment(payload)

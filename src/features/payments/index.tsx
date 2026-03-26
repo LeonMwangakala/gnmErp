@@ -595,7 +595,7 @@ export function Payments() {
           }
         }}
       >
-        <DialogContent className='max-w-[95vw]! w-[95vw]! sm:max-w-[360px]'>
+        <DialogContent className='w-[92vw] max-w-[320px]'>
           <DialogHeader>
             <DialogTitle>Confirm Delete Payment</DialogTitle>
           </DialogHeader>
