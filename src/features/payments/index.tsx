@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/select'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { paymentApi, PaginationMeta } from '@/lib/api'
+import { invoiceApi, paymentApi, PaginationMeta } from '@/lib/api'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { AddPaymentModal } from './add-payment-modal'
@@ -74,6 +74,8 @@ export interface Payment {
   receipt: string
   receipt_url: string | null
   currency_id?: number | null
+  currency_exchange_rate?: number | string | null
+  invoice_currency_exchange_rate?: number | string | null
   currency_code?: string | null
   currency_symbol?: string | null
   cmts_sync_status?: 'pending' | 'success' | 'failed' | string
@@ -94,6 +96,10 @@ export function Payments() {
   const [isSyncingPaymentId, setIsSyncingPaymentId] = useState<number | null>(null)
   const [isDeletingPaymentId, setIsDeletingPaymentId] = useState<number | null>(null)
   const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null)
+  const [viewPayment, setViewPayment] = useState<Payment | null>(null)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [isLoadingSlipDetails, setIsLoadingSlipDetails] = useState(false)
+  const [slipConsignments, setSlipConsignments] = useState<any[]>([])
   const [isConsignmentModalOpen, setIsConsignmentModalOpen] = useState(false)
   const [consignmentInvoiceNo, setConsignmentInvoiceNo] = useState<string | null>(null)
   const [pagination, setPagination] = useState<PaginationMeta>({
@@ -188,14 +194,6 @@ export function Payments() {
     return null
   }
 
-  const handleViewReceipt = (receiptUrl: string | null) => {
-    if (receiptUrl) {
-      window.open(receiptUrl, '_blank')
-    } else {
-      toast.info('No receipt available')
-    }
-  }
-
   const handleDownloadReceipt = (receiptUrl: string | null) => {
     if (receiptUrl) {
       const link = document.createElement('a')
@@ -208,6 +206,87 @@ export function Payments() {
     } else {
       toast.info('No receipt available')
     }
+  }
+
+  const handleOpenPaymentDetails = async (payment: Payment) => {
+    setViewPayment(payment)
+    setIsViewModalOpen(true)
+    setSlipConsignments([])
+    try {
+      setIsLoadingSlipDetails(true)
+      const response = await invoiceApi.getInvoiceConsignmentsGoods(payment.invoice_number)
+      const consignments = Array.isArray(response?.consignments) ? response.consignments : []
+      setSlipConsignments(consignments)
+    } catch {
+      setSlipConsignments([])
+    } finally {
+      setIsLoadingSlipDetails(false)
+    }
+  }
+
+  const handleCreatePaymentSlip = () => {
+    if (!viewPayment) return
+    const slipWindow = window.open('', '_blank')
+    if (!slipWindow) {
+      toast.error('Unable to open print window. Please allow popups.')
+      return
+    }
+
+    const consignmentsHtml =
+      slipConsignments.length === 0
+        ? '<p>No consignment details found.</p>'
+        : slipConsignments
+            .map((block: any) => {
+              const consignment = block?.consignment || {}
+              const lines = Array.isArray(block?.good_consignments) ? block.good_consignments : []
+              const rows = lines
+                .map(
+                  (line: any) => `<tr>
+                    <td style="border:1px solid #ddd;padding:6px;">${line?.good?.name || '-'}</td>
+                    <td style="border:1px solid #ddd;padding:6px;">${line?.quantity ?? '-'}</td>
+                    <td style="border:1px solid #ddd;padding:6px;">${line?.pkgs ?? '-'}</td>
+                    <td style="border:1px solid #ddd;padding:6px;">${line?.unit || '-'}</td>
+                  </tr>`
+                )
+                .join('')
+
+              return `<div style="margin-top:16px;">
+                <h4 style="margin:0 0 6px 0;">Consignment ${consignment?.tracking_number || '-'}</h4>
+                <p style="margin:0 0 6px 0;">Container: ${consignment?.container?.container_no || '-'}</p>
+                <table style="border-collapse:collapse;width:100%;font-size:12px;">
+                  <thead>
+                    <tr>
+                      <th style="border:1px solid #ddd;padding:6px;text-align:left;">Good</th>
+                      <th style="border:1px solid #ddd;padding:6px;text-align:left;">Qty</th>
+                      <th style="border:1px solid #ddd;padding:6px;text-align:left;">Pkgs</th>
+                      <th style="border:1px solid #ddd;padding:6px;text-align:left;">Unit</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rows || '<tr><td colspan="4" style="border:1px solid #ddd;padding:6px;">No goods</td></tr>'}</tbody>
+                </table>
+              </div>`
+            })
+            .join('')
+
+    slipWindow.document.write(`
+      <html>
+        <head><title>Payment Slip - ${viewPayment.invoice_number}</title></head>
+        <body style="font-family:Arial,sans-serif;padding:20px;color:#111;">
+          <h2 style="margin:0 0 12px 0;">Payment Slip</h2>
+          <p><strong>Invoice:</strong> ${viewPayment.invoice_number}</p>
+          <p><strong>Customer:</strong> ${viewPayment.customer_name || '-'}</p>
+          <p><strong>Date:</strong> ${viewPayment.date}</p>
+          <p><strong>Paid Amount:</strong> ${viewPayment.amount_formatted}</p>
+          <p><strong>Account:</strong> ${viewPayment.account_name}</p>
+          <hr style="margin:14px 0;" />
+          <h3 style="margin:0 0 8px 0;">Container & Consignment Details</h3>
+          ${consignmentsHtml}
+        </body>
+      </html>
+    `)
+    slipWindow.document.close()
+    slipWindow.focus()
+    slipWindow.print()
   }
 
   const getCmtsSyncBadgeVariant = (status?: string): 'default' | 'destructive' | 'secondary' => {
@@ -432,9 +511,8 @@ export function Payments() {
                               variant='ghost'
                               size='sm'
                               className='h-8 w-8 p-0'
-                              onClick={() => handleViewReceipt(payment.receipt_url)}
+                              onClick={() => void handleOpenPaymentDetails(payment)}
                               title='View'
-                              disabled={!payment.receipt_url}
                             >
                               <Eye className='h-4 w-4' />
                             </Button>
@@ -575,7 +653,7 @@ export function Payments() {
       />
 
       <Dialog open={isExportModalOpen} onOpenChange={setIsExportModalOpen}>
-        <DialogContent className='max-w-[95vw]! w-[95vw]! sm:max-w-[420px]'>
+        <DialogContent className='w-[92vw] max-w-[320px]'>
           <DialogHeader>
             <DialogTitle>Export Payments</DialogTitle>
           </DialogHeader>
@@ -617,6 +695,69 @@ export function Payments() {
         onOpenChange={setIsConsignmentModalOpen}
         invoiceNo={consignmentInvoiceNo}
       />
+
+      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+        <DialogContent className='w-[92vw] max-w-[540px]'>
+          <DialogHeader>
+            <DialogTitle>Payment Details</DialogTitle>
+          </DialogHeader>
+          <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+            <div className='space-y-1'>
+              <label className='text-sm font-medium'>Customer</label>
+              <Input value={viewPayment?.customer_name || '-'} disabled />
+            </div>
+            <div className='space-y-1'>
+              <label className='text-sm font-medium'>Invoice Number</label>
+              <Input value={viewPayment?.invoice_number || '-'} disabled />
+            </div>
+            <div className='space-y-1'>
+              <label className='text-sm font-medium'>Invoice Amount</label>
+              <Input value={viewPayment?.invoice_amount_formatted || '-'} disabled />
+            </div>
+            <div className='space-y-1'>
+              <label className='text-sm font-medium'>Paid Amount</label>
+              <Input value={viewPayment?.amount_formatted || '-'} disabled />
+            </div>
+            <div className='space-y-1'>
+              <label className='text-sm font-medium'>Account</label>
+              <Input value={viewPayment?.account_name || '-'} disabled />
+            </div>
+            <div className='space-y-1'>
+              <label className='text-sm font-medium'>Date</label>
+              <Input value={viewPayment?.date || '-'} disabled />
+            </div>
+            <div className='space-y-1'>
+              <label className='text-sm font-medium'>Exchange Rate</label>
+              <Input
+                value={
+                  String(
+                    viewPayment?.currency_exchange_rate ??
+                      viewPayment?.invoice_currency_exchange_rate ??
+                      '-'
+                  )
+                }
+                disabled
+              />
+            </div>
+            <div className='space-y-1 sm:col-span-2'>
+              <label className='text-sm font-medium'>Status</label>
+              <Input value={viewPayment?.invoice_status_label || '-'} disabled />
+            </div>
+          </div>
+          <div className='flex justify-between items-center pt-2'>
+            <span className='text-xs text-muted-foreground'>
+              {isLoadingSlipDetails ? 'Loading consignment details...' : `${slipConsignments.length} consignments loaded`}
+            </span>
+            <Button
+              type='button'
+              onClick={handleCreatePaymentSlip}
+              disabled={!viewPayment || isLoadingSlipDetails}
+            >
+              Create Payment Slip
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(paymentToDelete)}
