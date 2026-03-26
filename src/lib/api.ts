@@ -306,6 +306,10 @@ export const paymentApi = {
     const response = await api.post('/invoice-payments', data)
     return response.data
   },
+  deletePayment: async (id: number): Promise<any> => {
+    const response = await api.delete(`/invoice-payments/${id}`)
+    return response.data
+  },
   searchInvoices: async (
     search: string,
     limit: number = 20,

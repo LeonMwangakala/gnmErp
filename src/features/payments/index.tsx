@@ -1,5 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Eye, Download, ChevronLeft, ChevronRight, Plus, FileText, Wrench } from 'lucide-react'
+import {
+  Eye,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  FileText,
+  Wrench,
+  Trash2,
+  Info,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -37,6 +47,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { InvoiceConsignmentsGoodsModal } from '@/features/invoices/invoice-consignments-goods-modal'
 
 export interface Payment {
   id: number
@@ -78,9 +89,10 @@ export function Payments() {
   })
   const [isExporting, setIsExporting] = useState(false)
   const [isExportModalOpen, setIsExportModalOpen] = useState(false)
-  const [isFixModalOpen, setIsFixModalOpen] = useState(false)
-  const [fixInvoiceNumber, setFixInvoiceNumber] = useState('')
   const [isFixing, setIsFixing] = useState(false)
+  const [isDeletingPaymentId, setIsDeletingPaymentId] = useState<number | null>(null)
+  const [isConsignmentModalOpen, setIsConsignmentModalOpen] = useState(false)
+  const [consignmentInvoiceNo, setConsignmentInvoiceNo] = useState<string | null>(null)
   const [pagination, setPagination] = useState<PaginationMeta>({
     current_page: 1,
     per_page: 15,
@@ -132,7 +144,14 @@ export function Payments() {
         sort_order: sortOrder,
       })
       setPayments(response.data)
-      setPagination(response.pagination)
+      setPagination({
+        current_page: Number(response.pagination?.current_page ?? 1),
+        per_page: Number(response.pagination?.per_page ?? currentPerPage),
+        total: Number(response.pagination?.total ?? 0),
+        last_page: Number(response.pagination?.last_page ?? 1),
+        from: response.pagination?.from ?? null,
+        to: response.pagination?.to ?? null,
+      })
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to load payments')
     } finally {
@@ -220,22 +239,24 @@ export function Payments() {
     }
   }
 
-  const handleFixInvoicePayments = async () => {
-    if (!fixInvoiceNumber.trim()) {
-      toast.error('Please enter invoice number')
+  const handleFixInvoicePayments = async (invoiceNumber: string) => {
+    const number = invoiceNumber.trim()
+    if (!number) {
+      toast.error('Invoice number is required')
       return
     }
+    const confirmed = window.confirm(`Fix duplicate/malformed payments for invoice ${number}?`)
+    if (!confirmed) return
+
     try {
       setIsFixing(true)
-      const response = await paymentApi.fixInvoicePayments(fixInvoiceNumber.trim())
+      const response = await paymentApi.fixInvoicePayments(number)
       if (response?.status === 200) {
         const deleted = response?.data?.deleted ?? 0
         const updated = response?.data?.updated_amount_usd ?? 0
         toast.success(
           `${response?.message || 'Invoice payments fixed.'} Deleted: ${deleted}, updated USD: ${updated}.`
         )
-        setIsFixModalOpen(false)
-        setFixInvoiceNumber('')
         fetchPayments(1, pagination.per_page, search)
       } else {
         toast.error(response?.message || 'Failed to fix invoice payments')
@@ -244,6 +265,28 @@ export function Payments() {
       toast.error(error?.response?.data?.message || 'Failed to fix invoice payments')
     } finally {
       setIsFixing(false)
+    }
+  }
+
+  const handleDeletePayment = async (payment: Payment) => {
+    const confirmed = window.confirm(
+      `Delete payment for invoice ${payment.invoice_number}? This will adjust balances.`
+    )
+    if (!confirmed) return
+
+    try {
+      setIsDeletingPaymentId(payment.id)
+      const response = await paymentApi.deletePayment(payment.id)
+      if (response?.status === 200) {
+        toast.success(response?.message || 'Payment deleted successfully.')
+        fetchPayments(1, pagination.per_page, search)
+      } else {
+        toast.error(response?.message || 'Failed to delete payment')
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to delete payment')
+    } finally {
+      setIsDeletingPaymentId(null)
     }
   }
 
@@ -272,15 +315,6 @@ export function Payments() {
               >
                 <Download className='mr-2 h-4 w-4' />
                 Export
-              </Button>
-              <Button
-                type='button'
-                variant='outline'
-                onClick={() => setIsFixModalOpen(true)}
-                disabled={isFixing}
-              >
-                <Wrench className='mr-2 h-4 w-4' />
-                Fix Invoice Payments
               </Button>
             <Button onClick={() => setIsAddModalOpen(true)}>
               <Plus className='mr-2 h-4 w-4' />
@@ -317,6 +351,7 @@ export function Payments() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>S/N</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead
                         className='cursor-pointer hover:bg-muted'
@@ -343,8 +378,11 @@ export function Payments() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {payments.map((payment) => (
+                    {payments.map((payment, index) => (
                       <TableRow key={payment.id}>
+                        <TableCell>
+                          {(pagination.current_page - 1) * pagination.per_page + index + 1}
+                        </TableCell>
                         <TableCell>{payment.customer_name || '--'}</TableCell>
                         <TableCell className='font-medium'>
                           <div className='flex items-center gap-2'>
@@ -373,17 +411,50 @@ export function Payments() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {payment.receipt_url ? (
-                            <div className='flex items-center gap-2'>
-                              <Button
-                                variant='ghost'
-                                size='sm'
-                                className='h-8 w-8 p-0'
-                                onClick={() => handleViewReceipt(payment.receipt_url)}
-                                title='View Receipt'
-                              >
-                                <Eye className='h-4 w-4' />
-                              </Button>
+                          <div className='flex items-center gap-1'>
+                            <Button
+                              variant='ghost'
+                              size='sm'
+                              className='h-8 w-8 p-0'
+                              onClick={() => handleViewReceipt(payment.receipt_url)}
+                              title='View'
+                              disabled={!payment.receipt_url}
+                            >
+                              <Eye className='h-4 w-4' />
+                            </Button>
+                            <Button
+                              variant='ghost'
+                              size='sm'
+                              className='h-8 w-8 p-0'
+                              onClick={() => void handleFixInvoicePayments(payment.invoice_number)}
+                              title='Fix'
+                              disabled={isFixing}
+                            >
+                              <Wrench className='h-4 w-4' />
+                            </Button>
+                            <Button
+                              variant='ghost'
+                              size='sm'
+                              className='h-8 w-8 p-0 text-destructive'
+                              onClick={() => void handleDeletePayment(payment)}
+                              title='Delete'
+                              disabled={isDeletingPaymentId === payment.id}
+                            >
+                              <Trash2 className='h-4 w-4' />
+                            </Button>
+                            <Button
+                              variant='ghost'
+                              size='sm'
+                              className='h-8 w-8 p-0'
+                              onClick={() => {
+                                setConsignmentInvoiceNo(payment.invoice_number)
+                                setIsConsignmentModalOpen(true)
+                              }}
+                              title='Consignment & Goods details'
+                            >
+                              <Info className='h-4 w-4' />
+                            </Button>
+                            {payment.receipt_url ? (
                               <Button
                                 variant='ghost'
                                 size='sm'
@@ -393,10 +464,8 @@ export function Payments() {
                               >
                                 <Download className='h-4 w-4' />
                               </Button>
-                            </div>
-                          ) : (
-                            <span className='text-muted-foreground'>-</span>
-                          )}
+                            ) : null}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -515,48 +584,11 @@ export function Payments() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isFixModalOpen} onOpenChange={setIsFixModalOpen}>
-        <DialogContent className='max-w-[95vw]! w-[95vw]! sm:max-w-[420px]'>
-          <DialogHeader>
-            <DialogTitle>Fix Invoice Payments</DialogTitle>
-          </DialogHeader>
-
-          <div className='space-y-2'>
-            <label className='block text-sm font-medium'>
-              Invoice number <span className='text-destructive'>*</span>
-            </label>
-            <Input
-              type='text'
-              value={fixInvoiceNumber}
-              onChange={(e) => setFixInvoiceNumber(e.target.value)}
-              placeholder='e.g. BN+E188F3F3'
-              disabled={isFixing}
-            />
-            <p className='text-xs text-muted-foreground'>
-              This will correct malformed USD amounts and remove duplicate/overflow payment rows.
-            </p>
-          </div>
-
-          <div className='flex justify-end gap-2 pt-4'>
-            <Button
-              type='button'
-              variant='outline'
-              onClick={() => setIsFixModalOpen(false)}
-              disabled={isFixing}
-            >
-              Cancel
-            </Button>
-            <Button
-              type='button'
-              variant='destructive'
-              onClick={() => void handleFixInvoicePayments()}
-              disabled={isFixing || !fixInvoiceNumber.trim()}
-            >
-              {isFixing ? 'Fixing...' : 'Fix Now'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <InvoiceConsignmentsGoodsModal
+        open={isConsignmentModalOpen}
+        onOpenChange={setIsConsignmentModalOpen}
+        invoiceNo={consignmentInvoiceNo}
+      />
     </>
   )
 }
