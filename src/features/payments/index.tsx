@@ -41,7 +41,12 @@ import {
 export interface Payment {
   id: number
   invoice_id: number
+  customer_name?: string
   invoice_number: string
+  invoice_amount?: number
+  invoice_amount_formatted?: string
+  invoice_status?: number
+  invoice_status_label?: string
   date: string
   date_raw: string
   amount: number
@@ -312,50 +317,60 @@ export function Payments() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>S/N</TableHead>
+                      <TableHead>Customer</TableHead>
                       <TableHead
                         className='cursor-pointer hover:bg-muted'
                         onClick={() => handleSort('invoice_number')}
                       >
-                        Invoice {renderSortIcon('invoice_number')}
+                        Invoice Number {renderSortIcon('invoice_number')}
                       </TableHead>
-                      <TableHead>Payment Receipt</TableHead>
                       <TableHead
-                        className='cursor-pointer hover:bg-muted'
-                        onClick={() => handleSort('date')}
+                        className='cursor-pointer hover:bg-muted text-right'
+                        onClick={() => handleSort('invoice_amount')}
                       >
-                        Date {renderSortIcon('date')}
+                        Invoice Amount {renderSortIcon('invoice_amount')}
                       </TableHead>
                       <TableHead
                         className='cursor-pointer hover:bg-muted text-right'
                         onClick={() => handleSort('amount')}
                       >
-                        Amount {renderSortIcon('amount')}
-                      </TableHead>
-                      <TableHead>Currency</TableHead>
-                      <TableHead
-                        className='cursor-pointer hover:bg-muted'
-                        onClick={() => handleSort('payment_type')}
-                      >
-                        Payment Type {renderSortIcon('payment_type')}
+                        Paid Amount {renderSortIcon('amount')}
                       </TableHead>
                       <TableHead>Account</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>CMTS Sync</TableHead>
-                      <TableHead>Reference</TableHead>
-                      <TableHead>Description</TableHead>
+                      <TableHead>Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {payments.map((payment, index) => (
+                    {payments.map((payment) => (
                       <TableRow key={payment.id}>
-                        <TableCell>
-                          {(pagination.current_page - 1) * pagination.per_page + index + 1}
-                        </TableCell>
+                        <TableCell>{payment.customer_name || '--'}</TableCell>
                         <TableCell className='font-medium'>
                           <div className='flex items-center gap-2'>
                             <FileText className='h-4 w-4 text-muted-foreground' />
                             {payment.invoice_number}
                           </div>
+                        </TableCell>
+                        <TableCell className='text-right'>
+                          {payment.invoice_amount_formatted || '-'}
+                        </TableCell>
+                        <TableCell className='text-right'>
+                          <div className='flex flex-col items-end'>
+                            <span>{payment.amount_formatted}</span>
+                            {payment.amount_usd_formatted ? (
+                              <span className='text-xs text-muted-foreground'>
+                                USD: {payment.amount_usd_formatted}
+                              </span>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell>{payment.account_name}</TableCell>
+                        <TableCell>{payment.invoice_status_label || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant={getCmtsSyncBadgeVariant(payment.cmts_sync_status)}>
+                            {payment.cmts_sync_status || 'pending'}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           {payment.receipt_url ? (
@@ -383,31 +398,6 @@ export function Payments() {
                             <span className='text-muted-foreground'>-</span>
                           )}
                         </TableCell>
-                        <TableCell>{payment.date}</TableCell>
-                        <TableCell className='text-right'>
-                          <div className='flex flex-col items-end'>
-                            <span>{payment.amount_formatted}</span>
-                            {payment.amount_usd_formatted ? (
-                              <span className='text-xs text-muted-foreground'>
-                                USD: {payment.amount_usd_formatted}
-                              </span>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {payment.currency_code
-                            ? payment.currency_code
-                            : 'Base'}
-                        </TableCell>
-                        <TableCell>{payment.payment_type || '-'}</TableCell>
-                        <TableCell>{payment.account_name}</TableCell>
-                        <TableCell>
-                          <Badge variant={getCmtsSyncBadgeVariant(payment.cmts_sync_status)}>
-                            {payment.cmts_sync_status || 'pending'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{payment.reference}</TableCell>
-                        <TableCell>{payment.description}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
