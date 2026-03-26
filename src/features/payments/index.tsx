@@ -739,7 +739,7 @@ export function Payments() {
                 disabled
               />
             </div>
-            <div className='space-y-1 sm:col-span-2'>
+            <div className='space-y-1'>
               <label className='text-sm font-medium'>Status</label>
               <Input value={viewPayment?.invoice_status_label || '-'} disabled />
             </div>
