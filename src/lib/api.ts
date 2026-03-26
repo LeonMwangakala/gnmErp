@@ -290,6 +290,12 @@ export const paymentApi = {
     })
     return response.data
   },
+  fixInvoicePayments: async (invoiceNumber: string): Promise<any> => {
+    const response = await api.post('/payments/fix-invoice-payments', {
+      invoice_number: invoiceNumber,
+    })
+    return response.data
+  },
 
   getPaymentFormData: async () => {
     const response = await api.get('/payment/form-data')

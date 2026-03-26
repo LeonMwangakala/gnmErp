@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Eye, Download, ChevronLeft, ChevronRight, Plus, FileText } from 'lucide-react'
+import { Eye, Download, ChevronLeft, ChevronRight, Plus, FileText, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -73,6 +73,9 @@ export function Payments() {
   })
   const [isExporting, setIsExporting] = useState(false)
   const [isExportModalOpen, setIsExportModalOpen] = useState(false)
+  const [isFixModalOpen, setIsFixModalOpen] = useState(false)
+  const [fixInvoiceNumber, setFixInvoiceNumber] = useState('')
+  const [isFixing, setIsFixing] = useState(false)
   const [pagination, setPagination] = useState<PaginationMeta>({
     current_page: 1,
     per_page: 15,
@@ -212,6 +215,33 @@ export function Payments() {
     }
   }
 
+  const handleFixInvoicePayments = async () => {
+    if (!fixInvoiceNumber.trim()) {
+      toast.error('Please enter invoice number')
+      return
+    }
+    try {
+      setIsFixing(true)
+      const response = await paymentApi.fixInvoicePayments(fixInvoiceNumber.trim())
+      if (response?.status === 200) {
+        const deleted = response?.data?.deleted ?? 0
+        const updated = response?.data?.updated_amount_usd ?? 0
+        toast.success(
+          `${response?.message || 'Invoice payments fixed.'} Deleted: ${deleted}, updated USD: ${updated}.`
+        )
+        setIsFixModalOpen(false)
+        setFixInvoiceNumber('')
+        fetchPayments(1, pagination.per_page, search)
+      } else {
+        toast.error(response?.message || 'Failed to fix invoice payments')
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to fix invoice payments')
+    } finally {
+      setIsFixing(false)
+    }
+  }
+
   return (
     <>
       <Header>
@@ -237,6 +267,15 @@ export function Payments() {
               >
                 <Download className='mr-2 h-4 w-4' />
                 Export
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setIsFixModalOpen(true)}
+                disabled={isFixing}
+              >
+                <Wrench className='mr-2 h-4 w-4' />
+                Fix Invoice Payments
               </Button>
             <Button onClick={() => setIsAddModalOpen(true)}>
               <Plus className='mr-2 h-4 w-4' />
@@ -481,6 +520,49 @@ export function Payments() {
               disabled={isExporting || !exportDate}
             >
               {isExporting ? 'Exporting...' : 'Export'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isFixModalOpen} onOpenChange={setIsFixModalOpen}>
+        <DialogContent className='max-w-[95vw]! w-[95vw]! sm:max-w-[420px]'>
+          <DialogHeader>
+            <DialogTitle>Fix Invoice Payments</DialogTitle>
+          </DialogHeader>
+
+          <div className='space-y-2'>
+            <label className='block text-sm font-medium'>
+              Invoice number <span className='text-destructive'>*</span>
+            </label>
+            <Input
+              type='text'
+              value={fixInvoiceNumber}
+              onChange={(e) => setFixInvoiceNumber(e.target.value)}
+              placeholder='e.g. BN+E188F3F3'
+              disabled={isFixing}
+            />
+            <p className='text-xs text-muted-foreground'>
+              This will correct malformed USD amounts and remove duplicate/overflow payment rows.
+            </p>
+          </div>
+
+          <div className='flex justify-end gap-2 pt-4'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setIsFixModalOpen(false)}
+              disabled={isFixing}
+            >
+              Cancel
+            </Button>
+            <Button
+              type='button'
+              variant='destructive'
+              onClick={() => void handleFixInvoicePayments()}
+              disabled={isFixing || !fixInvoiceNumber.trim()}
+            >
+              {isFixing ? 'Fixing...' : 'Fix Now'}
             </Button>
           </div>
         </DialogContent>
