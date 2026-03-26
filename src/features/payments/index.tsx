@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Eye, Download, ChevronLeft, ChevronRight, Plus, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -58,6 +59,7 @@ export interface Payment {
   currency_id?: number | null
   currency_code?: string | null
   currency_symbol?: string | null
+  cmts_sync_status?: 'pending' | 'success' | 'failed' | string
 }
 
 export function Payments() {
@@ -178,6 +180,13 @@ export function Payments() {
     }
   }
 
+  const getCmtsSyncBadgeVariant = (status?: string): 'default' | 'destructive' | 'secondary' => {
+    const normalized = (status || 'pending').toLowerCase()
+    if (normalized === 'success') return 'default'
+    if (normalized === 'failed') return 'destructive'
+    return 'secondary'
+  }
+
   const handleExportByDate = async () => {
     if (!exportDate) return
     let success = false
@@ -292,6 +301,7 @@ export function Payments() {
                         Payment Type {renderSortIcon('payment_type')}
                       </TableHead>
                       <TableHead>Account</TableHead>
+                      <TableHead>CMTS Sync</TableHead>
                       <TableHead>Reference</TableHead>
                       <TableHead>Description</TableHead>
                     </TableRow>
@@ -352,6 +362,11 @@ export function Payments() {
                         </TableCell>
                         <TableCell>{payment.payment_type || '-'}</TableCell>
                         <TableCell>{payment.account_name}</TableCell>
+                        <TableCell>
+                          <Badge variant={getCmtsSyncBadgeVariant(payment.cmts_sync_status)}>
+                            {payment.cmts_sync_status || 'pending'}
+                          </Badge>
+                        </TableCell>
                         <TableCell>{payment.reference}</TableCell>
                         <TableCell>{payment.description}</TableCell>
                       </TableRow>
