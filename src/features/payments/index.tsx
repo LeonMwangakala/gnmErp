@@ -91,6 +91,7 @@ export function Payments() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false)
   const [isFixing, setIsFixing] = useState(false)
   const [isDeletingPaymentId, setIsDeletingPaymentId] = useState<number | null>(null)
+  const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null)
   const [isConsignmentModalOpen, setIsConsignmentModalOpen] = useState(false)
   const [consignmentInvoiceNo, setConsignmentInvoiceNo] = useState<string | null>(null)
   const [pagination, setPagination] = useState<PaginationMeta>({
@@ -269,16 +270,12 @@ export function Payments() {
   }
 
   const handleDeletePayment = async (payment: Payment) => {
-    const confirmed = window.confirm(
-      `Delete payment for invoice ${payment.invoice_number}? This will adjust balances.`
-    )
-    if (!confirmed) return
-
     try {
       setIsDeletingPaymentId(payment.id)
       const response = await paymentApi.deletePayment(payment.id)
       if (response?.status === 200) {
         toast.success(response?.message || 'Payment deleted successfully.')
+        setPaymentToDelete(null)
         fetchPayments(1, pagination.per_page, search)
       } else {
         toast.error(response?.message || 'Failed to delete payment')
@@ -436,7 +433,7 @@ export function Payments() {
                               variant='ghost'
                               size='sm'
                               className='h-8 w-8 p-0 text-destructive'
-                              onClick={() => void handleDeletePayment(payment)}
+                              onClick={() => setPaymentToDelete(payment)}
                               title='Delete'
                               disabled={isDeletingPaymentId === payment.id}
                             >
@@ -589,6 +586,46 @@ export function Payments() {
         onOpenChange={setIsConsignmentModalOpen}
         invoiceNo={consignmentInvoiceNo}
       />
+
+      <Dialog
+        open={Boolean(paymentToDelete)}
+        onOpenChange={(open) => {
+          if (!open && isDeletingPaymentId === null) {
+            setPaymentToDelete(null)
+          }
+        }}
+      >
+        <DialogContent className='max-w-[95vw]! w-[95vw]! sm:max-w-[360px]'>
+          <DialogHeader>
+            <DialogTitle>Confirm Delete Payment</DialogTitle>
+          </DialogHeader>
+          <p className='text-sm text-muted-foreground'>
+            Delete payment for invoice{' '}
+            <span className='font-medium text-foreground'>
+              {paymentToDelete?.invoice_number || '-'}
+            </span>
+            ? This will adjust customer and bank balances.
+          </p>
+          <div className='flex justify-end gap-2 pt-2'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setPaymentToDelete(null)}
+              disabled={isDeletingPaymentId !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              type='button'
+              variant='destructive'
+              onClick={() => paymentToDelete && void handleDeletePayment(paymentToDelete)}
+              disabled={isDeletingPaymentId !== null}
+            >
+              {isDeletingPaymentId !== null ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
