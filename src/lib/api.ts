@@ -296,6 +296,10 @@ export const paymentApi = {
     })
     return response.data
   },
+  syncPaymentToCmts: async (id: number): Promise<any> => {
+    const response = await api.post(`/payments/${id}/sync-cmts`)
+    return response.data
+  },
 
   getPaymentFormData: async () => {
     const response = await api.get('/payment/form-data')

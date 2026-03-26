@@ -7,6 +7,7 @@ import {
   Plus,
   FileText,
   Wrench,
+  RefreshCw,
   Trash2,
   Info,
 } from 'lucide-react'
@@ -90,6 +91,7 @@ export function Payments() {
   const [isExporting, setIsExporting] = useState(false)
   const [isExportModalOpen, setIsExportModalOpen] = useState(false)
   const [isFixing, setIsFixing] = useState(false)
+  const [isSyncingPaymentId, setIsSyncingPaymentId] = useState<number | null>(null)
   const [isDeletingPaymentId, setIsDeletingPaymentId] = useState<number | null>(null)
   const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null)
   const [isConsignmentModalOpen, setIsConsignmentModalOpen] = useState(false)
@@ -287,6 +289,23 @@ export function Payments() {
     }
   }
 
+  const handleSyncPaymentToCmts = async (payment: Payment) => {
+    try {
+      setIsSyncingPaymentId(payment.id)
+      const response = await paymentApi.syncPaymentToCmts(payment.id)
+      if (response?.status === 200) {
+        toast.success(response?.message || 'CMTS sync successful.')
+      } else {
+        toast.error(response?.message || 'CMTS sync failed.')
+      }
+      fetchPayments(pagination.current_page, pagination.per_page, search)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'CMTS sync failed.')
+    } finally {
+      setIsSyncingPaymentId(null)
+    }
+  }
+
   return (
     <>
       <Header>
@@ -438,6 +457,18 @@ export function Payments() {
                               disabled={isDeletingPaymentId === payment.id}
                             >
                               <Trash2 className='h-4 w-4' />
+                            </Button>
+                            <Button
+                              variant='ghost'
+                              size='sm'
+                              className='h-8 w-8 p-0'
+                              onClick={() => void handleSyncPaymentToCmts(payment)}
+                              title='Sync CMTS'
+                              disabled={isSyncingPaymentId === payment.id}
+                            >
+                              <RefreshCw
+                                className={`h-4 w-4 ${isSyncingPaymentId === payment.id ? 'animate-spin' : ''}`}
+                              />
                             </Button>
                             <Button
                               variant='ghost'
