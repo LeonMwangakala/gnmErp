@@ -23,6 +23,19 @@ export interface Company {
   email: string
 }
 
+/** Show user@company-domain (e.g. vicky@kikarara.com) instead of API default (e.g. admin@…). */
+function emailForUserAtCompany(company: Company, userEmail: string | undefined): string {
+  if (!userEmail?.includes('@')) {
+    return company.email
+  }
+  const localPart = userEmail.split('@')[0]
+  const domain = company.email.trim().split('@')[1]
+  if (!domain) {
+    return company.email
+  }
+  return `${localPart}@${domain}`
+}
+
 type CompanySwitcherProps = {
   companies?: Company[]
 }
@@ -149,7 +162,9 @@ export function CompanySwitcher({ companies = [] }: CompanySwitcherProps) {
                 </div>
                 <div className='flex flex-col'>
                   <span className='font-medium'>{company.name}</span>
-                  <span className='text-xs text-muted-foreground'>{company.email}</span>
+                  <span className='text-xs text-muted-foreground'>
+                    {emailForUserAtCompany(company, auth.user?.email)}
+                  </span>
                 </div>
                 {activeCompany.key === company.key && (
                   <span className='ms-auto text-xs text-muted-foreground'>Current</span>
