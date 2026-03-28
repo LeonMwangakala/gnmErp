@@ -477,7 +477,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
         txn_id: '',
         reference: form.reference,
         description: form.description,
-        sync_cmts: 0,
+        sync_cmts: 1,
       }
 
       const response = await paymentApi.createPayment(payload)
