@@ -66,7 +66,7 @@ const REPORTS: ReportDefinition[] = [
   },
   {
     key: 'container-payments',
-    title: 'Container payment report',
+    title: 'Container Payment Report',
     description:
       'Enter a container number to list invoice payments for that container, then export to Excel.',
   },
@@ -243,14 +243,18 @@ export function Reports() {
         <DialogContent
           className={
             selectedReport?.key === 'container-payments'
-              ? 'max-w-5xl w-[95vw] max-h-[90vh] flex flex-col gap-0 overflow-hidden'
+              ? 'w-[min(1200px,96vw)] max-w-[min(1200px,96vw)] sm:max-w-[min(1200px,96vw)] max-h-[90vh] min-h-[min(560px,85vh)] flex flex-col gap-0 overflow-hidden'
               : undefined
           }
         >
-          <DialogHeader>
+          <DialogHeader
+            className={
+              selectedReport?.key === 'container-payments' ? 'mb-[10px]' : undefined
+            }
+          >
             <DialogTitle>
               {selectedReport?.key === 'container-payments'
-                ? 'Container payment report'
+                ? 'Container Payment Report'
                 : selectedReport
                   ? `${selectedReport.title} filters`
                   : 'Report filters'}

@@ -58,7 +58,7 @@ function buildCustomerDetail(
 
   const goodsStr =
     goodNames.length > 0 ? [...new Set(goodNames)].join('; ') : '—'
-  const pkgsStr = pkgsSum > 0 ? String(pkgsSum) : '—'
+  const pkgsStr = pkgsSum > 0 ? `${pkgsSum} PKG` : '—'
 
   return `${name}: ${containerNoSearched}, ${pkgsStr}, ${goodsStr}`
 }
@@ -184,7 +184,7 @@ export function ContainerPaymentReportPanel() {
     } catch (error: any) {
       toast.error(
         error?.response?.data?.message ||
-          'Failed to load container payment report.'
+          'Failed to load Container Payment Report.'
       )
     } finally {
       setLoading(false)
@@ -199,7 +199,7 @@ export function ContainerPaymentReportPanel() {
 
     const headers = [
       'Invoice No',
-      'Customer (container / pkgs / goods)',
+      'Customer',
       'Amount',
       'Discount',
       'Net sales',
@@ -269,15 +269,13 @@ export function ContainerPaymentReportPanel() {
         </Button>
       </div>
 
-      <div className='rounded-md border overflow-auto max-h-[min(420px,50vh)]'>
+      <div className='rounded-md border overflow-auto max-h-[min(520px,calc(90vh-220px))]'>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className='w-10'>S/N</TableHead>
               <TableHead>Invoice No</TableHead>
-              <TableHead className='min-w-[220px]'>
-                Customer (name: container, packages, goods)
-              </TableHead>
+              <TableHead className='min-w-[220px]'>Customer</TableHead>
               <TableHead>Amount</TableHead>
               <TableHead>Discount</TableHead>
               <TableHead>Net sales</TableHead>
