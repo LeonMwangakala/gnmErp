@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { customerApi } from '@/lib/api'
+import { ContainerPaymentReportPanel } from './container-payment-report'
 
 interface CustomerOption {
   id: number
@@ -34,6 +35,7 @@ type ReportType =
   | 'invoice-payments'
   | 'petty-cash'
   | 'expense-payments'
+  | 'container-payments'
 
 interface ReportDefinition {
   key: ReportType
@@ -61,6 +63,12 @@ const REPORTS: ReportDefinition[] = [
     key: 'expense-payments',
     title: 'Expense payments report',
     description: 'Filter expense payments by date, vendor, account and category.',
+  },
+  {
+    key: 'container-payments',
+    title: 'Container payment report',
+    description:
+      'Enter a container number to list invoice payments for that container, then export to Excel.',
   },
 ]
 
@@ -95,6 +103,7 @@ type ReportFilters =
   | InvoicePaymentFilters
   | PettyCashFilters
   | ExpensePaymentFilters
+  | CommonFilters
 
 export function Reports() {
   const [open, setOpen] = useState(false)
@@ -179,11 +188,13 @@ export function Reports() {
           accountId: '',
           categoryId: '',
         }
+      case 'container-payments':
+        return base
     }
   }
 
   const handleDownload = async (type: 'pdf' | 'excel') => {
-    if (!selectedReport || !filters) return
+    if (!selectedReport || !filters || selectedReport.key === 'container-payments') return
     try {
       setIsDownloading(true)
       // TODO: Implement backend endpoints for each report type, e.g.:
@@ -229,14 +240,30 @@ export function Reports() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent
+          className={
+            selectedReport?.key === 'container-payments'
+              ? 'max-w-5xl w-[95vw] max-h-[90vh] flex flex-col gap-0 overflow-hidden'
+              : undefined
+          }
+        >
           <DialogHeader>
             <DialogTitle>
-              {selectedReport ? `${selectedReport.title} filters` : 'Report filters'}
+              {selectedReport?.key === 'container-payments'
+                ? 'Container payment report'
+                : selectedReport
+                  ? `${selectedReport.title} filters`
+                  : 'Report filters'}
             </DialogTitle>
           </DialogHeader>
 
-          {filters && (
+          {selectedReport?.key === 'container-payments' ? (
+            <div className='overflow-y-auto pr-1 -mr-1 min-h-0'>
+              <ContainerPaymentReportPanel />
+            </div>
+          ) : null}
+
+          {filters && selectedReport?.key !== 'container-payments' && (
             <div className='space-y-4'>
               <div className='space-y-2'>
                 <Label htmlFor='dateRange'>Date range</Label>
@@ -516,43 +543,45 @@ export function Reports() {
             </div>
           )}
 
-          <DialogFooter className='mt-4 flex-row justify-between gap-2'>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              onClick={() => {
-                if (selectedReport) {
-                  setFilters(getInitialFilters(selectedReport.key))
-                  setSelectedInvoiceCustomer(null)
-                  setSelectedPaymentCustomer(null)
-                }
-              }}
-            >
-              Reset filters
-            </Button>
-            <div className='flex items-center gap-2'>
+          {selectedReport?.key !== 'container-payments' ? (
+            <DialogFooter className='mt-4 flex-row justify-between gap-2'>
               <Button
                 type='button'
                 variant='outline'
                 size='sm'
-                disabled={isDownloading}
-                onClick={() => void handleDownload('pdf')}
+                onClick={() => {
+                  if (selectedReport) {
+                    setFilters(getInitialFilters(selectedReport.key))
+                    setSelectedInvoiceCustomer(null)
+                    setSelectedPaymentCustomer(null)
+                  }
+                }}
               >
-                <Download className='mr-2 h-4 w-4' />
-                PDF
+                Reset filters
               </Button>
-              <Button
-                type='button'
-                size='sm'
-                disabled={isDownloading}
-                onClick={() => void handleDownload('excel')}
-              >
-                <Download className='mr-2 h-4 w-4' />
-                Excel
-              </Button>
-            </div>
-          </DialogFooter>
+              <div className='flex items-center gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  disabled={isDownloading}
+                  onClick={() => void handleDownload('pdf')}
+                >
+                  <Download className='mr-2 h-4 w-4' />
+                  PDF
+                </Button>
+                <Button
+                  type='button'
+                  size='sm'
+                  disabled={isDownloading}
+                  onClick={() => void handleDownload('excel')}
+                >
+                  <Download className='mr-2 h-4 w-4' />
+                  Excel
+                </Button>
+              </div>
+            </DialogFooter>
+          ) : null}
         </DialogContent>
       </Dialog>
     </>
