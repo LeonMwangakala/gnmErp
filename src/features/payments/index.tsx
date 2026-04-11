@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Eye,
   Download,
@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Trash2,
   Info,
+  Printer,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -81,6 +82,330 @@ export interface Payment {
   cmts_sync_status?: 'pending' | 'success' | 'failed' | string
 }
 
+function paymentSlipLogoUrl(): string {
+  if (typeof window === 'undefined') return '/images/gnm_cargo.png'
+  return `${window.location.origin}/images/gnm_cargo.png`
+}
+
+function escapeHtml(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return ''
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): string {
+  const logoUrl = paymentSlipLogoUrl()
+
+  const consignmentsSection =
+    slipConsignments.length === 0
+      ? '<p class="empty-note">No consignment line items on file for this slip.</p>'
+      : slipConsignments
+          .map((block: any) => {
+            const consignment = block?.consignment || {}
+            const lines = Array.isArray(block?.good_consignments) ? block.good_consignments : []
+            const rows = lines
+              .map(
+                (line: any) => `<tr>
+                  <td>${escapeHtml(line?.good?.name) || '—'}</td>
+                  <td class="num">${escapeHtml(line?.quantity) || '—'}</td>
+                  <td class="num">${escapeHtml(line?.pkgs) || '—'}</td>
+                  <td>${escapeHtml(line?.unit) || '—'}</td>
+                </tr>`
+              )
+              .join('')
+
+            const tracking = escapeHtml(consignment?.tracking_number) || '—'
+            return `<div class="consignment-card">
+              <div class="consignment-card__head">Consignment ${tracking}</div>
+              <table class="line-table" role="grid">
+                <thead>
+                  <tr>
+                    <th scope="col">Good</th>
+                    <th scope="col" class="num">Qty</th>
+                    <th scope="col" class="num">Pkgs</th>
+                    <th scope="col">Unit</th>
+                  </tr>
+                </thead>
+                <tbody>${
+                  rows ||
+                  '<tr><td colspan="4" class="muted-cell">No goods listed</td></tr>'
+                }</tbody>
+              </table>
+            </div>`
+          })
+          .join('')
+
+  const descriptionNote =
+    viewPayment.description?.trim() !== ''
+      ? `<div class="description-box">
+          <div class="description-box__label">Notes</div>
+          <div class="description-box__text">${escapeHtml(viewPayment.description)}</div>
+        </div>`
+      : ''
+
+  const inv = escapeHtml(viewPayment.invoice_number)
+  const customer = escapeHtml(viewPayment.customer_name) || '—'
+  const paidDate = escapeHtml(viewPayment.date)
+  const amount = escapeHtml(viewPayment.amount_formatted)
+  const invTotalDisplay =
+    viewPayment.invoice_amount_formatted?.trim() !== ''
+      ? escapeHtml(viewPayment.invoice_amount_formatted)
+      : '—'
+  const referenceDisplay =
+    viewPayment.reference?.trim() !== ''
+      ? escapeHtml(viewPayment.reference)
+      : '—'
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment receipt — ${inv}</title>
+  <style>
+    /* Layout tuned for 80mm thermal paper (e.g. Epson TM-T20III, ~72mm printable width). */
+    * { box-sizing: border-box; }
+    html {
+      -webkit-print-color-adjust: economy;
+      print-color-adjust: economy;
+    }
+    body {
+      margin: 0;
+      padding: 10px 6px 14px;
+      font-family: Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
+      font-size: 10pt;
+      line-height: 1.35;
+      color: #000;
+      background: #fff;
+    }
+    .sheet {
+      width: 100%;
+      max-width: 72mm;
+      margin: 0 auto;
+      border: 1px solid #000;
+      padding: 0;
+    }
+    .doc-header {
+      text-align: center;
+      padding: 8px 6px 6px;
+      border-bottom: 1px solid #000;
+    }
+    .doc-header img {
+      width: 44px;
+      height: 44px;
+      object-fit: contain;
+      margin: 0 auto 4px;
+      display: block;
+      image-rendering: auto;
+      filter: grayscale(100%);
+    }
+    .doc-title {
+      margin: 0;
+      font-size: 11pt;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .kv-table {
+      width: 100%;
+      max-width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      font-size: 8.5pt;
+    }
+    .kv-table th,
+    .kv-table td {
+      border: 1px solid #000;
+      padding: 4px 5px;
+      vertical-align: top;
+      text-align: left;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+    }
+    .kv-table th {
+      width: 34%;
+      font-weight: 700;
+      background: #fff;
+    }
+    .amount-row td {
+      font-weight: 700;
+      font-size: 10pt;
+    }
+    .amount-row .amt {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .section-head {
+      margin: 0;
+      padding: 6px 6px 4px;
+      font-size: 8.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid #000;
+    }
+    .section-body {
+      padding: 6px 4px 8px;
+    }
+    .empty-note {
+      margin: 0;
+      padding: 8px 6px;
+      border: 1px dashed #000;
+      font-size: 8.5pt;
+      text-align: center;
+      word-wrap: break-word;
+    }
+    .consignment-card {
+      margin-bottom: 8px;
+      border: 1px solid #000;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .consignment-card:last-child { margin-bottom: 0; }
+    .consignment-card__head {
+      padding: 4px 5px;
+      font-size: 8pt;
+      font-weight: 700;
+      border-bottom: 1px solid #000;
+      word-wrap: break-word;
+    }
+    .line-table {
+      width: 100%;
+      max-width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      font-size: 7.5pt;
+    }
+    .line-table th,
+    .line-table td {
+      border: 1px solid #000;
+      padding: 3px 4px;
+      vertical-align: top;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+    }
+    .line-table th {
+      font-weight: 700;
+      text-align: left;
+      background: #fff;
+    }
+    .line-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .line-table th.num { text-align: right; }
+    .muted-cell {
+      font-style: italic;
+      text-align: center;
+      color: #000;
+    }
+    .description-box {
+      margin: 0;
+      padding: 6px 6px;
+      border-top: 1px solid #000;
+      font-size: 8.5pt;
+    }
+    .description-box__label {
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 2px;
+    }
+    .description-box__text {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .doc-footer {
+      text-align: center;
+      padding: 6px 4px 8px;
+      border-top: 1px solid #000;
+      font-size: 7pt;
+      color: #000;
+    }
+    .doc-footer strong {
+      display: block;
+      font-size: 8pt;
+      margin-bottom: 4px;
+    }
+    .doc-footer__meta {
+      margin: 0 0 3px;
+      font-size: 7pt;
+      line-height: 1.35;
+    }
+    .doc-footer__credit {
+      display: block;
+      margin-top: 6px;
+      font-size: 7pt;
+    }
+    @page {
+      size: 80mm auto;
+      margin: 0;
+    }
+    @media print {
+      html, body {
+        width: 72mm;
+        max-width: 72mm;
+        margin: 0 auto;
+        padding: 1mm 2mm 2mm;
+        font-size: 9pt;
+      }
+      .sheet {
+        width: 72mm;
+        max-width: 72mm;
+        border: none;
+        margin: 0;
+      }
+      .doc-header img {
+        width: 40px;
+        height: 40px;
+        filter: none;
+      }
+      .doc-title { font-size: 10pt; }
+      .kv-table { font-size: 8pt; }
+      .kv-table th,
+      .kv-table td { padding: 3px 4px; }
+      .amount-row td { font-size: 9.5pt; }
+      .line-table { font-size: 7pt; }
+      .line-table th,
+      .line-table td { padding: 2px 3px; }
+    }
+  </style>
+</head>
+<body class="thermal-receipt">
+  <div class="sheet">
+    <header class="doc-header">
+      <img src="${logoUrl}" alt="" width="44" height="44" />
+      <h1 class="doc-title">Payment receipt</h1>
+    </header>
+
+    <table class="kv-table">
+      <tbody>
+        <tr><th scope="row">Customer</th><td>${customer}</td></tr>
+        <tr><th scope="row">Date</th><td>${paidDate}</td></tr>
+        <tr><th scope="row">Amount</th><td>${invTotalDisplay}</td></tr>
+        <tr><th scope="row">Reference</th><td>${referenceDisplay}</td></tr>
+        <tr class="amount-row"><th scope="row">Paid</th><td class="amt">${amount}</td></tr>
+      </tbody>
+    </table>
+
+    ${descriptionNote}
+
+    <h2 class="section-head">Consignment details</h2>
+    <div class="section-body">${consignmentsSection}</div>
+
+    <footer class="doc-footer">
+      <strong>GNM CARGO · #JABALILABAHARI</strong>
+      <p class="doc-footer__meta">Warehouse Address: Keko Malubumbasi</p>
+      <p class="doc-footer__meta">Phone number: 06920454440</p>
+      <span class="doc-footer__credit">Powered by Torchlight</span>
+    </footer>
+  </div>
+</body>
+</html>`
+}
+
 export function Payments() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -98,6 +423,9 @@ export function Payments() {
   const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null)
   const [viewPayment, setViewPayment] = useState<Payment | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [isSlipModalOpen, setIsSlipModalOpen] = useState(false)
+  const [slipHtml, setSlipHtml] = useState('')
+  const slipIframeRef = useRef<HTMLIFrameElement>(null)
   const [isLoadingSlipDetails, setIsLoadingSlipDetails] = useState(false)
   const [slipConsignments, setSlipConsignments] = useState<any[]>([])
   const [isConsignmentModalOpen, setIsConsignmentModalOpen] = useState(false)
@@ -224,69 +552,20 @@ export function Payments() {
     }
   }
 
-  const handleCreatePaymentSlip = () => {
+  const handleOpenPaymentSlipModal = () => {
     if (!viewPayment) return
-    const slipWindow = window.open('', '_blank')
-    if (!slipWindow) {
-      toast.error('Unable to open print window. Please allow popups.')
+    setSlipHtml(buildPaymentSlipHtml(viewPayment, slipConsignments))
+    setIsSlipModalOpen(true)
+  }
+
+  const handlePrintPaymentSlip = () => {
+    const win = slipIframeRef.current?.contentWindow
+    if (!win) {
+      toast.error('Slip preview is not ready yet.')
       return
     }
-
-    const consignmentsHtml =
-      slipConsignments.length === 0
-        ? '<p>No consignment details found.</p>'
-        : slipConsignments
-            .map((block: any) => {
-              const consignment = block?.consignment || {}
-              const lines = Array.isArray(block?.good_consignments) ? block.good_consignments : []
-              const rows = lines
-                .map(
-                  (line: any) => `<tr>
-                    <td style="border:1px solid #ddd;padding:6px;">${line?.good?.name || '-'}</td>
-                    <td style="border:1px solid #ddd;padding:6px;">${line?.quantity ?? '-'}</td>
-                    <td style="border:1px solid #ddd;padding:6px;">${line?.pkgs ?? '-'}</td>
-                    <td style="border:1px solid #ddd;padding:6px;">${line?.unit || '-'}</td>
-                  </tr>`
-                )
-                .join('')
-
-              return `<div style="margin-top:16px;">
-                <h4 style="margin:0 0 6px 0;">Consignment ${consignment?.tracking_number || '-'}</h4>
-                <p style="margin:0 0 6px 0;">Container: ${consignment?.container?.container_no || '-'}</p>
-                <table style="border-collapse:collapse;width:100%;font-size:12px;">
-                  <thead>
-                    <tr>
-                      <th style="border:1px solid #ddd;padding:6px;text-align:left;">Good</th>
-                      <th style="border:1px solid #ddd;padding:6px;text-align:left;">Qty</th>
-                      <th style="border:1px solid #ddd;padding:6px;text-align:left;">Pkgs</th>
-                      <th style="border:1px solid #ddd;padding:6px;text-align:left;">Unit</th>
-                    </tr>
-                  </thead>
-                  <tbody>${rows || '<tr><td colspan="4" style="border:1px solid #ddd;padding:6px;">No goods</td></tr>'}</tbody>
-                </table>
-              </div>`
-            })
-            .join('')
-
-    slipWindow.document.write(`
-      <html>
-        <head><title>Payment Slip - ${viewPayment.invoice_number}</title></head>
-        <body style="font-family:Arial,sans-serif;padding:20px;color:#111;">
-          <h2 style="margin:0 0 12px 0;">Payment Slip</h2>
-          <p><strong>Invoice:</strong> ${viewPayment.invoice_number}</p>
-          <p><strong>Customer:</strong> ${viewPayment.customer_name || '-'}</p>
-          <p><strong>Date:</strong> ${viewPayment.date}</p>
-          <p><strong>Paid Amount:</strong> ${viewPayment.amount_formatted}</p>
-          <p><strong>Account:</strong> ${viewPayment.account_name}</p>
-          <hr style="margin:14px 0;" />
-          <h3 style="margin:0 0 8px 0;">Container & Consignment Details</h3>
-          ${consignmentsHtml}
-        </body>
-      </html>
-    `)
-    slipWindow.document.close()
-    slipWindow.focus()
-    slipWindow.print()
+    win.focus()
+    win.print()
   }
 
   const getCmtsSyncBadgeVariant = (status?: string): 'default' | 'destructive' | 'secondary' => {
@@ -696,7 +975,16 @@ export function Payments() {
         invoiceNo={consignmentInvoiceNo}
       />
 
-      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+      <Dialog
+        open={isViewModalOpen}
+        onOpenChange={(open) => {
+          setIsViewModalOpen(open)
+          if (!open) {
+            setIsSlipModalOpen(false)
+            setSlipHtml('')
+          }
+        }}
+      >
         <DialogContent className='w-[92vw] max-w-[540px]'>
           <DialogHeader>
             <DialogTitle>Payment Details</DialogTitle>
@@ -750,10 +1038,44 @@ export function Payments() {
             </span>
             <Button
               type='button'
-              onClick={handleCreatePaymentSlip}
+              onClick={handleOpenPaymentSlipModal}
               disabled={!viewPayment || isLoadingSlipDetails}
             >
-              Create Payment Slip
+              <FileText className='mr-2 h-4 w-4' />
+              Payment slip
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isSlipModalOpen}
+        onOpenChange={(open) => {
+          setIsSlipModalOpen(open)
+          if (!open) setSlipHtml('')
+        }}
+      >
+        <DialogContent className='flex max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh]'>
+          <DialogHeader className='shrink-0 border-b px-6 py-4 pr-14 text-left'>
+            <DialogTitle>Payment slip</DialogTitle>
+          </DialogHeader>
+          <div className='min-h-0 flex-1 overflow-auto bg-muted/40 px-4 py-3'>
+            {slipHtml ? (
+              <iframe
+                ref={slipIframeRef}
+                title='Payment slip'
+                srcDoc={slipHtml}
+                className='h-[min(65vh,520px)] w-full rounded-md border bg-white shadow-sm'
+              />
+            ) : null}
+          </div>
+          <div className='flex shrink-0 justify-end gap-2 border-t px-6 py-4'>
+            <Button type='button' variant='outline' onClick={() => setIsSlipModalOpen(false)}>
+              Close
+            </Button>
+            <Button type='button' onClick={handlePrintPaymentSlip} disabled={!slipHtml}>
+              <Printer className='mr-2 h-4 w-4' />
+              Print
             </Button>
           </div>
         </DialogContent>

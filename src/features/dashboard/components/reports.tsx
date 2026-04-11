@@ -1,6 +1,17 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import AsyncSelect from 'react-select/async'
-import { Download, FileText } from 'lucide-react'
+import {
+  format,
+  parse,
+  subDays,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  startOfDay,
+  endOfDay,
+} from 'date-fns'
+import type { DateRange } from 'react-day-picker'
+import { Download, FileText, CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -19,7 +30,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { customerApi } from '@/lib/api'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { customerApi, userApi } from '@/lib/api'
 import { ContainerPaymentReportPanel } from './container-payment-report'
 
 interface CustomerOption {
@@ -52,7 +69,8 @@ const REPORTS: ReportDefinition[] = [
   {
     key: 'invoice-payments',
     title: 'Invoice payments report',
-    description: 'Filter invoice payments by date, user, customer and invoice.',
+    description:
+      'Filter invoice payments by date range (today, week, month, or custom), user, customer and invoice.',
   },
   {
     key: 'petty-cash',
@@ -81,7 +99,52 @@ type InvoiceFilters = CommonFilters & {
   customerId: string
 }
 
-type InvoicePaymentFilters = CommonFilters & {
+type InvoicePaymentDatePreset = 'today' | 'yesterday' | 'week' | 'month' | 'custom'
+
+/** Parse `yyyy-MM-dd` as a local calendar date (avoids UTC shift from parseISO). */
+function parseYmdLocal(ymd: string): Date {
+  return parse(ymd, 'yyyy-MM-dd', new Date())
+}
+
+function getInvoicePaymentRangeForPreset(
+  preset: Exclude<InvoicePaymentDatePreset, 'custom'>
+): { dateFrom: string; dateTo: string } {
+  const now = new Date()
+  let start: Date
+  let end: Date
+  switch (preset) {
+    case 'today':
+      start = startOfDay(now)
+      end = endOfDay(now)
+      break
+    case 'yesterday': {
+      const y = subDays(now, 1)
+      start = startOfDay(y)
+      end = endOfDay(y)
+      break
+    }
+    case 'week':
+      start = startOfWeek(now, { weekStartsOn: 1 })
+      end = endOfDay(now)
+      break
+    case 'month':
+      start = startOfMonth(now)
+      end = endOfMonth(now)
+      break
+    default:
+      start = startOfDay(now)
+      end = endOfDay(now)
+  }
+  return {
+    dateFrom: format(start, 'yyyy-MM-dd'),
+    dateTo: format(end, 'yyyy-MM-dd'),
+  }
+}
+
+type InvoicePaymentFilters = {
+  dateFrom: string
+  dateTo: string
+  datePreset: InvoicePaymentDatePreset
   userId: string
   customerId: string
   invoiceId: string
@@ -105,6 +168,12 @@ type ReportFilters =
   | ExpensePaymentFilters
   | CommonFilters
 
+function isInvoicePaymentFilters(
+  f: ReportFilters | null | undefined
+): f is InvoicePaymentFilters {
+  return f != null && 'invoiceId' in f && 'dateFrom' in f && 'datePreset' in f
+}
+
 export function Reports() {
   const [open, setOpen] = useState(false)
   const [selectedReport, setSelectedReport] = useState<ReportDefinition | null>(null)
@@ -112,7 +181,29 @@ export function Reports() {
   const [isDownloading, setIsDownloading] = useState(false)
   const [selectedInvoiceCustomer, setSelectedInvoiceCustomer] = useState<CustomerOption | null>(null)
   const [selectedPaymentCustomer, setSelectedPaymentCustomer] = useState<CustomerOption | null>(null)
+  const [staffUsers, setStaffUsers] = useState<{ id: number; name: string; email: string }[]>([])
+  const [staffUsersLoading, setStaffUsersLoading] = useState(false)
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    if (!open || selectedReport?.key !== 'invoice-payments') return
+    let cancelled = false
+    setStaffUsersLoading(true)
+    void userApi
+      .getStaffUsersForReports()
+      .then((rows) => {
+        if (!cancelled) setStaffUsers(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setStaffUsers([])
+      })
+      .finally(() => {
+        if (!cancelled) setStaffUsersLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, selectedReport?.key])
 
   const loadCustomerOptions = useCallback(async (inputValue: string): Promise<CustomerOption[]> => {
     if (!inputValue || inputValue.length < 2) {
@@ -159,6 +250,34 @@ export function Reports() {
     setFilters((prev) => (prev ? ({ ...prev, [field]: value } as ReportFilters) : prev))
   }
 
+  const applyInvoicePaymentDatePreset = (preset: InvoicePaymentDatePreset) => {
+    setFilters((prev) => {
+      if (!isInvoicePaymentFilters(prev)) return prev
+      const p = prev
+      if (preset === 'custom') {
+        return { ...p, datePreset: 'custom' } as ReportFilters
+      }
+      const { dateFrom, dateTo } = getInvoicePaymentRangeForPreset(preset)
+      return { ...p, datePreset: preset, dateFrom, dateTo } as ReportFilters
+    })
+  }
+
+  const setInvoicePaymentCustomRange = (range: DateRange | undefined) => {
+    if (!range?.from) return
+    const fromStr = format(range.from, 'yyyy-MM-dd')
+    const toStr = range.to ? format(range.to, 'yyyy-MM-dd') : fromStr
+    setFilters((prev) => {
+      if (!isInvoicePaymentFilters(prev)) return prev
+      const p = prev
+      return {
+        ...p,
+        datePreset: 'custom',
+        dateFrom: fromStr,
+        dateTo: toStr,
+      } as ReportFilters
+    })
+  }
+
   const getInitialFilters = (type: ReportType): ReportFilters => {
     const base: CommonFilters = { dateRange: '' }
     switch (type) {
@@ -168,13 +287,17 @@ export function Reports() {
           status: 'all',
           customerId: '',
         }
-      case 'invoice-payments':
+      case 'invoice-payments': {
+        const { dateFrom, dateTo } = getInvoicePaymentRangeForPreset('month')
         return {
-          ...base,
+          datePreset: 'month' as const,
+          dateFrom,
+          dateTo,
           userId: '',
           customerId: '',
           invoiceId: '',
         }
+      }
       case 'petty-cash':
         return {
           ...base,
@@ -269,15 +392,17 @@ export function Reports() {
 
           {filters && selectedReport?.key !== 'container-payments' && (
             <div className='space-y-4'>
-              <div className='space-y-2'>
-                <Label htmlFor='dateRange'>Date range</Label>
-                <Input
-                  id='dateRange'
-                  placeholder='YYYY-MM-DD to YYYY-MM-DD (optional)'
-                  value={filters.dateRange}
-                  onChange={(e) => handleFilterChange('dateRange', e.target.value)}
-                />
-              </div>
+              {selectedReport?.key !== 'invoice-payments' && 'dateRange' in filters && (
+                <div className='space-y-2'>
+                  <Label htmlFor='dateRange'>Date range</Label>
+                  <Input
+                    id='dateRange'
+                    placeholder='YYYY-MM-DD to YYYY-MM-DD (optional)'
+                    value={(filters as CommonFilters).dateRange}
+                    onChange={(e) => handleFilterChange('dateRange', e.target.value)}
+                  />
+                </div>
+              )}
 
               {selectedReport?.key === 'invoice' && (
                 <>
@@ -382,14 +507,113 @@ export function Reports() {
 
               {selectedReport?.key === 'invoice-payments' && (
                 <>
+                  <div className='space-y-3'>
+                    <Label>Payment date range</Label>
+                    <div className='flex flex-wrap gap-2'>
+                      {(
+                        [
+                          ['today', 'Today'],
+                          ['yesterday', 'Yesterday'],
+                          ['week', 'Week'],
+                          ['month', 'Month'],
+                          ['custom', 'Custom'],
+                        ] as const
+                      ).map(([key, label]) => {
+                        const active =
+                          (filters as InvoicePaymentFilters).datePreset === key
+                        return (
+                          <Button
+                            key={key}
+                            type='button'
+                            size='sm'
+                            variant={active ? 'default' : 'outline'}
+                            className='h-8'
+                            onClick={() => applyInvoicePaymentDatePreset(key)}
+                          >
+                            {label}
+                          </Button>
+                        )
+                      })}
+                    </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          className='h-9 w-full justify-start text-start font-normal sm:w-[min(100%,280px)]'
+                        >
+                          <CalendarIcon className='mr-2 h-4 w-4 opacity-70' />
+                          {(() => {
+                            const ip = filters as InvoicePaymentFilters
+                            if (!ip.dateFrom || !ip.dateTo) {
+                              return <span className='text-muted-foreground'>Pick a date range</span>
+                            }
+                            const a = parseYmdLocal(ip.dateFrom)
+                            const b = parseYmdLocal(ip.dateTo)
+                            if (ip.dateFrom === ip.dateTo) {
+                              return format(a, 'MMM d, yyyy')
+                            }
+                            return `${format(a, 'MMM d, yyyy')} – ${format(b, 'MMM d, yyyy')}`
+                          })()}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className='w-auto p-0' align='start'>
+                        <Calendar
+                          key={`${(filters as InvoicePaymentFilters).dateFrom}-${(filters as InvoicePaymentFilters).dateTo}`}
+                          mode='range'
+                          captionLayout='dropdown'
+                          numberOfMonths={2}
+                          defaultMonth={parseYmdLocal(
+                            (filters as InvoicePaymentFilters).dateFrom ||
+                              format(new Date(), 'yyyy-MM-dd')
+                          )}
+                          selected={{
+                            from: (filters as InvoicePaymentFilters).dateFrom
+                              ? parseYmdLocal((filters as InvoicePaymentFilters).dateFrom)
+                              : undefined,
+                            to: (filters as InvoicePaymentFilters).dateTo
+                              ? parseYmdLocal((filters as InvoicePaymentFilters).dateTo)
+                              : undefined,
+                          }}
+                          onSelect={(range) => setInvoicePaymentCustomRange(range)}
+                          disabled={(date) => date > endOfDay(new Date()) || date < new Date('2000-01-01')}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <p className='text-xs text-muted-foreground'>
+                      Week = Monday through today. Month = full current calendar month.
+                    </p>
+                  </div>
                   <div className='space-y-2'>
-                    <Label htmlFor='paymentUser'>User (created by, optional ID)</Label>
-                    <Input
-                      id='paymentUser'
-                      placeholder='User ID'
-                      value={(filters as InvoicePaymentFilters).userId}
-                      onChange={(e) => handleFilterChange('userId', e.target.value)}
-                    />
+                    <Label htmlFor='paymentUser'>User (created by)</Label>
+                    <Select
+                      value={
+                        (filters as InvoicePaymentFilters).userId
+                          ? (filters as InvoicePaymentFilters).userId
+                          : '__all__'
+                      }
+                      onValueChange={(v) =>
+                        handleFilterChange('userId', v === '__all__' ? '' : v)
+                      }
+                      disabled={staffUsersLoading}
+                    >
+                      <SelectTrigger id='paymentUser' className='w-full'>
+                        <SelectValue
+                          placeholder={
+                            staffUsersLoading ? 'Loading users…' : 'All users'
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='__all__'>All users</SelectItem>
+                        {staffUsers.map((u) => (
+                          <SelectItem key={u.id} value={String(u.id)}>
+                            {u.name}
+                            {u.email ? ` · ${u.email}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className='space-y-2'>
                     <Label htmlFor='paymentCustomer'>Customer (optional)</Label>

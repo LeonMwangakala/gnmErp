@@ -348,6 +348,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
         invoice_due: String(selected.due),
         invoice_currency: selected.currency ? String(selected.currency) : '',
         invoice_currency_exchange_rate: String(selected.currency_exchange_rate ?? 1),
+        reference: selected.invoice_number || '',
       }))
 
       // Recalculate max amount if we have currency info
@@ -365,6 +366,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
         invoice_due: '',
         invoice_currency: '',
         invoice_currency_exchange_rate: '',
+        reference: '',
       }))
       setMaxAmount(null)
     }
@@ -443,7 +445,14 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
       return
     }
 
-    if (!form.invoice_id || !form.account_id || !form.currency || !form.amount || !form.date) {
+    if (
+      !form.invoice_id ||
+      !form.account_id ||
+      !form.currency ||
+      !form.amount ||
+      !form.date ||
+      !form.reference.trim()
+    ) {
       toast.error('Please fill in all required fields.')
       return
     }
@@ -475,7 +484,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
         payment_method: 'Manual',
         receipt: '',
         txn_id: '',
-        reference: form.reference,
+        reference: form.reference.trim(),
         description: form.description,
         sync_cmts: 1,
       }
@@ -851,11 +860,14 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                 {step === 2 && (
                   <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                   <div>
-                    <label className='block text-sm font-medium mb-1'>Reference</label>
+                    <label className='block text-sm font-medium mb-1'>
+                      Reference <span className='text-destructive'>*</span>
+                    </label>
                     <Input
                       value={form.reference}
                       onChange={(e) => handleInputChange('reference', e.target.value)}
                       placeholder='Reference'
+                      required
                     />
                   </div>
 

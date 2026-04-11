@@ -145,6 +145,23 @@ export interface PaginatedResponse<T> {
   pagination: PaginationMeta
 }
 
+export interface StaffUserOption {
+  id: number
+  name: string
+  email: string
+}
+
+export const userApi = {
+  /** Company owner + staff for invoice payment report "created by" filter */
+  getStaffUsersForReports: async (): Promise<StaffUserOption[]> => {
+    const response = await api.get('/users/staff-for-reports')
+    if (response.data?.status === 403) {
+      return []
+    }
+    return response.data.data || []
+  },
+}
+
 export const customerApi = {
   getCustomers: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
     const response = await api.get('/customers', { params })
