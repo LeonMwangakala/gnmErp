@@ -204,6 +204,30 @@ export const customerApi = {
 }
 
 export const invoiceApi = {
+  getInvoicesReport: async (params: {
+    date_from: string
+    date_to: string
+    status: string
+    customer_id?: string
+  }): Promise<
+    | { ok: true; data: InvoiceReportData }
+    | { ok: false; message: string }
+  > => {
+    const response = await api.get('/invoices/report/summary', {
+      params: {
+        date_from: params.date_from,
+        date_to: params.date_to,
+        status: params.status,
+        ...(params.customer_id ? { customer_id: params.customer_id } : {}),
+      },
+    })
+    const body = response.data as { status?: number; message?: string; data?: InvoiceReportData }
+    if (body?.status === 200 && body.data) {
+      return { ok: true, data: body.data }
+    }
+    return { ok: false, message: body?.message || 'Failed to load report' }
+  },
+
   getInvoices: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
     const response = await api.get('/invoices', { params })
     return {
@@ -327,6 +351,37 @@ export interface InvoicePaymentReportData {
   totals_by_currency: InvoicePaymentReportCurrencyTotal[]
   date_from: string
   date_to: string
+}
+
+export interface InvoiceReportRow {
+  id: number
+  invoice_number: string
+  customer_name: string
+  issue_date: string
+  issue_date_raw: string | null
+  due_date: string
+  status: number
+  status_label: string
+  total: number
+  total_formatted: string
+  due: number
+  due_formatted: string
+}
+
+export interface InvoiceReportSummary {
+  invoice_count: number
+  total_amount: number
+  total_amount_formatted: string
+  total_due: number
+  total_due_formatted: string
+}
+
+export interface InvoiceReportData {
+  date_from: string
+  date_to: string
+  status_filter: string
+  rows: InvoiceReportRow[]
+  summary: InvoiceReportSummary
 }
 
 export const paymentApi = {

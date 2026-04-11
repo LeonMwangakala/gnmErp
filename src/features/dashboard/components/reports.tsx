@@ -41,7 +41,9 @@ import {
   customerApi,
   userApi,
   paymentApi,
+  invoiceApi,
   type InvoicePaymentReportData,
+  type InvoiceReportData,
 } from '@/lib/api'
 import {
   Table,
@@ -69,32 +71,10 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
-function ReportColumnHead({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <TableHead className='whitespace-normal align-bottom'>
-      <div className='flex min-w-[5.5rem] flex-col gap-0.5 py-1'>
-        <span>{title}</span>
-        <span className='text-xs font-normal leading-tight text-muted-foreground'>
-          {subtitle}
-        </span>
-      </div>
-    </TableHead>
-  )
-}
-
 function downloadInvoicePaymentReportCsv(data: InvoicePaymentReportData) {
   const totals = data.totals_by_currency ?? []
   const lines: string[] = [
-    [
-      'Date (payment date)',
-      'Customer (customer name)',
-      'Invoice (invoice number)',
-      'Amount (total invoice amount)',
-      'Paid (paid amount)',
-      'Account (account paid)',
-      'Status (invoice status)',
-      'Cashier (created by user)',
-    ].join(','),
+    ['Date', 'Customer', 'Invoice', 'Amount', 'Paid', 'Account', 'Status', 'Cashier'].join(','),
     ...data.rows.map((r) =>
       [
         escapeCsvCell(r.date),
@@ -109,13 +89,9 @@ function downloadInvoicePaymentReportCsv(data: InvoicePaymentReportData) {
     ),
     '',
     'Summary by account',
-    ['Account', 'Total', 'Payments'].join(','),
+    ['Account', 'Total'].join(','),
     ...data.summary_by_account.map((s) =>
-      [
-        escapeCsvCell(s.account_label),
-        escapeCsvCell(s.total_formatted),
-        String(s.payment_count),
-      ].join(',')
+      [escapeCsvCell(s.account_label), escapeCsvCell(s.total_formatted)].join(',')
     ),
     '',
     'Totals by currency',
@@ -149,7 +125,7 @@ function printInvoicePaymentReportAsPdf(data: InvoicePaymentReportData) {
   const sumHtml = data.summary_by_account
     .map(
       (s) =>
-        `<tr><td>${escapeHtml(s.account_label)}</td><td class="num">${escapeHtml(s.total_formatted)}</td><td>${s.payment_count}</td></tr>`
+        `<tr><td>${escapeHtml(s.account_label)}</td><td class="num">${escapeHtml(s.total_formatted)}</td></tr>`
     )
     .join('')
   const curTotalsHtml = totals
@@ -166,18 +142,92 @@ h2{font-size:14px;margin-top:20px;margin-bottom:8px;}
 table{border-collapse:collapse;width:100%;margin-top:12px;}
 th,td{border:1px solid #ccc;padding:6px;text-align:left;}
 th{background:#f0f0f0;}
-th .sub{font-weight:normal;color:#555;font-size:10px;}
 td.num{text-align:right;}
 .meta{color:#444;margin-bottom:16px;}
 </style></head><body>
 <h1>Invoice payments report</h1>
 <div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}</div>
-<table><thead><tr><th>Date<br/><span class="sub">Payment date</span></th><th>Customer<br/><span class="sub">Customer name</span></th><th>Invoice<br/><span class="sub">Invoice number</span></th><th>Amount<br/><span class="sub">Total invoice amount</span></th><th>Paid<br/><span class="sub">Paid amount</span></th><th>Account<br/><span class="sub">Account paid</span></th><th>Status<br/><span class="sub">Invoice status</span></th><th>Cashier<br/><span class="sub">Created by user</span></th></tr></thead>
+<table><thead><tr><th>Date</th><th>Customer</th><th>Invoice</th><th>Amount</th><th>Paid</th><th>Account</th><th>Status</th><th>Cashier</th></tr></thead>
 <tbody>${rowHtml}</tbody></table>
 <h2>Summary by account</h2>
-<table><thead><tr><th>Account</th><th>Total</th><th>Payments</th></tr></thead><tbody>${sumHtml}</tbody></table>
+<table><thead><tr><th>Account</th><th>Total</th></tr></thead><tbody>${sumHtml}</tbody></table>
 <h2>Totals by currency</h2>
 <table><thead><tr><th>Total</th><th>Payments</th></tr></thead><tbody>${curTotalsHtml}</tbody></table>
+<script>window.onload=function(){window.print();}</script>
+</body></html>`)
+  w.document.close()
+}
+
+function invoiceReportStatusFilterLabel(filter: string): string {
+  switch (filter) {
+    case 'unpaid':
+      return 'Unpaid'
+    case 'partial':
+      return 'Partial paid'
+    case 'paid':
+      return 'Paid'
+    default:
+      return 'All (excl. draft)'
+  }
+}
+
+function downloadInvoiceReportCsv(data: InvoiceReportData) {
+  const lines: string[] = [
+    ['Issue date', 'Invoice', 'Customer', 'Total', 'Due', 'Due date', 'Status'].join(','),
+    ...data.rows.map((r) =>
+      [
+        escapeCsvCell(r.issue_date),
+        escapeCsvCell(r.invoice_number),
+        escapeCsvCell(r.customer_name),
+        escapeCsvCell(r.total_formatted),
+        escapeCsvCell(r.due_formatted),
+        escapeCsvCell(r.due_date),
+        escapeCsvCell(r.status_label),
+      ].join(',')
+    ),
+    '',
+    'Summary',
+    `Invoice count,${data.summary.invoice_count}`,
+    `Total amount,${escapeCsvCell(data.summary.total_amount_formatted)}`,
+    `Total due,${escapeCsvCell(data.summary.total_due_formatted)}`,
+  ]
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `invoice-report-${data.date_from}-to-${data.date_to}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function printInvoiceReportAsPdf(data: InvoiceReportData) {
+  const w = window.open('', '_blank')
+  if (!w) {
+    toast.error('Pop-up blocked. Allow pop-ups to print or save as PDF.')
+    return
+  }
+  const rowHtml = data.rows
+    .map(
+      (r) =>
+        `<tr><td>${escapeHtml(r.issue_date)}</td><td>${escapeHtml(r.invoice_number)}</td><td>${escapeHtml(r.customer_name)}</td><td class="num">${escapeHtml(r.total_formatted)}</td><td class="num">${escapeHtml(r.due_formatted)}</td><td>${escapeHtml(r.due_date)}</td><td>${escapeHtml(r.status_label)}</td></tr>`
+    )
+    .join('')
+  w.document.write(`<!DOCTYPE html><html><head><title>Invoice report</title>
+<style>
+body{font-family:system-ui,sans-serif;padding:16px;font-size:12px;}
+h1{font-size:16px;margin-bottom:8px;}
+table{border-collapse:collapse;width:100%;margin-top:12px;}
+th,td{border:1px solid #ccc;padding:6px;text-align:left;}
+th{background:#f0f0f0;}
+td.num{text-align:right;}
+.meta{color:#444;margin-bottom:16px;}
+.sum{margin-top:16px;font-size:13px;}
+</style></head><body>
+<h1>Invoice report</h1>
+<div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}<br/>Status: ${escapeHtml(invoiceReportStatusFilterLabel(data.status_filter))}</div>
+<table><thead><tr><th>Issue date</th><th>Invoice</th><th>Customer</th><th>Total</th><th>Due</th><th>Due date</th><th>Status</th></tr></thead>
+<tbody>${rowHtml}</tbody></table>
+<div class="sum"><strong>Invoices:</strong> ${data.summary.invoice_count} &nbsp;|&nbsp; <strong>Total:</strong> ${escapeHtml(data.summary.total_amount_formatted)} &nbsp;|&nbsp; <strong>Due:</strong> ${escapeHtml(data.summary.total_due_formatted)}</div>
 <script>window.onload=function(){window.print();}</script>
 </body></html>`)
   w.document.close()
@@ -208,7 +258,7 @@ const REPORTS: ReportDefinition[] = [
   {
     key: 'invoice',
     title: 'Invoice report',
-    description: 'Filter invoices by date range, status and customer.',
+    description: 'Filter invoices by date range and status.',
   },
   {
     key: 'invoice-payments',
@@ -237,11 +287,17 @@ const REPORTS: ReportDefinition[] = [
 /** Set to true to show customer + invoice filters on the invoice payments report */
 const SHOW_INVOICE_PAYMENT_CUSTOMER_AND_INVOICE_FILTERS = false
 
+/** Set to true to show the customer filter on the invoice report */
+const SHOW_INVOICE_REPORT_CUSTOMER_FILTER = false
+
 type CommonFilters = {
   dateRange: string
 }
 
-type InvoiceFilters = CommonFilters & {
+type InvoiceFilters = {
+  dateFrom: string
+  dateTo: string
+  datePreset: InvoicePaymentDatePreset
   status: 'all' | 'unpaid' | 'partial' | 'paid'
   customerId: string
 }
@@ -321,6 +377,17 @@ function isInvoicePaymentFilters(
   return f != null && 'invoiceId' in f && 'dateFrom' in f && 'datePreset' in f
 }
 
+/** Invoice report + invoice payments report share preset + custom range dates */
+function isDateRangedReportFilters(
+  f: ReportFilters | null | undefined
+): f is InvoicePaymentFilters | InvoiceFilters {
+  return f != null && 'dateFrom' in f && 'dateTo' in f && 'datePreset' in f
+}
+
+function isInvoiceFilters(f: ReportFilters | null | undefined): f is InvoiceFilters {
+  return f != null && 'status' in f && 'dateFrom' in f && !('userId' in f)
+}
+
 export function Reports() {
   const [open, setOpen] = useState(false)
   const [selectedReport, setSelectedReport] = useState<ReportDefinition | null>(null)
@@ -334,6 +401,9 @@ export function Reports() {
   const [invoicePaymentReportData, setInvoicePaymentReportData] =
     useState<InvoicePaymentReportData | null>(null)
   const [invoicePaymentReportSubmitting, setInvoicePaymentReportSubmitting] = useState(false)
+  const [invoiceReportOpen, setInvoiceReportOpen] = useState(false)
+  const [invoiceReportData, setInvoiceReportData] = useState<InvoiceReportData | null>(null)
+  const [invoiceReportSubmitting, setInvoiceReportSubmitting] = useState(false)
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -396,6 +466,8 @@ export function Reports() {
     setSelectedPaymentCustomer(null)
     setInvoicePaymentReportOpen(false)
     setInvoicePaymentReportData(null)
+    setInvoiceReportOpen(false)
+    setInvoiceReportData(null)
     setOpen(true)
   }
 
@@ -424,13 +496,39 @@ export function Reports() {
     }
   }
 
+  const submitInvoiceReport = async () => {
+    if (!filters || !isInvoiceFilters(filters)) return
+    if (!filters.dateFrom || !filters.dateTo) {
+      toast.error('Choose an invoice date range.')
+      return
+    }
+    setInvoiceReportSubmitting(true)
+    try {
+      const result = await invoiceApi.getInvoicesReport({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        status: filters.status,
+        ...(filters.customerId ? { customer_id: filters.customerId } : {}),
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      setInvoiceReportData(result.data)
+      setOpen(false)
+      setInvoiceReportOpen(true)
+    } finally {
+      setInvoiceReportSubmitting(false)
+    }
+  }
+
   const handleFilterChange = (field: string, value: string) => {
     setFilters((prev) => (prev ? ({ ...prev, [field]: value } as ReportFilters) : prev))
   }
 
-  const applyInvoicePaymentDatePreset = (preset: InvoicePaymentDatePreset) => {
+  const applyReportDatePreset = (preset: InvoicePaymentDatePreset) => {
     setFilters((prev) => {
-      if (!isInvoicePaymentFilters(prev)) return prev
+      if (!isDateRangedReportFilters(prev)) return prev
       const p = prev
       if (preset === 'custom') {
         return { ...p, datePreset: 'custom' } as ReportFilters
@@ -440,12 +538,12 @@ export function Reports() {
     })
   }
 
-  const setInvoicePaymentCustomRange = (range: DateRange | undefined) => {
+  const setReportCustomDateRange = (range: DateRange | undefined) => {
     if (!range?.from) return
     const fromStr = format(range.from, 'yyyy-MM-dd')
     const toStr = range.to ? format(range.to, 'yyyy-MM-dd') : fromStr
     setFilters((prev) => {
-      if (!isInvoicePaymentFilters(prev)) return prev
+      if (!isDateRangedReportFilters(prev)) return prev
       const p = prev
       return {
         ...p,
@@ -459,12 +557,16 @@ export function Reports() {
   const getInitialFilters = (type: ReportType): ReportFilters => {
     const base: CommonFilters = { dateRange: '' }
     switch (type) {
-      case 'invoice':
+      case 'invoice': {
+        const { dateFrom, dateTo } = getInvoicePaymentRangeForPreset('month')
         return {
-          ...base,
+          datePreset: 'month' as const,
+          dateFrom,
+          dateTo,
           status: 'all',
           customerId: '',
         }
+      }
       case 'invoice-payments': {
         const { dateFrom, dateTo } = getInvoicePaymentRangeForPreset('month')
         return {
@@ -499,7 +601,8 @@ export function Reports() {
       !selectedReport ||
       !filters ||
       selectedReport.key === 'container-payments' ||
-      selectedReport.key === 'invoice-payments'
+      selectedReport.key === 'invoice-payments' ||
+      selectedReport.key === 'invoice'
     )
       return
     try {
@@ -576,7 +679,9 @@ export function Reports() {
 
           {filters && selectedReport?.key !== 'container-payments' && (
             <div className='space-y-4'>
-              {selectedReport?.key !== 'invoice-payments' && 'dateRange' in filters && (
+              {selectedReport?.key !== 'invoice-payments' &&
+                selectedReport?.key !== 'invoice' &&
+                'dateRange' in filters && (
                 <div className='space-y-2'>
                   <Label htmlFor='dateRange'>Date range</Label>
                   <Input
@@ -587,6 +692,90 @@ export function Reports() {
                   />
                 </div>
               )}
+
+              {(selectedReport?.key === 'invoice-payments' ||
+                selectedReport?.key === 'invoice') &&
+                isDateRangedReportFilters(filters) && (
+                  <div className='space-y-3'>
+                    <Label>
+                      {selectedReport.key === 'invoice-payments'
+                        ? 'Payment date range'
+                        : 'Invoice date range'}
+                    </Label>
+                    <div className='flex flex-wrap gap-2'>
+                      {(
+                        [
+                          ['today', 'Today'],
+                          ['yesterday', 'Yesterday'],
+                          ['week', 'Week'],
+                          ['month', 'Month'],
+                          ['custom', 'Custom'],
+                        ] as const
+                      ).map(([key, label]) => {
+                        const active = filters.datePreset === key
+                        return (
+                          <Button
+                            key={key}
+                            type='button'
+                            size='sm'
+                            variant={active ? 'default' : 'outline'}
+                            className='h-8'
+                            onClick={() => applyReportDatePreset(key)}
+                          >
+                            {label}
+                          </Button>
+                        )
+                      })}
+                    </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          className='h-9 w-full justify-start text-start font-normal sm:w-[min(100%,280px)]'
+                        >
+                          <CalendarIcon className='mr-2 h-4 w-4 opacity-70' />
+                          {(() => {
+                            const dr = filters
+                            if (!dr.dateFrom || !dr.dateTo) {
+                              return <span className='text-muted-foreground'>Pick a date range</span>
+                            }
+                            const a = parseYmdLocal(dr.dateFrom)
+                            const b = parseYmdLocal(dr.dateTo)
+                            if (dr.dateFrom === dr.dateTo) {
+                              return format(a, 'MMM d, yyyy')
+                            }
+                            return `${format(a, 'MMM d, yyyy')} – ${format(b, 'MMM d, yyyy')}`
+                          })()}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className='w-auto p-0' align='start'>
+                        <Calendar
+                          key={`${filters.dateFrom}-${filters.dateTo}`}
+                          mode='range'
+                          captionLayout='dropdown'
+                          numberOfMonths={2}
+                          defaultMonth={parseYmdLocal(
+                            filters.dateFrom || format(new Date(), 'yyyy-MM-dd')
+                          )}
+                          selected={{
+                            from: filters.dateFrom
+                              ? parseYmdLocal(filters.dateFrom)
+                              : undefined,
+                            to: filters.dateTo
+                              ? parseYmdLocal(filters.dateTo)
+                              : undefined,
+                          }}
+                          onSelect={(range) => setReportCustomDateRange(range)}
+                          disabled={(date) => date > endOfDay(new Date()) || date < new Date('2000-01-01')}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <p className='text-xs text-muted-foreground'>
+                      Week = Monday through today. Month = full current calendar month.
+                    </p>
+                  </div>
+                )}
 
               {selectedReport?.key === 'invoice' && (
                 <>
@@ -609,165 +798,90 @@ export function Reports() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='invoiceCustomer'>Customer (optional)</Label>
-                    <AsyncSelect<CustomerOption>
-                      value={selectedInvoiceCustomer}
-                      onChange={(selected) => {
-                        setSelectedInvoiceCustomer(selected)
-                        handleFilterChange('customerId', selected ? String(selected.id) : '')
-                      }}
-                      loadOptions={loadCustomerOptionsDebounced}
-                      placeholder='Type customer name or email...'
-                      isClearable
-                      isSearchable
-                      noOptionsMessage={({ inputValue }) =>
-                        inputValue.length < 2
-                          ? 'Type at least 2 characters to search'
-                          : 'No customers found'
-                      }
-                      loadingMessage={() => 'Searching customers...'}
-                      className='react-select-container'
-                      classNamePrefix='react-select'
-                      styles={{
-                        control: (base, state) => ({
-                          ...base,
-                          minHeight: '36px',
-                          height: '36px',
-                          borderColor: state.isFocused
-                            ? 'hsl(var(--ring))'
-                            : 'hsl(var(--input))',
-                          backgroundColor: 'transparent',
-                          borderRadius: 'calc(var(--radius) - 2px)',
-                          borderWidth: '1px',
-                          borderStyle: 'solid',
-                          boxShadow: state.isFocused
-                            ? '0 0 0 3px hsl(var(--ring) / 0.5)'
-                            : 'none',
-                          '&:hover': {
-                            borderColor: 'hsl(var(--ring))',
-                          },
-                        }),
-                        input: (base) => ({
-                          ...base,
-                          margin: 0,
-                          padding: 0,
-                        }),
-                        valueContainer: (base) => ({
-                          ...base,
-                          padding: '0 8px',
-                          height: '36px',
-                        }),
-                        singleValue: (base) => ({
-                          ...base,
-                          color: 'hsl(var(--foreground))',
-                        }),
-                        placeholder: (base) => ({
-                          ...base,
-                          color: 'hsl(var(--muted-foreground))',
-                        }),
-                        menu: (base) => ({
-                          ...base,
-                          backgroundColor: 'hsl(var(--popover))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: 'calc(var(--radius) - 2px)',
-                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                        }),
-                        option: (base, state) => ({
-                          ...base,
-                          backgroundColor: state.isFocused
-                            ? 'hsl(var(--accent))'
-                            : 'transparent',
-                          color: 'hsl(var(--foreground))',
-                          '&:active': {
-                            backgroundColor: 'hsl(var(--accent))',
-                          },
-                        }),
-                      }}
-                    />
-                  </div>
+                  {SHOW_INVOICE_REPORT_CUSTOMER_FILTER && (
+                    <div className='space-y-2'>
+                      <Label htmlFor='invoiceCustomer'>Customer (optional)</Label>
+                      <AsyncSelect<CustomerOption>
+                        value={selectedInvoiceCustomer}
+                        onChange={(selected) => {
+                          setSelectedInvoiceCustomer(selected)
+                          handleFilterChange('customerId', selected ? String(selected.id) : '')
+                        }}
+                        loadOptions={loadCustomerOptionsDebounced}
+                        placeholder='Type customer name or email...'
+                        isClearable
+                        isSearchable
+                        noOptionsMessage={({ inputValue }) =>
+                          inputValue.length < 2
+                            ? 'Type at least 2 characters to search'
+                            : 'No customers found'
+                        }
+                        loadingMessage={() => 'Searching customers...'}
+                        className='react-select-container'
+                        classNamePrefix='react-select'
+                        styles={{
+                          control: (base, state) => ({
+                            ...base,
+                            minHeight: '36px',
+                            height: '36px',
+                            borderColor: state.isFocused
+                              ? 'hsl(var(--ring))'
+                              : 'hsl(var(--input))',
+                            backgroundColor: 'transparent',
+                            borderRadius: 'calc(var(--radius) - 2px)',
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
+                            boxShadow: state.isFocused
+                              ? '0 0 0 3px hsl(var(--ring) / 0.5)'
+                              : 'none',
+                            '&:hover': {
+                              borderColor: 'hsl(var(--ring))',
+                            },
+                          }),
+                          input: (base) => ({
+                            ...base,
+                            margin: 0,
+                            padding: 0,
+                          }),
+                          valueContainer: (base) => ({
+                            ...base,
+                            padding: '0 8px',
+                            height: '36px',
+                          }),
+                          singleValue: (base) => ({
+                            ...base,
+                            color: 'hsl(var(--foreground))',
+                          }),
+                          placeholder: (base) => ({
+                            ...base,
+                            color: 'hsl(var(--muted-foreground))',
+                          }),
+                          menu: (base) => ({
+                            ...base,
+                            backgroundColor: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: 'calc(var(--radius) - 2px)',
+                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                          }),
+                          option: (base, state) => ({
+                            ...base,
+                            backgroundColor: state.isFocused
+                              ? 'hsl(var(--accent))'
+                              : 'transparent',
+                            color: 'hsl(var(--foreground))',
+                            '&:active': {
+                              backgroundColor: 'hsl(var(--accent))',
+                            },
+                          }),
+                        }}
+                      />
+                    </div>
+                  )}
                 </>
               )}
 
               {selectedReport?.key === 'invoice-payments' && (
                 <>
-                  <div className='space-y-3'>
-                    <Label>Payment date range</Label>
-                    <div className='flex flex-wrap gap-2'>
-                      {(
-                        [
-                          ['today', 'Today'],
-                          ['yesterday', 'Yesterday'],
-                          ['week', 'Week'],
-                          ['month', 'Month'],
-                          ['custom', 'Custom'],
-                        ] as const
-                      ).map(([key, label]) => {
-                        const active =
-                          (filters as InvoicePaymentFilters).datePreset === key
-                        return (
-                          <Button
-                            key={key}
-                            type='button'
-                            size='sm'
-                            variant={active ? 'default' : 'outline'}
-                            className='h-8'
-                            onClick={() => applyInvoicePaymentDatePreset(key)}
-                          >
-                            {label}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type='button'
-                          variant='outline'
-                          className='h-9 w-full justify-start text-start font-normal sm:w-[min(100%,280px)]'
-                        >
-                          <CalendarIcon className='mr-2 h-4 w-4 opacity-70' />
-                          {(() => {
-                            const ip = filters as InvoicePaymentFilters
-                            if (!ip.dateFrom || !ip.dateTo) {
-                              return <span className='text-muted-foreground'>Pick a date range</span>
-                            }
-                            const a = parseYmdLocal(ip.dateFrom)
-                            const b = parseYmdLocal(ip.dateTo)
-                            if (ip.dateFrom === ip.dateTo) {
-                              return format(a, 'MMM d, yyyy')
-                            }
-                            return `${format(a, 'MMM d, yyyy')} – ${format(b, 'MMM d, yyyy')}`
-                          })()}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className='w-auto p-0' align='start'>
-                        <Calendar
-                          key={`${(filters as InvoicePaymentFilters).dateFrom}-${(filters as InvoicePaymentFilters).dateTo}`}
-                          mode='range'
-                          captionLayout='dropdown'
-                          numberOfMonths={2}
-                          defaultMonth={parseYmdLocal(
-                            (filters as InvoicePaymentFilters).dateFrom ||
-                              format(new Date(), 'yyyy-MM-dd')
-                          )}
-                          selected={{
-                            from: (filters as InvoicePaymentFilters).dateFrom
-                              ? parseYmdLocal((filters as InvoicePaymentFilters).dateFrom)
-                              : undefined,
-                            to: (filters as InvoicePaymentFilters).dateTo
-                              ? parseYmdLocal((filters as InvoicePaymentFilters).dateTo)
-                              : undefined,
-                          }}
-                          onSelect={(range) => setInvoicePaymentCustomRange(range)}
-                          disabled={(date) => date > endOfDay(new Date()) || date < new Date('2000-01-01')}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <p className='text-xs text-muted-foreground'>
-                      Week = Monday through today. Month = full current calendar month.
-                    </p>
-                  </div>
                   <div className='space-y-2'>
                     <Label htmlFor='paymentUser'>User (created by)</Label>
                     <Select
@@ -970,6 +1084,8 @@ export function Reports() {
                     setFilters(getInitialFilters(selectedReport.key))
                     setSelectedInvoiceCustomer(null)
                     setSelectedPaymentCustomer(null)
+                    setInvoiceReportData(null)
+                    setInvoiceReportOpen(false)
                   }
                 }}
               >
@@ -989,6 +1105,21 @@ export function Reports() {
                   onClick={() => void submitInvoicePaymentReport()}
                 >
                   {invoicePaymentReportSubmitting ? 'Loading…' : 'Submit'}
+                </Button>
+              ) : selectedReport?.key === 'invoice' ? (
+                <Button
+                  type='button'
+                  size='sm'
+                  disabled={
+                    invoiceReportSubmitting ||
+                    !filters ||
+                    !isInvoiceFilters(filters) ||
+                    !filters.dateFrom ||
+                    !filters.dateTo
+                  }
+                  onClick={() => void submitInvoiceReport()}
+                >
+                  {invoiceReportSubmitting ? 'Loading…' : 'Submit'}
                 </Button>
               ) : (
                 <div className='flex items-center gap-2'>
@@ -1044,28 +1175,14 @@ export function Reports() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <ReportColumnHead title='Date' subtitle='Payment date' />
-                        <ReportColumnHead title='Customer' subtitle='Customer name' />
-                        <ReportColumnHead title='Invoice' subtitle='Invoice number' />
-                        <TableHead className='whitespace-normal align-bottom text-end'>
-                          <div className='flex min-w-[6rem] flex-col items-end gap-0.5 py-1'>
-                            <span>Amount</span>
-                            <span className='text-xs font-normal leading-tight text-muted-foreground'>
-                              Total invoice amount
-                            </span>
-                          </div>
-                        </TableHead>
-                        <TableHead className='whitespace-normal align-bottom text-end'>
-                          <div className='flex min-w-[5rem] flex-col items-end gap-0.5 py-1'>
-                            <span>Paid</span>
-                            <span className='text-xs font-normal leading-tight text-muted-foreground'>
-                              Paid amount
-                            </span>
-                          </div>
-                        </TableHead>
-                        <ReportColumnHead title='Account' subtitle='Account paid' />
-                        <ReportColumnHead title='Status' subtitle='Invoice status' />
-                        <ReportColumnHead title='Cashier' subtitle='Created by user' />
+                        <TableHead>Date</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Invoice</TableHead>
+                        <TableHead className='text-end'>Amount</TableHead>
+                        <TableHead className='text-end'>Paid</TableHead>
+                        <TableHead>Account</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Cashier</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1106,14 +1223,13 @@ export function Reports() {
                         <TableRow>
                           <TableHead>Account</TableHead>
                           <TableHead className='text-end'>Total</TableHead>
-                          <TableHead className='text-end'>Payments</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {invoicePaymentReportData.summary_by_account.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={3}
+                              colSpan={2}
                               className='text-center text-muted-foreground'
                             >
                               No totals.
@@ -1129,9 +1245,6 @@ export function Reports() {
                               </TableCell>
                               <TableCell className='text-end tabular-nums'>
                                 {s.total_formatted}
-                              </TableCell>
-                              <TableCell className='text-end tabular-nums'>
-                                {s.payment_count}
                               </TableCell>
                             </TableRow>
                           ))
@@ -1180,6 +1293,121 @@ export function Reports() {
                   onClick={() => {
                     if (invoicePaymentReportData) {
                       printInvoicePaymentReportAsPdf(invoicePaymentReportData)
+                    }
+                  }}
+                >
+                  <Download className='mr-2 h-4 w-4' />
+                  PDF
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={invoiceReportOpen}
+        onOpenChange={(next) => {
+          setInvoiceReportOpen(next)
+          if (!next) setInvoiceReportData(null)
+        }}
+      >
+        <DialogContent className='flex max-h-[min(90vh,800px)] w-[min(1100px,96vw)] max-w-[min(1100px,96vw)] flex-col gap-0 overflow-hidden sm:max-w-[min(1100px,96vw)]'>
+          <DialogHeader className='shrink-0'>
+            <DialogTitle>Invoice report</DialogTitle>
+          </DialogHeader>
+          {invoiceReportData ? (
+            <>
+              <p className='text-sm text-muted-foreground shrink-0 pb-2'>
+                {invoiceReportData.date_from} – {invoiceReportData.date_to}
+                <span className='ms-2'>
+                  · Status: {invoiceReportStatusFilterLabel(invoiceReportData.status_filter)}
+                </span>
+                <span className='ms-2'>
+                  ({invoiceReportData.rows.length}{' '}
+                  {invoiceReportData.rows.length === 1 ? 'invoice' : 'invoices'})
+                </span>
+              </p>
+              <ScrollArea className='min-h-0 flex-1 pr-3 -mr-1'>
+                <div className='space-y-4 pb-4'>
+                  <div className='overflow-x-auto'>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Issue date</TableHead>
+                          <TableHead>Invoice</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead className='text-end'>Total</TableHead>
+                          <TableHead className='text-end'>Due</TableHead>
+                          <TableHead>Due date</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {invoiceReportData.rows.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={7} className='text-center text-muted-foreground'>
+                              No invoices in this range.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          invoiceReportData.rows.map((r) => (
+                            <TableRow key={r.id}>
+                              <TableCell className='whitespace-nowrap tabular-nums'>
+                                {r.issue_date}
+                              </TableCell>
+                              <TableCell className='tabular-nums'>{r.invoice_number}</TableCell>
+                              <TableCell className='whitespace-normal'>{r.customer_name}</TableCell>
+                              <TableCell className='text-end tabular-nums'>
+                                {r.total_formatted}
+                              </TableCell>
+                              <TableCell className='text-end tabular-nums'>
+                                {r.due_formatted}
+                              </TableCell>
+                              <TableCell className='whitespace-nowrap tabular-nums'>
+                                {r.due_date}
+                              </TableCell>
+                              <TableCell className='whitespace-nowrap'>{r.status_label}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className='rounded-md border bg-muted/30 px-3 py-2 text-sm'>
+                    <span className='font-medium'>Summary: </span>
+                    <span className='tabular-nums'>{invoiceReportData.summary.invoice_count}</span>
+                    {' invoices · Total '}
+                    <span className='tabular-nums'>
+                      {invoiceReportData.summary.total_amount_formatted}
+                    </span>
+                    {' · Due '}
+                    <span className='tabular-nums'>
+                      {invoiceReportData.summary.total_due_formatted}
+                    </span>
+                  </div>
+                </div>
+              </ScrollArea>
+              <DialogFooter className='mt-4 shrink-0 flex-row justify-end gap-2 border-t pt-4'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={() => {
+                    if (invoiceReportData) {
+                      downloadInvoiceReportCsv(invoiceReportData)
+                    }
+                  }}
+                >
+                  <Download className='mr-2 h-4 w-4' />
+                  Excel
+                </Button>
+                <Button
+                  type='button'
+                  size='sm'
+                  onClick={() => {
+                    if (invoiceReportData) {
+                      printInvoiceReportAsPdf(invoiceReportData)
                     }
                   }}
                 >
