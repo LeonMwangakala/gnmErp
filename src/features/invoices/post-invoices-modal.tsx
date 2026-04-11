@@ -258,7 +258,9 @@ export function PostInvoicesModal({
         }
       }
 
-      const response = await invoiceApi.bulkPost(selectedIds)
+      const response = await invoiceApi.bulkPost(selectedIds, {
+        container_no: containerNo.trim(),
+      })
 
       if (response.status === 200) {
         toast.success(

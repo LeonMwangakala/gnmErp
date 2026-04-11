@@ -275,8 +275,21 @@ export const invoiceApi = {
     })
     return response.data
   },
-  bulkPost: async (invoiceIds?: number[]) => {
-    const payload = invoiceIds && invoiceIds.length > 0 ? { invoice_ids: invoiceIds } : {}
+  bulkPost: async (
+    invoiceIds?: number[],
+    options?: {
+      container_no?: string
+      invoice_containers?: Array<{ invoice_id: number; container_no: string }>
+    }
+  ) => {
+    const payload: Record<string, unknown> =
+      invoiceIds && invoiceIds.length > 0 ? { invoice_ids: invoiceIds } : {}
+    if (options?.container_no !== undefined && options.container_no.trim() !== '') {
+      payload.container_no = options.container_no.trim()
+    }
+    if (options?.invoice_containers?.length) {
+      payload.invoice_containers = options.invoice_containers
+    }
     const response = await api.post('/invoices/bulk-post', payload)
     return response.data
   },
