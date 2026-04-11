@@ -69,39 +69,59 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
+function ReportColumnHead({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <TableHead className='whitespace-normal align-bottom'>
+      <div className='flex min-w-[5.5rem] flex-col gap-0.5 py-1'>
+        <span>{title}</span>
+        <span className='text-xs font-normal leading-tight text-muted-foreground'>
+          {subtitle}
+        </span>
+      </div>
+    </TableHead>
+  )
+}
+
 function downloadInvoicePaymentReportCsv(data: InvoicePaymentReportData) {
   const totals = data.totals_by_currency ?? []
   const lines: string[] = [
-    ['Customer', 'Invoice', 'Currency', 'Amount', 'Account paid at'].join(','),
+    [
+      'Date (payment date)',
+      'Customer (customer name)',
+      'Invoice (invoice number)',
+      'Amount (total invoice amount)',
+      'Paid (paid amount)',
+      'Account (account paid)',
+      'Status (invoice status)',
+      'Cashier (created by user)',
+    ].join(','),
     ...data.rows.map((r) =>
       [
+        escapeCsvCell(r.date),
         escapeCsvCell(r.customer_name),
         escapeCsvCell(r.invoice_number),
-        escapeCsvCell(r.currency_code),
+        escapeCsvCell(r.invoice_total_formatted ?? ''),
         escapeCsvCell(r.amount_formatted),
-        escapeCsvCell(r.account_paid_at),
+        escapeCsvCell(r.account_label),
+        escapeCsvCell(r.invoice_status ?? ''),
+        escapeCsvCell(r.cashier_name ?? ''),
       ].join(',')
     ),
     '',
     'Summary by account',
-    ['Account', 'Currency', 'Total', 'Payments'].join(','),
+    ['Account', 'Total', 'Payments'].join(','),
     ...data.summary_by_account.map((s) =>
       [
         escapeCsvCell(s.account_label),
-        escapeCsvCell(s.currency_code),
         escapeCsvCell(s.total_formatted),
         String(s.payment_count),
       ].join(',')
     ),
     '',
     'Totals by currency',
-    ['Currency', 'Total', 'Payments'].join(','),
+    ['Total', 'Payments'].join(','),
     ...totals.map((t) =>
-      [
-        escapeCsvCell(t.currency_code),
-        escapeCsvCell(t.total_formatted),
-        String(t.payment_count),
-      ].join(',')
+      [escapeCsvCell(t.total_formatted), String(t.payment_count)].join(',')
     ),
   ]
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
@@ -123,19 +143,19 @@ function printInvoicePaymentReportAsPdf(data: InvoicePaymentReportData) {
   const rowHtml = data.rows
     .map(
       (r) =>
-        `<tr><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.invoice_number)}</td><td>${escapeHtml(r.currency_code)}</td><td class="num">${escapeHtml(r.amount_formatted)}</td><td>${escapeHtml(r.account_paid_at)}</td></tr>`
+        `<tr><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.invoice_number)}</td><td class="num">${escapeHtml(r.invoice_total_formatted ?? '')}</td><td class="num">${escapeHtml(r.amount_formatted)}</td><td>${escapeHtml(r.account_label)}</td><td>${escapeHtml(r.invoice_status ?? '')}</td><td>${escapeHtml(r.cashier_name ?? '')}</td></tr>`
     )
     .join('')
   const sumHtml = data.summary_by_account
     .map(
       (s) =>
-        `<tr><td>${escapeHtml(s.account_label)}</td><td>${escapeHtml(s.currency_code)}</td><td class="num">${escapeHtml(s.total_formatted)}</td><td>${s.payment_count}</td></tr>`
+        `<tr><td>${escapeHtml(s.account_label)}</td><td class="num">${escapeHtml(s.total_formatted)}</td><td>${s.payment_count}</td></tr>`
     )
     .join('')
   const curTotalsHtml = totals
     .map(
       (t) =>
-        `<tr><td>${escapeHtml(t.currency_code)}</td><td class="num">${escapeHtml(t.total_formatted)}</td><td>${t.payment_count}</td></tr>`
+        `<tr><td class="num">${escapeHtml(t.total_formatted)}</td><td>${t.payment_count}</td></tr>`
     )
     .join('')
   w.document.write(`<!DOCTYPE html><html><head><title>Invoice payments report</title>
@@ -146,17 +166,18 @@ h2{font-size:14px;margin-top:20px;margin-bottom:8px;}
 table{border-collapse:collapse;width:100%;margin-top:12px;}
 th,td{border:1px solid #ccc;padding:6px;text-align:left;}
 th{background:#f0f0f0;}
+th .sub{font-weight:normal;color:#555;font-size:10px;}
 td.num{text-align:right;}
 .meta{color:#444;margin-bottom:16px;}
 </style></head><body>
 <h1>Invoice payments report</h1>
 <div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}</div>
-<table><thead><tr><th>Customer</th><th>Invoice</th><th>Currency</th><th>Amount</th><th>Account paid at</th></tr></thead>
+<table><thead><tr><th>Date<br/><span class="sub">Payment date</span></th><th>Customer<br/><span class="sub">Customer name</span></th><th>Invoice<br/><span class="sub">Invoice number</span></th><th>Amount<br/><span class="sub">Total invoice amount</span></th><th>Paid<br/><span class="sub">Paid amount</span></th><th>Account<br/><span class="sub">Account paid</span></th><th>Status<br/><span class="sub">Invoice status</span></th><th>Cashier<br/><span class="sub">Created by user</span></th></tr></thead>
 <tbody>${rowHtml}</tbody></table>
 <h2>Summary by account</h2>
-<table><thead><tr><th>Account</th><th>Currency</th><th>Total</th><th>Payments</th></tr></thead><tbody>${sumHtml}</tbody></table>
+<table><thead><tr><th>Account</th><th>Total</th><th>Payments</th></tr></thead><tbody>${sumHtml}</tbody></table>
 <h2>Totals by currency</h2>
-<table><thead><tr><th>Currency</th><th>Total</th><th>Payments</th></tr></thead><tbody>${curTotalsHtml}</tbody></table>
+<table><thead><tr><th>Total</th><th>Payments</th></tr></thead><tbody>${curTotalsHtml}</tbody></table>
 <script>window.onload=function(){window.print();}</script>
 </body></html>`)
   w.document.close()
@@ -1004,7 +1025,7 @@ export function Reports() {
           if (!next) setInvoicePaymentReportData(null)
         }}
       >
-        <DialogContent className='flex max-h-[min(90vh,800px)] w-[min(960px,96vw)] max-w-[min(960px,96vw)] flex-col gap-0 overflow-hidden sm:max-w-[min(960px,96vw)]'>
+        <DialogContent className='flex max-h-[min(90vh,800px)] w-[min(1280px,98vw)] max-w-[min(1280px,98vw)] flex-col gap-0 overflow-hidden sm:max-w-[min(1280px,98vw)]'>
           <DialogHeader className='shrink-0'>
             <DialogTitle>Invoice payments report</DialogTitle>
           </DialogHeader>
@@ -1019,44 +1040,64 @@ export function Reports() {
               </p>
               <ScrollArea className='min-h-0 flex-1 pr-3 -mr-1'>
                 <div className='space-y-6 pb-4'>
+                  <div className='overflow-x-auto'>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>Invoice</TableHead>
-                        <TableHead>Currency</TableHead>
-                        <TableHead className='text-end'>Amount</TableHead>
-                        <TableHead className='min-w-[200px] whitespace-normal'>
-                          Account paid at
+                        <ReportColumnHead title='Date' subtitle='Payment date' />
+                        <ReportColumnHead title='Customer' subtitle='Customer name' />
+                        <ReportColumnHead title='Invoice' subtitle='Invoice number' />
+                        <TableHead className='whitespace-normal align-bottom text-end'>
+                          <div className='flex min-w-[6rem] flex-col items-end gap-0.5 py-1'>
+                            <span>Amount</span>
+                            <span className='text-xs font-normal leading-tight text-muted-foreground'>
+                              Total invoice amount
+                            </span>
+                          </div>
                         </TableHead>
+                        <TableHead className='whitespace-normal align-bottom text-end'>
+                          <div className='flex min-w-[5rem] flex-col items-end gap-0.5 py-1'>
+                            <span>Paid</span>
+                            <span className='text-xs font-normal leading-tight text-muted-foreground'>
+                              Paid amount
+                            </span>
+                          </div>
+                        </TableHead>
+                        <ReportColumnHead title='Account' subtitle='Account paid' />
+                        <ReportColumnHead title='Status' subtitle='Invoice status' />
+                        <ReportColumnHead title='Cashier' subtitle='Created by user' />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {invoicePaymentReportData.rows.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className='text-center text-muted-foreground'>
+                          <TableCell colSpan={8} className='text-center text-muted-foreground'>
                             No payments in this range.
                           </TableCell>
                         </TableRow>
                       ) : (
                         invoicePaymentReportData.rows.map((r) => (
                           <TableRow key={r.id}>
+                            <TableCell className='whitespace-nowrap tabular-nums'>{r.date}</TableCell>
                             <TableCell className='whitespace-normal'>{r.customer_name}</TableCell>
-                            <TableCell>{r.invoice_number}</TableCell>
-                            <TableCell className='font-medium tabular-nums'>
-                              {r.currency_code}
+                            <TableCell className='tabular-nums'>{r.invoice_number}</TableCell>
+                            <TableCell className='text-end tabular-nums'>
+                              {r.invoice_total_formatted ?? '—'}
                             </TableCell>
                             <TableCell className='text-end tabular-nums'>
                               {r.amount_formatted}
                             </TableCell>
-                            <TableCell className='whitespace-normal text-muted-foreground'>
-                              {r.account_paid_at}
+                            <TableCell className='max-w-[220px] whitespace-normal text-muted-foreground'>
+                              {r.account_label}
                             </TableCell>
+                            <TableCell className='whitespace-nowrap'>{r.invoice_status ?? '—'}</TableCell>
+                            <TableCell className='whitespace-normal'>{r.cashier_name ?? '—'}</TableCell>
                           </TableRow>
                         ))
                       )}
                     </TableBody>
                   </Table>
+                  </div>
 
                   <div>
                     <h3 className='mb-2 text-sm font-semibold'>Summary by account</h3>
@@ -1064,7 +1105,6 @@ export function Reports() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Account</TableHead>
-                          <TableHead>Currency</TableHead>
                           <TableHead className='text-end'>Total</TableHead>
                           <TableHead className='text-end'>Payments</TableHead>
                         </TableRow>
@@ -1073,7 +1113,7 @@ export function Reports() {
                         {invoicePaymentReportData.summary_by_account.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={4}
+                              colSpan={3}
                               className='text-center text-muted-foreground'
                             >
                               No totals.
@@ -1087,7 +1127,6 @@ export function Reports() {
                               <TableCell className='whitespace-normal'>
                                 {s.account_label}
                               </TableCell>
-                              <TableCell className='tabular-nums'>{s.currency_code}</TableCell>
                               <TableCell className='text-end tabular-nums'>
                                 {s.total_formatted}
                               </TableCell>
@@ -1106,8 +1145,7 @@ export function Reports() {
                       ) : (
                         (invoicePaymentReportData.totals_by_currency ?? []).map((t) => (
                           <li key={t.currency_code} className='flex flex-wrap items-baseline gap-x-2'>
-                            <span className='font-medium tabular-nums'>{t.currency_code}</span>
-                            <span className='tabular-nums'>{t.total_formatted}</span>
+                            <span className='tabular-nums font-medium'>{t.total_formatted}</span>
                             <span className='text-muted-foreground text-xs'>
                               ({t.payment_count}{' '}
                               {t.payment_count === 1 ? 'payment' : 'payments'})

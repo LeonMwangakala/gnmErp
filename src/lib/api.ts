@@ -288,6 +288,9 @@ export interface InvoicePaymentReportRow {
   id: number
   customer_name: string
   invoice_number: string
+  invoice_total: number
+  invoice_total_formatted: string
+  invoice_status: string
   amount: number
   amount_formatted: string
   currency_code: string
@@ -297,6 +300,7 @@ export interface InvoicePaymentReportRow {
   date: string
   date_raw: string | null
   account_id: number
+  cashier_name: string
 }
 
 export interface InvoicePaymentReportAccountSummary {
