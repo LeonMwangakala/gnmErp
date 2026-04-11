@@ -228,6 +228,32 @@ export const invoiceApi = {
     return { ok: false, message: body?.message || 'Failed to load report' }
   },
 
+  getPostedContainersReport: async (params: {
+    date_from: string
+    date_to: string
+    container_no?: string
+  }): Promise<
+    | { ok: true; data: PostedContainersReportData }
+    | { ok: false; message: string }
+  > => {
+    const response = await api.get('/invoices/report/posted-containers', {
+      params: {
+        date_from: params.date_from,
+        date_to: params.date_to,
+        ...(params.container_no?.trim() ? { container_no: params.container_no.trim() } : {}),
+      },
+    })
+    const body = response.data as {
+      status?: number
+      message?: string
+      data?: PostedContainersReportData
+    }
+    if (body?.status === 200 && body.data) {
+      return { ok: true, data: body.data }
+    }
+    return { ok: false, message: body?.message || 'Failed to load report' }
+  },
+
   getInvoices: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
     const response = await api.get('/invoices', { params })
     return {
@@ -395,6 +421,24 @@ export interface InvoiceReportData {
   status_filter: string
   rows: InvoiceReportRow[]
   summary: InvoiceReportSummary
+}
+
+export interface PostedContainersReportRow {
+  id: number
+  container_no: string
+  invoice_number: string
+  customer_name: string
+  posted_at: string
+  posted_at_raw: string | null
+  posted_by_name: string
+}
+
+export interface PostedContainersReportData {
+  date_from: string
+  date_to: string
+  container_no_filter: string
+  rows: PostedContainersReportRow[]
+  summary: { row_count: number }
 }
 
 export const paymentApi = {

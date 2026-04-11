@@ -44,6 +44,7 @@ import {
   invoiceApi,
   type InvoicePaymentReportData,
   type InvoiceReportData,
+  type PostedContainersReportData,
 } from '@/lib/api'
 import {
   Table,
@@ -233,6 +234,64 @@ td.num{text-align:right;}
   w.document.close()
 }
 
+function downloadPostedContainersReportCsv(data: PostedContainersReportData) {
+  const lines: string[] = [
+    ['Posted at', 'Container', 'Invoice', 'Customer', 'Posted by'].join(','),
+    ...data.rows.map((r) =>
+      [
+        escapeCsvCell(r.posted_at),
+        escapeCsvCell(r.container_no),
+        escapeCsvCell(r.invoice_number),
+        escapeCsvCell(r.customer_name),
+        escapeCsvCell(r.posted_by_name),
+      ].join(',')
+    ),
+    '',
+    `Rows,${data.summary.row_count}`,
+  ]
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `posted-containers-${data.date_from}-to-${data.date_to}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function printPostedContainersReportAsPdf(data: PostedContainersReportData) {
+  const w = window.open('', '_blank')
+  if (!w) {
+    toast.error('Pop-up blocked. Allow pop-ups to print or save as PDF.')
+    return
+  }
+  const filterNote = data.container_no_filter
+    ? `Container contains: ${escapeHtml(data.container_no_filter)}`
+    : 'All containers'
+  const rowHtml = data.rows
+    .map(
+      (r) =>
+        `<tr><td>${escapeHtml(r.posted_at)}</td><td>${escapeHtml(r.container_no)}</td><td>${escapeHtml(r.invoice_number)}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.posted_by_name)}</td></tr>`
+    )
+    .join('')
+  w.document.write(`<!DOCTYPE html><html><head><title>Posted containers report</title>
+<style>
+body{font-family:system-ui,sans-serif;padding:16px;font-size:12px;}
+h1{font-size:16px;margin-bottom:8px;}
+table{border-collapse:collapse;width:100%;margin-top:12px;}
+th,td{border:1px solid #ccc;padding:6px;text-align:left;}
+th{background:#f0f0f0;}
+.meta{color:#444;margin-bottom:16px;}
+</style></head><body>
+<h1>Posted containers (at invoice post)</h1>
+<div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}<br/>${filterNote}</div>
+<table><thead><tr><th>Posted at</th><th>Container</th><th>Invoice</th><th>Customer</th><th>Posted by</th></tr></thead>
+<tbody>${rowHtml || '<tr><td colspan="5">No rows</td></tr>'}</tbody></table>
+<p class="meta">${data.summary.row_count} row(s)</p>
+<script>window.onload=function(){window.print();}</script>
+</body></html>`)
+  w.document.close()
+}
+
 interface CustomerOption {
   id: number
   value: string
@@ -244,6 +303,7 @@ interface CustomerOption {
 type ReportType =
   | 'invoice'
   | 'invoice-payments'
+  | 'posted-containers'
   | 'petty-cash'
   | 'expense-payments'
   | 'container-payments'
@@ -265,6 +325,12 @@ const REPORTS: ReportDefinition[] = [
     title: 'Invoice payments report',
     description:
       'Filter invoice payments by date range (today, week, month, or custom) and user.',
+  },
+  {
+    key: 'posted-containers',
+    title: 'Posted containers',
+    description:
+      'Container numbers recorded when invoices were posted, by post date. Optional container filter.',
   },
   {
     key: 'petty-cash',
@@ -353,6 +419,13 @@ type InvoicePaymentFilters = {
   invoiceId: string
 }
 
+type PostedContainersFilters = {
+  dateFrom: string
+  dateTo: string
+  datePreset: InvoicePaymentDatePreset
+  containerNo: string
+}
+
 type PettyCashFilters = CommonFilters & {
   categoryId: string
   receiverFor: 'all' | 'employee' | 'vendor' | 'other'
@@ -367,6 +440,7 @@ type ExpensePaymentFilters = CommonFilters & {
 type ReportFilters =
   | InvoiceFilters
   | InvoicePaymentFilters
+  | PostedContainersFilters
   | PettyCashFilters
   | ExpensePaymentFilters
   | CommonFilters
@@ -377,15 +451,21 @@ function isInvoicePaymentFilters(
   return f != null && 'invoiceId' in f && 'dateFrom' in f && 'datePreset' in f
 }
 
-/** Invoice report + invoice payments report share preset + custom range dates */
+/** Invoice / payments / posted-containers share preset + custom range dates */
 function isDateRangedReportFilters(
   f: ReportFilters | null | undefined
-): f is InvoicePaymentFilters | InvoiceFilters {
+): f is InvoicePaymentFilters | InvoiceFilters | PostedContainersFilters {
   return f != null && 'dateFrom' in f && 'dateTo' in f && 'datePreset' in f
 }
 
 function isInvoiceFilters(f: ReportFilters | null | undefined): f is InvoiceFilters {
   return f != null && 'status' in f && 'dateFrom' in f && !('userId' in f)
+}
+
+function isPostedContainersFilters(
+  f: ReportFilters | null | undefined
+): f is PostedContainersFilters {
+  return f != null && 'containerNo' in f && 'dateFrom' in f && 'datePreset' in f
 }
 
 export function Reports() {
@@ -404,6 +484,10 @@ export function Reports() {
   const [invoiceReportOpen, setInvoiceReportOpen] = useState(false)
   const [invoiceReportData, setInvoiceReportData] = useState<InvoiceReportData | null>(null)
   const [invoiceReportSubmitting, setInvoiceReportSubmitting] = useState(false)
+  const [postedContainersReportOpen, setPostedContainersReportOpen] = useState(false)
+  const [postedContainersReportData, setPostedContainersReportData] =
+    useState<PostedContainersReportData | null>(null)
+  const [postedContainersReportSubmitting, setPostedContainersReportSubmitting] = useState(false)
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -468,6 +552,8 @@ export function Reports() {
     setInvoicePaymentReportData(null)
     setInvoiceReportOpen(false)
     setInvoiceReportData(null)
+    setPostedContainersReportOpen(false)
+    setPostedContainersReportData(null)
     setOpen(true)
   }
 
@@ -519,6 +605,31 @@ export function Reports() {
       setInvoiceReportOpen(true)
     } finally {
       setInvoiceReportSubmitting(false)
+    }
+  }
+
+  const submitPostedContainersReport = async () => {
+    if (!filters || !isPostedContainersFilters(filters)) return
+    if (!filters.dateFrom || !filters.dateTo) {
+      toast.error('Choose a posted date range.')
+      return
+    }
+    setPostedContainersReportSubmitting(true)
+    try {
+      const result = await invoiceApi.getPostedContainersReport({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        ...(filters.containerNo.trim() ? { container_no: filters.containerNo.trim() } : {}),
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      setPostedContainersReportData(result.data)
+      setOpen(false)
+      setPostedContainersReportOpen(true)
+    } finally {
+      setPostedContainersReportSubmitting(false)
     }
   }
 
@@ -578,6 +689,15 @@ export function Reports() {
           invoiceId: '',
         }
       }
+      case 'posted-containers': {
+        const { dateFrom, dateTo } = getInvoicePaymentRangeForPreset('month')
+        return {
+          datePreset: 'month' as const,
+          dateFrom,
+          dateTo,
+          containerNo: '',
+        }
+      }
       case 'petty-cash':
         return {
           ...base,
@@ -602,7 +722,8 @@ export function Reports() {
       !filters ||
       selectedReport.key === 'container-payments' ||
       selectedReport.key === 'invoice-payments' ||
-      selectedReport.key === 'invoice'
+      selectedReport.key === 'invoice' ||
+      selectedReport.key === 'posted-containers'
     )
       return
     try {
@@ -681,6 +802,7 @@ export function Reports() {
             <div className='space-y-4'>
               {selectedReport?.key !== 'invoice-payments' &&
                 selectedReport?.key !== 'invoice' &&
+                selectedReport?.key !== 'posted-containers' &&
                 'dateRange' in filters && (
                 <div className='space-y-2'>
                   <Label htmlFor='dateRange'>Date range</Label>
@@ -694,13 +816,16 @@ export function Reports() {
               )}
 
               {(selectedReport?.key === 'invoice-payments' ||
-                selectedReport?.key === 'invoice') &&
+                selectedReport?.key === 'invoice' ||
+                selectedReport?.key === 'posted-containers') &&
                 isDateRangedReportFilters(filters) && (
                   <div className='space-y-3'>
                     <Label>
                       {selectedReport.key === 'invoice-payments'
                         ? 'Payment date range'
-                        : 'Invoice date range'}
+                        : selectedReport.key === 'posted-containers'
+                          ? 'Posted date range'
+                          : 'Invoice date range'}
                     </Label>
                     <div className='flex flex-wrap gap-2'>
                       {(
@@ -776,6 +901,21 @@ export function Reports() {
                     </p>
                   </div>
                 )}
+
+              {selectedReport?.key === 'posted-containers' && isPostedContainersFilters(filters) && (
+                <div className='space-y-2'>
+                  <Label htmlFor='postedContainersFilter'>Container number (optional)</Label>
+                  <Input
+                    id='postedContainersFilter'
+                    placeholder='Contains… e.g. ABCD — leave empty for all'
+                    value={filters.containerNo}
+                    onChange={(e) => handleFilterChange('containerNo', e.target.value)}
+                  />
+                  <p className='text-xs text-muted-foreground'>
+                    Optional partial match on the stored container number.
+                  </p>
+                </div>
+              )}
 
               {selectedReport?.key === 'invoice' && (
                 <>
@@ -1086,6 +1226,8 @@ export function Reports() {
                     setSelectedPaymentCustomer(null)
                     setInvoiceReportData(null)
                     setInvoiceReportOpen(false)
+                    setPostedContainersReportData(null)
+                    setPostedContainersReportOpen(false)
                   }
                 }}
               >
@@ -1120,6 +1262,21 @@ export function Reports() {
                   onClick={() => void submitInvoiceReport()}
                 >
                   {invoiceReportSubmitting ? 'Loading…' : 'Submit'}
+                </Button>
+              ) : selectedReport?.key === 'posted-containers' ? (
+                <Button
+                  type='button'
+                  size='sm'
+                  disabled={
+                    postedContainersReportSubmitting ||
+                    !filters ||
+                    !isPostedContainersFilters(filters) ||
+                    !filters.dateFrom ||
+                    !filters.dateTo
+                  }
+                  onClick={() => void submitPostedContainersReport()}
+                >
+                  {postedContainersReportSubmitting ? 'Loading…' : 'Submit'}
                 </Button>
               ) : (
                 <div className='flex items-center gap-2'>
@@ -1408,6 +1565,102 @@ export function Reports() {
                   onClick={() => {
                     if (invoiceReportData) {
                       printInvoiceReportAsPdf(invoiceReportData)
+                    }
+                  }}
+                >
+                  <Download className='mr-2 h-4 w-4' />
+                  PDF
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={postedContainersReportOpen}
+        onOpenChange={(next) => {
+          setPostedContainersReportOpen(next)
+          if (!next) setPostedContainersReportData(null)
+        }}
+      >
+        <DialogContent className='flex max-h-[min(90vh,800px)] w-[min(1100px,96vw)] max-w-[min(1100px,96vw)] flex-col gap-0 overflow-hidden sm:max-w-[min(1100px,96vw)]'>
+          <DialogHeader className='shrink-0'>
+            <DialogTitle>Posted containers</DialogTitle>
+          </DialogHeader>
+          {postedContainersReportData ? (
+            <>
+              <p className='text-sm text-muted-foreground shrink-0 pb-2'>
+                {postedContainersReportData.date_from} – {postedContainersReportData.date_to}
+                {postedContainersReportData.container_no_filter ? (
+                  <span className='ms-2'>
+                    · Container contains: {postedContainersReportData.container_no_filter}
+                  </span>
+                ) : null}
+                <span className='ms-2'>
+                  ({postedContainersReportData.rows.length}{' '}
+                  {postedContainersReportData.rows.length === 1 ? 'row' : 'rows'})
+                </span>
+              </p>
+              <ScrollArea className='min-h-0 flex-1 pr-3 -mr-1'>
+                <div className='space-y-4 pb-4'>
+                  <div className='overflow-x-auto'>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Posted at</TableHead>
+                          <TableHead>Container</TableHead>
+                          <TableHead>Invoice</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Posted by</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {postedContainersReportData.rows.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className='text-center text-muted-foreground'>
+                              No rows in this range. Post invoices from the Post Invoices flow with a
+                              container number to populate this report.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          postedContainersReportData.rows.map((r) => (
+                            <TableRow key={r.id}>
+                              <TableCell className='whitespace-nowrap tabular-nums'>
+                                {r.posted_at}
+                              </TableCell>
+                              <TableCell className='font-mono text-sm'>{r.container_no}</TableCell>
+                              <TableCell className='tabular-nums'>{r.invoice_number}</TableCell>
+                              <TableCell className='whitespace-normal'>{r.customer_name}</TableCell>
+                              <TableCell className='whitespace-normal'>{r.posted_by_name}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </ScrollArea>
+              <DialogFooter className='mt-4 shrink-0 flex-row justify-end gap-2 border-t pt-4'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={() => {
+                    if (postedContainersReportData) {
+                      downloadPostedContainersReportCsv(postedContainersReportData)
+                    }
+                  }}
+                >
+                  <Download className='mr-2 h-4 w-4' />
+                  Excel
+                </Button>
+                <Button
+                  type='button'
+                  size='sm'
+                  onClick={() => {
+                    if (postedContainersReportData) {
+                      printPostedContainersReportAsPdf(postedContainersReportData)
                     }
                   }}
                 >
