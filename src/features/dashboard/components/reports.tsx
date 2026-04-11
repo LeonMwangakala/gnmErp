@@ -898,6 +898,14 @@ export function Reports() {
                     </Popover>
                     <p className='text-xs text-muted-foreground'>
                       Week = Monday through today. Month = full current calendar month.
+                      {selectedReport?.key === 'invoice' && (
+                        <>
+                          {' '}
+                          Invoice report includes rows whose <span className='font-medium'>issue date</span> or{' '}
+                          <span className='font-medium'>sent/posted date</span> falls in this range. Status{' '}
+                          <span className='font-medium'>All</span> excludes drafts only.
+                        </>
+                      )}
                     </p>
                   </div>
                 )}
