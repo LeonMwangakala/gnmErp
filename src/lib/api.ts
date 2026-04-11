@@ -284,7 +284,70 @@ export const invoiceApi = {
   },
 }
 
+export interface InvoicePaymentReportRow {
+  id: number
+  customer_name: string
+  invoice_number: string
+  amount: number
+  amount_formatted: string
+  currency_code: string
+  currency_display_symbol: string
+  account_paid_at: string
+  account_label: string
+  date: string
+  date_raw: string | null
+  account_id: number
+}
+
+export interface InvoicePaymentReportAccountSummary {
+  account_id: number
+  account_label: string
+  currency_code: string
+  currency_display_symbol: string
+  total: number
+  total_formatted: string
+  payment_count: number
+}
+
+export interface InvoicePaymentReportCurrencyTotal {
+  currency_code: string
+  currency_display_symbol: string
+  total: number
+  total_formatted: string
+  payment_count: number
+}
+
+export interface InvoicePaymentReportData {
+  rows: InvoicePaymentReportRow[]
+  summary_by_account: InvoicePaymentReportAccountSummary[]
+  totals_by_currency: InvoicePaymentReportCurrencyTotal[]
+  date_from: string
+  date_to: string
+}
+
 export const paymentApi = {
+  getInvoicePaymentsReport: async (params: {
+    date_from: string
+    date_to: string
+    user_id?: string
+  }): Promise<
+    | { ok: true; data: InvoicePaymentReportData }
+    | { ok: false; message: string }
+  > => {
+    const response = await api.get('/payments/report/invoice-payments', {
+      params: {
+        date_from: params.date_from,
+        date_to: params.date_to,
+        ...(params.user_id ? { user_id: params.user_id } : {}),
+      },
+    })
+    const body = response.data as { status?: number; message?: string; data?: InvoicePaymentReportData }
+    if (body?.status === 200 && body.data) {
+      return { ok: true, data: body.data }
+    }
+    return { ok: false, message: body?.message || 'Failed to load report' }
+  },
+
   getPayments: async (params?: PaginationParams & { invoice_id?: number }): Promise<PaginatedResponse<any>> => {
     const response = await api.get('/payments', { params })
     return {
