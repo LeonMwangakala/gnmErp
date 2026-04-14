@@ -49,7 +49,6 @@ export function AddEditPettyCashRequestModal({
     amount: '',
     comment: '',
     currency: '',
-    currency_exchange_rate: '1',
   })
   const [currencies, setCurrencies] = useState<CurrencyOption[]>([])
 
@@ -68,17 +67,12 @@ export function AddEditPettyCashRequestModal({
             amount: request.amount.toString(),
             comment: request.comment || '',
             currency: request.currency_id ? request.currency_id.toString() : baseCurrency ? baseCurrency.id.toString() : '',
-            currency_exchange_rate:
-              request.currency_exchange_rate !== null && request.currency_exchange_rate !== undefined
-                ? request.currency_exchange_rate.toString()
-                : '1',
           })
         } else {
           setForm({
             amount: '',
             comment: '',
             currency: baseCurrency ? baseCurrency.id.toString() : '',
-            currency_exchange_rate: '1',
           })
         }
       } catch (error: any) {
@@ -144,47 +138,28 @@ export function AddEditPettyCashRequestModal({
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="currency">
-                  Currency <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={form.currency}
-                  onValueChange={(value) => setForm((prev) => ({ ...prev, currency: value }))}
-                >
-                  <SelectTrigger id="currency">
-                    <SelectValue placeholder="Select currency" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map((currency) => (
-                      <SelectItem key={currency.id} value={currency.id.toString()}>
-                        {currency.currency_code} - {currency.currency_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="currency_exchange_rate">
-                  Exchange Rate <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="currency_exchange_rate"
-                  type="number"
-                  step="0.00000001"
-                  min="0"
-                  value={form.currency_exchange_rate}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      currency_exchange_rate: e.target.value || '1',
-                    }))
-                  }
-                  required
-                  placeholder="Enter exchange rate"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="currency">
+                Currency <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={form.currency}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, currency: value }))}
+              >
+                <SelectTrigger id="currency">
+                  <SelectValue placeholder="Select currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currencies.map((currency) => (
+                    <SelectItem key={currency.id} value={currency.id.toString()}>
+                      {currency.currency_code} - {currency.currency_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Exchange rate is auto-handled by the system for petty cash requests.
+              </p>
             </div>
 
             <div className="space-y-2">

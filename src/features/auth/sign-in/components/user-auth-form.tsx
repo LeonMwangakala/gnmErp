@@ -55,6 +55,12 @@ export function UserAuthForm({
       const response = await authApi.login(data.email, data.password)
 
       if (response.status === 200 && response.token) {
+        // eslint-disable-next-line no-console -- debug: login API payload (users, employee_context, etc.)
+        console.log('[login] result', {
+          ...response,
+          token: '[redacted]',
+        })
+
         // Set access token
         auth.setAccessToken(response.token)
 

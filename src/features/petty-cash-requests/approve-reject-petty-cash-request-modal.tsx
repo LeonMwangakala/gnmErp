@@ -46,11 +46,14 @@ export function ApproveRejectPettyCashRequestModal({
   })
   const [bankAccounts, setBankAccounts] = useState<Array<{
     id: number
+    bank_name?: string
     holder_name: string
     opening_balance: number
     opening_balance_formatted: string
+    currency_id?: number | null
+    currency_code?: string | null
   }>>([])
-  const [selectedAccountBalance, setSelectedAccountBalance] = useState<number | null>(null)
+  const [selectedAccountBalance, setSelectedAccountBalance] = useState<string>('')
 
   useEffect(() => {
     if (open && request) {
@@ -60,9 +63,19 @@ export function ApproveRejectPettyCashRequestModal({
         approved_amount: status === 3 ? request.amount.toString() : '',
         approved_comment: '',
       })
-      setSelectedAccountBalance(null)
+      setSelectedAccountBalance('')
     }
   }, [open, request, status])
+
+  useEffect(() => {
+    if (!request || !form.from_bank_account) return
+    const selected = bankAccounts.find((acc) => acc.id.toString() === form.from_bank_account)
+    if (!selected) return
+    if (request.currency_id && selected.currency_id && request.currency_id !== selected.currency_id) {
+      setForm((prev) => ({ ...prev, from_bank_account: '' }))
+      setSelectedAccountBalance('')
+    }
+  }, [request, form.from_bank_account, bankAccounts])
 
   const fetchFormData = async () => {
     try {
@@ -76,7 +89,7 @@ export function ApproveRejectPettyCashRequestModal({
   const handleAccountChange = (accountId: string) => {
     setForm({ ...form, from_bank_account: accountId })
     const account = bankAccounts.find((acc) => acc.id.toString() === accountId)
-    setSelectedAccountBalance(account ? account.opening_balance : null)
+    setSelectedAccountBalance(account ? account.opening_balance_formatted : '')
   }
 
   const handleAmountChange = (amount: string) => {
@@ -92,15 +105,34 @@ export function ApproveRejectPettyCashRequestModal({
     }
 
     if (status === 3) {
+      const selectedAccount = bankAccounts.find(
+        (acc) => acc.id.toString() === form.from_bank_account
+      )
       if (!form.from_bank_account) {
         toast.error('Please select a bank account')
+        return
+      }
+      if (
+        selectedAccount &&
+        request?.currency_id &&
+        selectedAccount.currency_id &&
+        selectedAccount.currency_id !== request.currency_id
+      ) {
+        toast.error('Selected bank account currency must match the request currency')
+        return
+      }
+      if (selectedAccount && request?.amount && selectedAccount.opening_balance < request.amount) {
+        toast.error('Account balance is less than the requested amount')
         return
       }
       if (!form.approved_amount || parseFloat(form.approved_amount) <= 0) {
         toast.error('Please enter a valid approved amount')
         return
       }
-      if (selectedAccountBalance !== null && parseFloat(form.approved_amount) > selectedAccountBalance) {
+      if (
+        selectedAccount &&
+        parseFloat(form.approved_amount) > (selectedAccount.opening_balance || 0)
+      ) {
         toast.error('Account balance is less than approved amount')
         return
       }
@@ -132,6 +164,10 @@ export function ApproveRejectPettyCashRequestModal({
   const isApproval = status === 3
   const title = isApproval ? 'Approve Petty Cash Request' : 'Reject Petty Cash Request'
   const buttonText = isApproval ? 'Approve' : 'Reject'
+  const filteredBankAccounts = bankAccounts.filter((acc) => {
+    if (!request.currency_id || !acc.currency_id) return true
+    return acc.currency_id === request.currency_id
+  })
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -162,19 +198,38 @@ export function ApproveRejectPettyCashRequestModal({
                         <SelectValue placeholder="Select Account" />
                       </SelectTrigger>
                       <SelectContent>
-                        {bankAccounts.map((account) => (
+                        {filteredBankAccounts.map((account) => (
                           <SelectItem key={account.id} value={account.id.toString()}>
-                            {account.holder_name} [{account.opening_balance_formatted}]
+                            {account.bank_name || account.holder_name}
+                            {account.currency_code ? `, ${account.currency_code}` : ''}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {isApproval && filteredBankAccounts.length === 0 && (
+                      <p className="text-xs text-destructive">
+                        No bank account found for {request.currency_code || 'the selected currency'}.
+                      </p>
+                    )}
+                    {isApproval &&
+                      form.from_bank_account &&
+                      (() => {
+                        const selected = bankAccounts.find(
+                          (acc) => acc.id.toString() === form.from_bank_account
+                        )
+                        if (!selected) return null
+                        return selected.opening_balance < request.amount ? (
+                          <p className="text-xs text-destructive">
+                            Selected account balance is below requested amount.
+                          </p>
+                        ) : null
+                      })()}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="balance">Balance</Label>
                     <Input
                       id="balance"
-                      value={selectedAccountBalance !== null ? selectedAccountBalance.toLocaleString() : ''}
+                      value={selectedAccountBalance}
                       readOnly
                       className="bg-muted"
                     />

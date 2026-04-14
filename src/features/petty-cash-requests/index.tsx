@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Eye, Check, X } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -34,10 +34,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { pettyCashRequestApi, PaginationMeta } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth-store'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { AddEditPettyCashRequestModal } from './add-edit-petty-cash-request-modal'
@@ -71,6 +78,7 @@ export interface PettyCashRequest {
 }
 
 export function PettyCashRequests() {
+  const user = useAuthStore((s) => s.auth.user)
   const [requests, setRequests] = useState<PettyCashRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [pagination, setPagination] = useState<PaginationMeta>({
@@ -125,7 +133,17 @@ export function PettyCashRequests() {
       }
 
       const response = await pettyCashRequestApi.getPettyCashRequests(params)
-      setRequests(response.data)
+      const normalized = (response.data || []).map((item: any) => {
+        const parsedStatus =
+          item.status === null || item.status === undefined || item.status === ''
+            ? null
+            : Number(item.status)
+        return {
+          ...item,
+          status: Number.isFinite(parsedStatus as number) ? (parsedStatus as number | null) : null,
+        }
+      })
+      setRequests(normalized)
       setPagination(response.pagination)
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to fetch petty cash requests')
@@ -192,7 +210,11 @@ export function PettyCashRequests() {
   }
 
   const canApprove = (request: PettyCashRequest) => {
-    return request.status !== 2 && request.status !== 3
+    const dept = (user?.employee_context?.department_name || '').trim().toLowerCase()
+    const desig = (user?.employee_context?.designation_name || '').trim().toLowerCase()
+    const isFinanceFm = dept === 'finance' && desig === 'fm'
+
+    return isFinanceFm && request.status !== 2 && request.status !== 3
   }
 
   return (
@@ -263,9 +285,9 @@ export function PettyCashRequests() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>S/N</TableHead>
-                        <TableHead>Request Number</TableHead>
+                        <TableHead>Request No</TableHead>
                         <TableHead>Currency</TableHead>
-                        <TableHead>Requested Amount</TableHead>
+                        <TableHead>Amount</TableHead>
                         <TableHead>Requested By</TableHead>
                         <TableHead>Requested On</TableHead>
                         <TableHead>Status</TableHead>
@@ -292,52 +314,47 @@ export function PettyCashRequests() {
                           <TableCell>{request.approved_on_formatted || '-'}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleView(request)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              {canApprove(request) && (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleApprove(request)}
-                                    className="text-green-600 hover:text-green-700"
-                                  >
-                                    <Check className="h-4 w-4" />
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    Options
                                   </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleReject(request)}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </>
-                              )}
-                              {canEdit(request) && (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleView(request)}>
+                                    View
+                                  </DropdownMenuItem>
+                                  {canApprove(request) && (
+                                    <>
+                                      <DropdownMenuItem
+                                        onClick={() => handleApprove(request)}
+                                        className="text-green-600 focus:text-green-700"
+                                      >
+                                        Approve
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => handleReject(request)}
+                                        className="text-red-600 focus:text-red-700"
+                                      >
+                                        Reject
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                  <DropdownMenuItem
                                     onClick={() => handleEdit(request)}
+                                    disabled={!canEdit(request)}
                                   >
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
                                     onClick={() => handleDelete(request.id)}
-                                    className="text-red-600 hover:text-red-700"
+                                    disabled={!canEdit(request)}
+                                    className="text-red-600 focus:text-red-700"
                                   >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </>
-                              )}
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>

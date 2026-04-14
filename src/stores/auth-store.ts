@@ -4,6 +4,16 @@ import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
 const ACCESS_TOKEN = 'torchlight_access_token'
 const USER_DATA = 'torchlight_user_data'
 
+/** HR row linked to the login user (from employees + department + designation). */
+export interface EmployeeContext {
+  employee_record_id: number
+  employee_number?: string | null
+  department_id: number | null
+  department_name: string | null
+  designation_id: number | null
+  designation_name: string | null
+}
+
 // Laravel User structure from API
 export interface LaravelUser {
   id: number
@@ -13,6 +23,7 @@ export interface LaravelUser {
   avatar?: string
   type?: string
   created_by?: number
+  employee_context?: EmployeeContext | null
   [key: string]: any // Allow additional fields
 }
 
@@ -26,6 +37,8 @@ interface AuthUser {
   type?: string
   role: string[]
   exp: number
+  /** Present when this user is linked to an HR employee record */
+  employee_context?: EmployeeContext | null
 }
 
 interface AuthState {
@@ -73,6 +86,10 @@ export const useAuthStore = create<AuthState>()((set, get) => {
             ? ['admin'] 
             : ['user'],
           exp: Date.now() + 24 * 60 * 60 * 1000, // 24 hours from now
+          employee_context:
+            laravelUser.employee_context !== undefined
+              ? laravelUser.employee_context
+              : undefined,
         }
         get().auth.setUser(authUser)
       },
