@@ -20,6 +20,10 @@ import { Route as CreditNotesRouteImport } from './routes/credit-notes'
 import { Route as ClerkRouteRouteImport } from './routes/clerk/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as CustomsVesselsRouteImport } from './routes/customs.vessels'
+import { Route as CustomsVesselVoyageRouteImport } from './routes/customs.vessel-voyage'
+import { Route as CustomsJobsRouteImport } from './routes/customs.jobs'
+import { Route as CustomsDashboardRouteImport } from './routes/customs.dashboard'
 import { Route as CustomersIdRouteImport } from './routes/customers.$id'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
@@ -110,6 +114,26 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const CustomsVesselsRoute = CustomsVesselsRouteImport.update({
+  id: '/customs/vessels',
+  path: '/customs/vessels',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomsVesselVoyageRoute = CustomsVesselVoyageRouteImport.update({
+  id: '/customs/vessel-voyage',
+  path: '/customs/vessel-voyage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomsJobsRoute = CustomsJobsRouteImport.update({
+  id: '/customs/jobs',
+  path: '/customs/jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomsDashboardRoute = CustomsDashboardRouteImport.update({
+  id: '/customs/dashboard',
+  path: '/customs/dashboard',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const CustomersIdRoute = CustomersIdRouteImport.update({
   id: '/$id',
@@ -328,6 +352,10 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
+  '/customs/dashboard': typeof CustomsDashboardRoute
+  '/customs/jobs': typeof CustomsJobsRoute
+  '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
+  '/customs/vessels': typeof CustomsVesselsRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -372,6 +400,10 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
+  '/customs/dashboard': typeof CustomsDashboardRoute
+  '/customs/jobs': typeof CustomsJobsRoute
+  '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
+  '/customs/vessels': typeof CustomsVesselsRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -422,6 +454,10 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
+  '/customs/dashboard': typeof CustomsDashboardRoute
+  '/customs/jobs': typeof CustomsJobsRoute
+  '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
+  '/customs/vessels': typeof CustomsVesselsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -471,6 +507,10 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/customers/$id'
+    | '/customs/dashboard'
+    | '/customs/jobs'
+    | '/customs/vessel-voyage'
+    | '/customs/vessels'
     | '/errors/$error'
     | '/settings/account'
     | '/settings/appearance'
@@ -515,6 +555,10 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/customers/$id'
+    | '/customs/dashboard'
+    | '/customs/jobs'
+    | '/customs/vessel-voyage'
+    | '/customs/vessels'
     | '/'
     | '/errors/$error'
     | '/settings/account'
@@ -564,6 +608,10 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/customers/$id'
+    | '/customs/dashboard'
+    | '/customs/jobs'
+    | '/customs/vessel-voyage'
+    | '/customs/vessels'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/account'
@@ -610,6 +658,10 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  CustomsDashboardRoute: typeof CustomsDashboardRoute
+  CustomsJobsRoute: typeof CustomsJobsRoute
+  CustomsVesselVoyageRoute: typeof CustomsVesselVoyageRoute
+  CustomsVesselsRoute: typeof CustomsVesselsRoute
   AccountingBankingAccountRoute: typeof AccountingBankingAccountRoute
   AccountingBankingTransferRoute: typeof AccountingBankingTransferRoute
   AccountingExpensesBillsRoute: typeof AccountingExpensesBillsRoute
@@ -698,6 +750,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/customs/vessels': {
+      id: '/customs/vessels'
+      path: '/customs/vessels'
+      fullPath: '/customs/vessels'
+      preLoaderRoute: typeof CustomsVesselsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customs/vessel-voyage': {
+      id: '/customs/vessel-voyage'
+      path: '/customs/vessel-voyage'
+      fullPath: '/customs/vessel-voyage'
+      preLoaderRoute: typeof CustomsVesselVoyageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customs/jobs': {
+      id: '/customs/jobs'
+      path: '/customs/jobs'
+      fullPath: '/customs/jobs'
+      preLoaderRoute: typeof CustomsJobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customs/dashboard': {
+      id: '/customs/dashboard'
+      path: '/customs/dashboard'
+      fullPath: '/customs/dashboard'
+      preLoaderRoute: typeof CustomsDashboardRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/customers/$id': {
       id: '/customers/$id'
@@ -1078,6 +1158,10 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  CustomsDashboardRoute: CustomsDashboardRoute,
+  CustomsJobsRoute: CustomsJobsRoute,
+  CustomsVesselVoyageRoute: CustomsVesselVoyageRoute,
+  CustomsVesselsRoute: CustomsVesselsRoute,
   AccountingBankingAccountRoute: AccountingBankingAccountRoute,
   AccountingBankingTransferRoute: AccountingBankingTransferRoute,
   AccountingExpensesBillsRoute: AccountingExpensesBillsRoute,

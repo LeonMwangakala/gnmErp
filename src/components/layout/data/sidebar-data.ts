@@ -24,36 +24,87 @@ import {
   TrendingDown,
   Clipboard,
   Store,
+  Anchor,
+  BriefcaseBusiness,
+  Ship,
+  Route,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
-export const sidebarData: SidebarData = {
-  user: {
-    name: 'satnaing',
-    email: 'satnaingdev@gmail.com',
-    avatar: '/avatars/shadcn.jpg',
-  },
-  teams: [
+type AuthUserLike = {
+  type?: string
+  role?: string[]
+  employee_context?: {
+    department_name?: string | null
+  } | null
+} | null
+
+function isAdminUser(user: AuthUserLike): boolean {
+  if (!user) return false
+  const roleList = Array.isArray(user.role) ? user.role : []
+  const type = (user.type || '').toLowerCase()
+
+  return (
+    roleList.includes('admin') ||
+    type === 'admin' ||
+    type === 'owner' ||
+    type === 'super admin' ||
+    type === 'company'
+  )
+}
+
+function isCustomsDepartmentUser(user: AuthUserLike): boolean {
+  const dept = (user?.employee_context?.department_name || '').trim().toLowerCase()
+
+  return dept.includes('custom')
+}
+
+export function getSidebarData(user?: AuthUserLike): SidebarData {
+  const customsItems = [
     {
-      name: 'ERP System',
-      logo: Command,
-      plan: 'Enterprise Resource Planning',
+      title: 'Customs Dashboard',
+      url: '/customs/dashboard',
+      icon: Anchor,
     },
     {
-      name: 'Acme Inc',
-      logo: GalleryVerticalEnd,
-      plan: 'Enterprise',
+      title: 'Jobs',
+      url: '/customs/jobs',
+      icon: BriefcaseBusiness,
     },
     {
-      name: 'Acme Corp.',
-      logo: AudioWaveform,
-      plan: 'Startup',
+      title: 'Vessels',
+      url: '/customs/vessels',
+      icon: Ship,
     },
-  ],
-  navGroups: [
     {
-      title: 'General',
-      items: [
+      title: 'Vessel Voyage',
+      url: '/customs/vessel-voyage',
+      icon: Route,
+    },
+  ]
+
+  const admin = isAdminUser(user || null)
+  const customsDepartment = isCustomsDepartmentUser(user || null)
+  const customsOnly = customsDepartment && !admin
+
+  const generalItems = customsOnly
+    ? [
+        customsItems[0],
+        {
+          title: 'Customers',
+          url: '/customers',
+          icon: UserCircle,
+        },
+        {
+          title: 'Vendors',
+          url: '/vendors',
+          icon: Store,
+        },
+        customsItems[1],
+        customsItems[2],
+        customsItems[3],
+      ]
+    : [
         {
           title: 'Dashboard',
           url: '/home',
@@ -73,6 +124,11 @@ export const sidebarData: SidebarData = {
           title: 'Invoices',
           url: '/invoices',
           icon: FileText,
+        },
+        {
+          title: 'Customs',
+          icon: Anchor,
+          items: customsItems,
         },
         {
           title: 'Payment',
@@ -154,7 +210,35 @@ export const sidebarData: SidebarData = {
             },
           ],
         },
-      ],
+      ]
+
+  return {
+  user: {
+    name: 'satnaing',
+    email: 'satnaingdev@gmail.com',
+    avatar: '/avatars/shadcn.jpg',
+  },
+  teams: [
+    {
+      name: 'ERP System',
+      logo: Command,
+      plan: 'Enterprise Resource Planning',
+    },
+    {
+      name: 'Acme Inc',
+      logo: GalleryVerticalEnd,
+      plan: 'Enterprise',
+    },
+    {
+      name: 'Acme Corp.',
+      logo: AudioWaveform,
+      plan: 'Startup',
+    },
+  ],
+  navGroups: [
+    {
+      title: 'General',
+      items: generalItems,
     },
     {
       title: 'Other',
@@ -199,3 +283,7 @@ export const sidebarData: SidebarData = {
     },
   ],
 }
+
+}
+
+export const sidebarData: SidebarData = getSidebarData(null)
