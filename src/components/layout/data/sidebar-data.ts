@@ -26,8 +26,10 @@ import {
   Store,
   Anchor,
   BriefcaseBusiness,
+  Users,
   Ship,
   Route,
+  Workflow,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -62,7 +64,7 @@ function isCustomsDepartmentUser(user: AuthUserLike): boolean {
 export function getSidebarData(user?: AuthUserLike): SidebarData {
   const customsItems = [
     {
-      title: 'Customs Dashboard',
+      title: 'Overview',
       url: '/customs/dashboard',
       icon: Anchor,
     },
@@ -70,6 +72,16 @@ export function getSidebarData(user?: AuthUserLike): SidebarData {
       title: 'Jobs',
       url: '/customs/jobs',
       icon: BriefcaseBusiness,
+    },
+    {
+      title: 'Shipper',
+      url: '/customs/shipper',
+      icon: Users,
+    },
+    {
+      title: 'Work Flow',
+      url: '/customs/work-flow',
+      icon: Workflow,
     },
     {
       title: 'Vessels',
@@ -103,6 +115,8 @@ export function getSidebarData(user?: AuthUserLike): SidebarData {
         customsItems[1],
         customsItems[2],
         customsItems[3],
+        customsItems[4],
+        customsItems[5],
       ]
     : [
         {

@@ -20,8 +20,10 @@ import { Route as CreditNotesRouteImport } from './routes/credit-notes'
 import { Route as ClerkRouteRouteImport } from './routes/clerk/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as CustomsWorkFlowRouteImport } from './routes/customs.work-flow'
 import { Route as CustomsVesselsRouteImport } from './routes/customs.vessels'
 import { Route as CustomsVesselVoyageRouteImport } from './routes/customs.vessel-voyage'
+import { Route as CustomsShipperRouteImport } from './routes/customs.shipper'
 import { Route as CustomsJobsRouteImport } from './routes/customs.jobs'
 import { Route as CustomsDashboardRouteImport } from './routes/customs.dashboard'
 import { Route as CustomersIdRouteImport } from './routes/customers.$id'
@@ -44,6 +46,7 @@ import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
+import { Route as CustomsJobsCreateRouteImport } from './routes/customs.jobs.create'
 import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/clerk/_authenticated/user-management'
 import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-up'
 import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
@@ -115,6 +118,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const CustomsWorkFlowRoute = CustomsWorkFlowRouteImport.update({
+  id: '/customs/work-flow',
+  path: '/customs/work-flow',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CustomsVesselsRoute = CustomsVesselsRouteImport.update({
   id: '/customs/vessels',
   path: '/customs/vessels',
@@ -123,6 +131,11 @@ const CustomsVesselsRoute = CustomsVesselsRouteImport.update({
 const CustomsVesselVoyageRoute = CustomsVesselVoyageRouteImport.update({
   id: '/customs/vessel-voyage',
   path: '/customs/vessel-voyage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomsShipperRoute = CustomsShipperRouteImport.update({
+  id: '/customs/shipper',
+  path: '/customs/shipper',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CustomsJobsRoute = CustomsJobsRouteImport.update({
@@ -235,6 +248,11 @@ const AuthenticatedAppsIndexRoute = AuthenticatedAppsIndexRouteImport.update({
   id: '/apps/',
   path: '/apps/',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const CustomsJobsCreateRoute = CustomsJobsCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => CustomsJobsRoute,
 } as any)
 const ClerkAuthenticatedUserManagementRoute =
   ClerkAuthenticatedUserManagementRouteImport.update({
@@ -353,9 +371,11 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
   '/customs/dashboard': typeof CustomsDashboardRoute
-  '/customs/jobs': typeof CustomsJobsRoute
+  '/customs/jobs': typeof CustomsJobsRouteWithChildren
+  '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
   '/customs/vessels': typeof CustomsVesselsRoute
+  '/customs/work-flow': typeof CustomsWorkFlowRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -372,6 +392,7 @@ export interface FileRoutesByFullPath {
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
+  '/customs/jobs/create': typeof CustomsJobsCreateRoute
   '/apps/': typeof AuthenticatedAppsIndexRoute
   '/chats/': typeof AuthenticatedChatsIndexRoute
   '/help-center/': typeof AuthenticatedHelpCenterIndexRoute
@@ -401,9 +422,11 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
   '/customs/dashboard': typeof CustomsDashboardRoute
-  '/customs/jobs': typeof CustomsJobsRoute
+  '/customs/jobs': typeof CustomsJobsRouteWithChildren
+  '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
   '/customs/vessels': typeof CustomsVesselsRoute
+  '/customs/work-flow': typeof CustomsWorkFlowRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -421,6 +444,7 @@ export interface FileRoutesByTo {
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
+  '/customs/jobs/create': typeof CustomsJobsCreateRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
@@ -455,9 +479,11 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
   '/customs/dashboard': typeof CustomsDashboardRoute
-  '/customs/jobs': typeof CustomsJobsRoute
+  '/customs/jobs': typeof CustomsJobsRouteWithChildren
+  '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
   '/customs/vessels': typeof CustomsVesselsRoute
+  '/customs/work-flow': typeof CustomsWorkFlowRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -475,6 +501,7 @@ export interface FileRoutesById {
   '/clerk/(auth)/sign-in': typeof ClerkauthSignInRoute
   '/clerk/(auth)/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/_authenticated/user-management': typeof ClerkAuthenticatedUserManagementRoute
+  '/customs/jobs/create': typeof CustomsJobsCreateRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
@@ -509,8 +536,10 @@ export interface FileRouteTypes {
     | '/customers/$id'
     | '/customs/dashboard'
     | '/customs/jobs'
+    | '/customs/shipper'
     | '/customs/vessel-voyage'
     | '/customs/vessels'
+    | '/customs/work-flow'
     | '/errors/$error'
     | '/settings/account'
     | '/settings/appearance'
@@ -527,6 +556,7 @@ export interface FileRouteTypes {
     | '/clerk/sign-in'
     | '/clerk/sign-up'
     | '/clerk/user-management'
+    | '/customs/jobs/create'
     | '/apps/'
     | '/chats/'
     | '/help-center/'
@@ -557,8 +587,10 @@ export interface FileRouteTypes {
     | '/customers/$id'
     | '/customs/dashboard'
     | '/customs/jobs'
+    | '/customs/shipper'
     | '/customs/vessel-voyage'
     | '/customs/vessels'
+    | '/customs/work-flow'
     | '/'
     | '/errors/$error'
     | '/settings/account'
@@ -576,6 +608,7 @@ export interface FileRouteTypes {
     | '/clerk/sign-in'
     | '/clerk/sign-up'
     | '/clerk/user-management'
+    | '/customs/jobs/create'
     | '/apps'
     | '/chats'
     | '/help-center'
@@ -610,8 +643,10 @@ export interface FileRouteTypes {
     | '/customers/$id'
     | '/customs/dashboard'
     | '/customs/jobs'
+    | '/customs/shipper'
     | '/customs/vessel-voyage'
     | '/customs/vessels'
+    | '/customs/work-flow'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/account'
@@ -629,6 +664,7 @@ export interface FileRouteTypes {
     | '/clerk/(auth)/sign-in'
     | '/clerk/(auth)/sign-up'
     | '/clerk/_authenticated/user-management'
+    | '/customs/jobs/create'
     | '/_authenticated/apps/'
     | '/_authenticated/chats/'
     | '/_authenticated/help-center/'
@@ -659,9 +695,11 @@ export interface RootRouteChildren {
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
   CustomsDashboardRoute: typeof CustomsDashboardRoute
-  CustomsJobsRoute: typeof CustomsJobsRoute
+  CustomsJobsRoute: typeof CustomsJobsRouteWithChildren
+  CustomsShipperRoute: typeof CustomsShipperRoute
   CustomsVesselVoyageRoute: typeof CustomsVesselVoyageRoute
   CustomsVesselsRoute: typeof CustomsVesselsRoute
+  CustomsWorkFlowRoute: typeof CustomsWorkFlowRoute
   AccountingBankingAccountRoute: typeof AccountingBankingAccountRoute
   AccountingBankingTransferRoute: typeof AccountingBankingTransferRoute
   AccountingExpensesBillsRoute: typeof AccountingExpensesBillsRoute
@@ -751,6 +789,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/customs/work-flow': {
+      id: '/customs/work-flow'
+      path: '/customs/work-flow'
+      fullPath: '/customs/work-flow'
+      preLoaderRoute: typeof CustomsWorkFlowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/customs/vessels': {
       id: '/customs/vessels'
       path: '/customs/vessels'
@@ -763,6 +808,13 @@ declare module '@tanstack/react-router' {
       path: '/customs/vessel-voyage'
       fullPath: '/customs/vessel-voyage'
       preLoaderRoute: typeof CustomsVesselVoyageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customs/shipper': {
+      id: '/customs/shipper'
+      path: '/customs/shipper'
+      fullPath: '/customs/shipper'
+      preLoaderRoute: typeof CustomsShipperRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/customs/jobs': {
@@ -918,6 +970,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/apps/'
       preLoaderRoute: typeof AuthenticatedAppsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/customs/jobs/create': {
+      id: '/customs/jobs/create'
+      path: '/create'
+      fullPath: '/customs/jobs/create'
+      preLoaderRoute: typeof CustomsJobsCreateRouteImport
+      parentRoute: typeof CustomsJobsRoute
     }
     '/clerk/_authenticated/user-management': {
       id: '/clerk/_authenticated/user-management'
@@ -1137,6 +1196,18 @@ const CustomersRouteWithChildren = CustomersRoute._addFileChildren(
   CustomersRouteChildren,
 )
 
+interface CustomsJobsRouteChildren {
+  CustomsJobsCreateRoute: typeof CustomsJobsCreateRoute
+}
+
+const CustomsJobsRouteChildren: CustomsJobsRouteChildren = {
+  CustomsJobsCreateRoute: CustomsJobsCreateRoute,
+}
+
+const CustomsJobsRouteWithChildren = CustomsJobsRoute._addFileChildren(
+  CustomsJobsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ClerkRouteRoute: ClerkRouteRouteWithChildren,
@@ -1159,9 +1230,11 @@ const rootRouteChildren: RootRouteChildren = {
   errors500Route: errors500Route,
   errors503Route: errors503Route,
   CustomsDashboardRoute: CustomsDashboardRoute,
-  CustomsJobsRoute: CustomsJobsRoute,
+  CustomsJobsRoute: CustomsJobsRouteWithChildren,
+  CustomsShipperRoute: CustomsShipperRoute,
   CustomsVesselVoyageRoute: CustomsVesselVoyageRoute,
   CustomsVesselsRoute: CustomsVesselsRoute,
+  CustomsWorkFlowRoute: CustomsWorkFlowRoute,
   AccountingBankingAccountRoute: AccountingBankingAccountRoute,
   AccountingBankingTransferRoute: AccountingBankingTransferRoute,
   AccountingExpensesBillsRoute: AccountingExpensesBillsRoute,

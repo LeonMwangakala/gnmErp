@@ -971,3 +971,22 @@ export const vendorApi = {
   },
 }
 
+export type CustomsJobFormOptions = {
+  shipment_types: string[]
+  cargo_types: string[]
+  type_of_cargo: string[]
+}
+
+export const customsJobApi = {
+  getFormOptions: async (): Promise<CustomsJobFormOptions> => {
+    const response = await api.get('/customs/jobs/form-options')
+    return (
+      response.data?.data || {
+        shipment_types: ['SEA', 'AIR', 'ROAD', 'POST_ENTRY'],
+        cargo_types: ['FCL', 'LCL'],
+        type_of_cargo: ['NORMAL', 'DANGEROUS', 'FRAGILE', 'ABNORMAL', 'PERISHABLE'],
+      }
+    )
+  },
+}
+
