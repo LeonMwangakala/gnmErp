@@ -697,7 +697,7 @@ export function Reports() {
           dateTo,
           containerNo: '',
         }
-      }
+        }
       case 'petty-cash':
         return {
           ...base,
@@ -804,15 +804,15 @@ export function Reports() {
                 selectedReport?.key !== 'invoice' &&
                 selectedReport?.key !== 'posted-containers' &&
                 'dateRange' in filters && (
-                <div className='space-y-2'>
-                  <Label htmlFor='dateRange'>Date range</Label>
-                  <Input
-                    id='dateRange'
-                    placeholder='YYYY-MM-DD to YYYY-MM-DD (optional)'
+              <div className='space-y-2'>
+                <Label htmlFor='dateRange'>Date range</Label>
+                <Input
+                  id='dateRange'
+                  placeholder='YYYY-MM-DD to YYYY-MM-DD (optional)'
                     value={(filters as CommonFilters).dateRange}
-                    onChange={(e) => handleFilterChange('dateRange', e.target.value)}
-                  />
-                </div>
+                  onChange={(e) => handleFilterChange('dateRange', e.target.value)}
+                />
+              </div>
               )}
 
               {(selectedReport?.key === 'invoice-payments' ||
@@ -947,83 +947,83 @@ export function Reports() {
                     </Select>
                   </div>
                   {SHOW_INVOICE_REPORT_CUSTOMER_FILTER && (
-                    <div className='space-y-2'>
-                      <Label htmlFor='invoiceCustomer'>Customer (optional)</Label>
-                      <AsyncSelect<CustomerOption>
-                        value={selectedInvoiceCustomer}
-                        onChange={(selected) => {
-                          setSelectedInvoiceCustomer(selected)
-                          handleFilterChange('customerId', selected ? String(selected.id) : '')
-                        }}
-                        loadOptions={loadCustomerOptionsDebounced}
-                        placeholder='Type customer name or email...'
-                        isClearable
-                        isSearchable
-                        noOptionsMessage={({ inputValue }) =>
-                          inputValue.length < 2
-                            ? 'Type at least 2 characters to search'
-                            : 'No customers found'
-                        }
-                        loadingMessage={() => 'Searching customers...'}
-                        className='react-select-container'
-                        classNamePrefix='react-select'
-                        styles={{
-                          control: (base, state) => ({
-                            ...base,
-                            minHeight: '36px',
-                            height: '36px',
-                            borderColor: state.isFocused
-                              ? 'hsl(var(--ring))'
-                              : 'hsl(var(--input))',
-                            backgroundColor: 'transparent',
-                            borderRadius: 'calc(var(--radius) - 2px)',
-                            borderWidth: '1px',
-                            borderStyle: 'solid',
-                            boxShadow: state.isFocused
-                              ? '0 0 0 3px hsl(var(--ring) / 0.5)'
-                              : 'none',
-                            '&:hover': {
-                              borderColor: 'hsl(var(--ring))',
-                            },
-                          }),
-                          input: (base) => ({
-                            ...base,
-                            margin: 0,
-                            padding: 0,
-                          }),
-                          valueContainer: (base) => ({
-                            ...base,
-                            padding: '0 8px',
-                            height: '36px',
-                          }),
-                          singleValue: (base) => ({
-                            ...base,
-                            color: 'hsl(var(--foreground))',
-                          }),
-                          placeholder: (base) => ({
-                            ...base,
-                            color: 'hsl(var(--muted-foreground))',
-                          }),
-                          menu: (base) => ({
-                            ...base,
-                            backgroundColor: 'hsl(var(--popover))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: 'calc(var(--radius) - 2px)',
-                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                          }),
-                          option: (base, state) => ({
-                            ...base,
-                            backgroundColor: state.isFocused
-                              ? 'hsl(var(--accent))'
-                              : 'transparent',
-                            color: 'hsl(var(--foreground))',
-                            '&:active': {
-                              backgroundColor: 'hsl(var(--accent))',
-                            },
-                          }),
-                        }}
-                      />
-                    </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='invoiceCustomer'>Customer (optional)</Label>
+                    <AsyncSelect<CustomerOption>
+                      value={selectedInvoiceCustomer}
+                      onChange={(selected) => {
+                        setSelectedInvoiceCustomer(selected)
+                        handleFilterChange('customerId', selected ? String(selected.id) : '')
+                      }}
+                      loadOptions={loadCustomerOptionsDebounced}
+                      placeholder='Type customer name or email...'
+                      isClearable
+                      isSearchable
+                      noOptionsMessage={({ inputValue }) =>
+                        inputValue.length < 2
+                          ? 'Type at least 2 characters to search'
+                          : 'No customers found'
+                      }
+                      loadingMessage={() => 'Searching customers...'}
+                      className='react-select-container'
+                      classNamePrefix='react-select'
+                      styles={{
+                        control: (base, state) => ({
+                          ...base,
+                          minHeight: '36px',
+                          height: '36px',
+                          borderColor: state.isFocused
+                            ? 'hsl(var(--ring))'
+                            : 'hsl(var(--input))',
+                          backgroundColor: 'transparent',
+                          borderRadius: 'calc(var(--radius) - 2px)',
+                          borderWidth: '1px',
+                          borderStyle: 'solid',
+                          boxShadow: state.isFocused
+                            ? '0 0 0 3px hsl(var(--ring) / 0.5)'
+                            : 'none',
+                          '&:hover': {
+                            borderColor: 'hsl(var(--ring))',
+                          },
+                        }),
+                        input: (base) => ({
+                          ...base,
+                          margin: 0,
+                          padding: 0,
+                        }),
+                        valueContainer: (base) => ({
+                          ...base,
+                          padding: '0 8px',
+                          height: '36px',
+                        }),
+                        singleValue: (base) => ({
+                          ...base,
+                          color: 'hsl(var(--foreground))',
+                        }),
+                        placeholder: (base) => ({
+                          ...base,
+                          color: 'hsl(var(--muted-foreground))',
+                        }),
+                        menu: (base) => ({
+                          ...base,
+                          backgroundColor: 'hsl(var(--popover))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: 'calc(var(--radius) - 2px)',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                        }),
+                        option: (base, state) => ({
+                          ...base,
+                          backgroundColor: state.isFocused
+                            ? 'hsl(var(--accent))'
+                            : 'transparent',
+                          color: 'hsl(var(--foreground))',
+                          '&:active': {
+                            backgroundColor: 'hsl(var(--accent))',
+                          },
+                        }),
+                      }}
+                    />
+                  </div>
                   )}
                 </>
               )}
@@ -1063,92 +1063,92 @@ export function Reports() {
                   </div>
                   {SHOW_INVOICE_PAYMENT_CUSTOMER_AND_INVOICE_FILTERS && (
                     <>
-                      <div className='space-y-2'>
-                        <Label htmlFor='paymentCustomer'>Customer (optional)</Label>
-                        <AsyncSelect<CustomerOption>
-                          value={selectedPaymentCustomer}
-                          onChange={(selected) => {
-                            setSelectedPaymentCustomer(selected)
-                            handleFilterChange('customerId', selected ? String(selected.id) : '')
-                          }}
-                          loadOptions={loadCustomerOptionsDebounced}
-                          placeholder='Type customer name or email...'
-                          isClearable
-                          isSearchable
-                          noOptionsMessage={({ inputValue }) =>
-                            inputValue.length < 2
-                              ? 'Type at least 2 characters to search'
-                              : 'No customers found'
-                          }
-                          loadingMessage={() => 'Searching customers...'}
-                          className='react-select-container'
-                          classNamePrefix='react-select'
-                          styles={{
-                            control: (base, state) => ({
-                              ...base,
-                              minHeight: '36px',
-                              height: '36px',
-                              borderColor: state.isFocused
-                                ? 'hsl(var(--ring))'
-                                : 'hsl(var(--input))',
-                              backgroundColor: 'transparent',
-                              borderRadius: 'calc(var(--radius) - 2px)',
-                              borderWidth: '1px',
-                              borderStyle: 'solid',
-                              boxShadow: state.isFocused
-                                ? '0 0 0 3px hsl(var(--ring) / 0.5)'
-                                : 'none',
-                              '&:hover': {
-                                borderColor: 'hsl(var(--ring))',
-                              },
-                            }),
-                            input: (base) => ({
-                              ...base,
-                              margin: 0,
-                              padding: 0,
-                            }),
-                            valueContainer: (base) => ({
-                              ...base,
-                              padding: '0 8px',
-                              height: '36px',
-                            }),
-                            singleValue: (base) => ({
-                              ...base,
-                              color: 'hsl(var(--foreground))',
-                            }),
-                            placeholder: (base) => ({
-                              ...base,
-                              color: 'hsl(var(--muted-foreground))',
-                            }),
-                            menu: (base) => ({
-                              ...base,
-                              backgroundColor: 'hsl(var(--popover))',
-                              border: '1px solid hsl(var(--border))',
-                              borderRadius: 'calc(var(--radius) - 2px)',
-                              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                            }),
-                            option: (base, state) => ({
-                              ...base,
-                              backgroundColor: state.isFocused
-                                ? 'hsl(var(--accent))'
-                                : 'transparent',
-                              color: 'hsl(var(--foreground))',
-                              '&:active': {
-                                backgroundColor: 'hsl(var(--accent))',
-                              },
-                            }),
-                          }}
-                        />
-                      </div>
-                      <div className='space-y-2'>
-                        <Label htmlFor='paymentInvoice'>Invoice (optional ID)</Label>
-                        <Input
-                          id='paymentInvoice'
-                          placeholder='Invoice ID'
-                          value={(filters as InvoicePaymentFilters).invoiceId}
-                          onChange={(e) => handleFilterChange('invoiceId', e.target.value)}
-                        />
-                      </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='paymentCustomer'>Customer (optional)</Label>
+                    <AsyncSelect<CustomerOption>
+                      value={selectedPaymentCustomer}
+                      onChange={(selected) => {
+                        setSelectedPaymentCustomer(selected)
+                        handleFilterChange('customerId', selected ? String(selected.id) : '')
+                      }}
+                      loadOptions={loadCustomerOptionsDebounced}
+                      placeholder='Type customer name or email...'
+                      isClearable
+                      isSearchable
+                      noOptionsMessage={({ inputValue }) =>
+                        inputValue.length < 2
+                          ? 'Type at least 2 characters to search'
+                          : 'No customers found'
+                      }
+                      loadingMessage={() => 'Searching customers...'}
+                      className='react-select-container'
+                      classNamePrefix='react-select'
+                      styles={{
+                        control: (base, state) => ({
+                          ...base,
+                          minHeight: '36px',
+                          height: '36px',
+                          borderColor: state.isFocused
+                            ? 'hsl(var(--ring))'
+                            : 'hsl(var(--input))',
+                          backgroundColor: 'transparent',
+                          borderRadius: 'calc(var(--radius) - 2px)',
+                          borderWidth: '1px',
+                          borderStyle: 'solid',
+                          boxShadow: state.isFocused
+                            ? '0 0 0 3px hsl(var(--ring) / 0.5)'
+                            : 'none',
+                          '&:hover': {
+                            borderColor: 'hsl(var(--ring))',
+                          },
+                        }),
+                        input: (base) => ({
+                          ...base,
+                          margin: 0,
+                          padding: 0,
+                        }),
+                        valueContainer: (base) => ({
+                          ...base,
+                          padding: '0 8px',
+                          height: '36px',
+                        }),
+                        singleValue: (base) => ({
+                          ...base,
+                          color: 'hsl(var(--foreground))',
+                        }),
+                        placeholder: (base) => ({
+                          ...base,
+                          color: 'hsl(var(--muted-foreground))',
+                        }),
+                        menu: (base) => ({
+                          ...base,
+                          backgroundColor: 'hsl(var(--popover))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: 'calc(var(--radius) - 2px)',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                        }),
+                        option: (base, state) => ({
+                          ...base,
+                          backgroundColor: state.isFocused
+                            ? 'hsl(var(--accent))'
+                            : 'transparent',
+                          color: 'hsl(var(--foreground))',
+                          '&:active': {
+                            backgroundColor: 'hsl(var(--accent))',
+                          },
+                        }),
+                      }}
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='paymentInvoice'>Invoice (optional ID)</Label>
+                    <Input
+                      id='paymentInvoice'
+                      placeholder='Invoice ID'
+                      value={(filters as InvoicePaymentFilters).invoiceId}
+                      onChange={(e) => handleFilterChange('invoiceId', e.target.value)}
+                    />
+                  </div>
                     </>
                   )}
                 </>
@@ -1222,25 +1222,25 @@ export function Reports() {
           )}
 
           {selectedReport?.key !== 'container-payments' ? (
-            <DialogFooter className='mt-4 flex-row justify-between gap-2'>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                onClick={() => {
-                  if (selectedReport) {
-                    setFilters(getInitialFilters(selectedReport.key))
-                    setSelectedInvoiceCustomer(null)
-                    setSelectedPaymentCustomer(null)
+          <DialogFooter className='mt-4 flex-row justify-between gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={() => {
+                if (selectedReport) {
+                  setFilters(getInitialFilters(selectedReport.key))
+                  setSelectedInvoiceCustomer(null)
+                  setSelectedPaymentCustomer(null)
                     setInvoiceReportData(null)
                     setInvoiceReportOpen(false)
                     setPostedContainersReportData(null)
                     setPostedContainersReportOpen(false)
-                  }
-                }}
-              >
-                Reset filters
-              </Button>
+                }
+              }}
+            >
+              Reset filters
+            </Button>
               {selectedReport?.key === 'invoice-payments' ? (
                 <Button
                   type='button'
@@ -1287,29 +1287,29 @@ export function Reports() {
                   {postedContainersReportSubmitting ? 'Loading…' : 'Submit'}
                 </Button>
               ) : (
-                <div className='flex items-center gap-2'>
-                  <Button
-                    type='button'
-                    variant='outline'
-                    size='sm'
-                    disabled={isDownloading}
-                    onClick={() => void handleDownload('pdf')}
-                  >
-                    <Download className='mr-2 h-4 w-4' />
-                    PDF
-                  </Button>
-                  <Button
-                    type='button'
-                    size='sm'
-                    disabled={isDownloading}
-                    onClick={() => void handleDownload('excel')}
-                  >
-                    <Download className='mr-2 h-4 w-4' />
-                    Excel
-                  </Button>
-                </div>
+            <div className='flex items-center gap-2'>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                disabled={isDownloading}
+                onClick={() => void handleDownload('pdf')}
+              >
+                <Download className='mr-2 h-4 w-4' />
+                PDF
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                disabled={isDownloading}
+                onClick={() => void handleDownload('excel')}
+              >
+                <Download className='mr-2 h-4 w-4' />
+                Excel
+              </Button>
+            </div>
               )}
-            </DialogFooter>
+          </DialogFooter>
           ) : null}
         </DialogContent>
       </Dialog>

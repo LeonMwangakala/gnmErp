@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { ChevronDown, ChevronRight, Download, Eye, Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import * as XLSX from 'xlsx'
 import { CustomsPage } from './customs-page'
 import {
   createInitialJobStageAssignments,
@@ -44,6 +45,8 @@ import {
 } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { customsJobApi } from '@/lib/api'
+import { getStoredVessels, type Vessel } from './vessels-storage'
+import { getStoredVesselVoyages, type VesselVoyage } from './vessel-voyage-storage'
 
 type JobForm = {
   shipmentType: string
@@ -56,9 +59,10 @@ type JobForm = {
   cargoType: string
   typeOfCargo: string
   referenceNo: string
-  idfNo: string
+  ucrNo: string
   tansadNo: string
   idfTansadDate: string
+  fileManager: string
   createdBy: string
   supplierName: string
   supplierAddress: string
@@ -68,7 +72,7 @@ type JobForm = {
   notifyAddress: string
   status: string
   shippingLine: string
-  eta: string
+  carryingDate: string
   arrivalDate: string
   berthingDate: string
   loadingVessel: string
@@ -79,6 +83,7 @@ type JobForm = {
   vesselType: string
   vesselBerthedAt: string
   icdTransfer: string
+  icdTransferLocation: string
   originCountry: string
   portOfLoading: string
   portOfDischarge: string
@@ -119,6 +124,17 @@ type JobForm = {
   internalNotes: string
 }
 
+type CommodityRow = {
+  itemNo: string
+  commodityCode: string
+  desc: string
+  modeSpecification: string
+  component: string
+  quantity: string
+  unitPrice: string
+  itemInvPrice: string
+}
+
 const initialForm: JobForm = {
   shipmentType: 'SEA',
   mblNo: '',
@@ -130,9 +146,10 @@ const initialForm: JobForm = {
   cargoType: 'FCL',
   typeOfCargo: 'NORMAL',
   referenceNo: '',
-  idfNo: '',
+  ucrNo: '',
   tansadNo: '',
   idfTansadDate: '',
+  fileManager: '',
   createdBy: '',
   supplierName: '',
   supplierAddress: '',
@@ -142,7 +159,7 @@ const initialForm: JobForm = {
   notifyAddress: '',
   status: 'OTHER',
   shippingLine: '',
-  eta: '',
+  carryingDate: '',
   arrivalDate: '',
   berthingDate: '',
   loadingVessel: '',
@@ -153,6 +170,7 @@ const initialForm: JobForm = {
   vesselType: '',
   vesselBerthedAt: '',
   icdTransfer: '',
+  icdTransferLocation: '',
   originCountry: '',
   portOfLoading: '',
   portOfDischarge: 'DAR ES SALAAM',
@@ -180,6 +198,7 @@ const initialForm: JobForm = {
 }
 
 export function CustomsCreateJob() {
+  const [currentJobId, setCurrentJobId] = useState<number | null>(null)
   const [form, setForm] = useState<JobForm>(initialForm)
   const [shipmentTypeOptions, setShipmentTypeOptions] = useState<string[]>([
     'SEA',
@@ -207,8 +226,28 @@ export function CustomsCreateJob() {
       fileName: string
       fileSize: string
       date: string
+      file: File
     }>
   >([])
+  const [uploadedDocuments, setUploadedDocuments] = useState<
+    Array<{
+      id: number
+      name: string
+      fileName: string
+      fileSize: string
+      date: string
+      file?: File
+      filePath?: string
+      fileUrl?: string
+      mimeType?: string
+    }>
+  >([])
+  const [documentsLoading, setDocumentsLoading] = useState(false)
+  const [isDocumentPreviewOpen, setIsDocumentPreviewOpen] = useState(false)
+  const [documentPreviewUrl, setDocumentPreviewUrl] = useState('')
+  const [documentPreviewName, setDocumentPreviewName] = useState('')
+  const [documentPreviewMimeType, setDocumentPreviewMimeType] = useState('')
+  const [documentPreviewObjectUrl, setDocumentPreviewObjectUrl] = useState<string | null>(null)
   const [authorizationLetters, setAuthorizationLetters] = useState<string[]>([])
   const [selectedAuthorizationLetter, setSelectedAuthorizationLetter] = useState<File | null>(null)
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false)
@@ -224,8 +263,51 @@ export function CustomsCreateJob() {
     }>
   >([])
   const [openShipmentSections, setOpenShipmentSections] = useState({ container: false, vehicle: false, looseCargo: false })
+  const [commoditySearch, setCommoditySearch] = useState('')
+  const [commodityRows, setCommodityRows] = useState<CommodityRow[]>([])
+  const [uploadedCommodityFiles, setUploadedCommodityFiles] = useState<string[]>([])
+  const csvInputRef = useRef<HTMLInputElement | null>(null)
+  const excelInputRef = useRef<HTMLInputElement | null>(null)
+
+  const [vessels, setVessels] = useState<Vessel[]>([])
+  const [vesselVoyages, setVesselVoyages] = useState<VesselVoyage[]>([])
 
   const updateField = <K extends keyof JobForm>(key: K, value: JobForm[K]) => setForm((p) => ({ ...p, [key]: value }))
+
+  useEffect(() => {
+    setVessels(getStoredVessels())
+    setVesselVoyages(getStoredVesselVoyages())
+  }, [])
+
+  useEffect(() => {
+    if (!currentJobId) return
+    fetchJobDocuments(currentJobId)
+  }, [currentJobId])
+
+  const getFirstActiveVoyageForVesselId = (vesselId: string) => {
+    const id = Number(vesselId)
+    if (!Number.isFinite(id)) return ''
+    return (
+      vesselVoyages.find((vv) => vv.vesselId === id && vv.status === 'ACTIVE')?.voyage ||
+      ''
+    )
+  }
+
+  const handleLoadingVesselChange = (vesselId: string) => {
+    setForm((p) => ({
+      ...p,
+      loadingVessel: vesselId,
+      loadingVoyage: getFirstActiveVoyageForVesselId(vesselId),
+    }))
+  }
+
+  const handleDischargingVesselChange = (vesselId: string) => {
+    setForm((p) => ({
+      ...p,
+      dischargingVessel: vesselId,
+      dischargingVoyage: getFirstActiveVoyageForVesselId(vesselId),
+    }))
+  }
   const toggleShipmentSection = (section: 'container' | 'vehicle' | 'looseCargo') =>
     setOpenShipmentSections((p) => ({ ...p, [section]: !p[section] }))
 
@@ -337,6 +419,7 @@ export function CustomsCreateJob() {
         fileName: selectedFile.name,
         fileSize: `${fileSizeKb} KB`,
         date: now.toLocaleDateString(),
+        file: selectedFile,
       },
     ])
 
@@ -351,16 +434,465 @@ export function CustomsCreateJob() {
       return
     }
 
-    toast.success(`${pendingUploads.length} document(s) queued for upload`)
+    setUploadedDocuments((prev) => [...prev, ...pendingUploads])
+    toast.success(`${pendingUploads.length} document(s) uploaded`)
     setIsUploadModalOpen(false)
     resetUploadModalForm()
   }
 
-  const handleSave = () => {
+  const safeOpenUrl = (url: string) => {
+    if (!url) return
+    const absoluteUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`
+    window.open(absoluteUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const downloadBlob = (blob: Blob, fileName: string) => {
+    const objectUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = objectUrl
+    anchor.download = fileName || 'document'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(objectUrl)
+  }
+
+  const closeDocumentPreview = () => {
+    setIsDocumentPreviewOpen(false)
+    setDocumentPreviewUrl('')
+    setDocumentPreviewName('')
+    setDocumentPreviewMimeType('')
+    if (documentPreviewObjectUrl) {
+      URL.revokeObjectURL(documentPreviewObjectUrl)
+      setDocumentPreviewObjectUrl(null)
+    }
+  }
+
+  const detectPreviewKind = (mimeType: string, fileName: string): 'pdf' | 'image' | 'other' => {
+    const lowerMime = mimeType.toLowerCase()
+    const lowerName = fileName.toLowerCase()
+    if (lowerMime.includes('pdf') || lowerName.endsWith('.pdf')) return 'pdf'
+    if (lowerMime.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(lowerName)) return 'image'
+    return 'other'
+  }
+
+  const handlePreviewDocument = (doc: {
+    fileName: string
+    file?: File
+    fileUrl?: string
+    mimeType?: string
+  }) => {
+    const resolvedMimeType = doc.mimeType || doc.file?.type || ''
+    const resolvedFileName = doc.fileName || doc.file?.name || 'document'
+
+    if (doc.fileUrl) {
+      const absoluteUrl = doc.fileUrl.startsWith('http')
+        ? doc.fileUrl
+        : `${window.location.origin}${doc.fileUrl}`
+      setDocumentPreviewUrl(absoluteUrl)
+      setDocumentPreviewName(resolvedFileName)
+      setDocumentPreviewMimeType(resolvedMimeType)
+      setIsDocumentPreviewOpen(true)
+      return
+    }
+
+    if (doc.file) {
+      const objectUrl = URL.createObjectURL(doc.file)
+      setDocumentPreviewUrl(objectUrl)
+      setDocumentPreviewName(resolvedFileName)
+      setDocumentPreviewMimeType(resolvedMimeType)
+      setDocumentPreviewObjectUrl(objectUrl)
+      setIsDocumentPreviewOpen(true)
+      return
+    }
+    toast.error('No document source found')
+  }
+
+  const handleDownloadDocument = async (doc: {
+    fileName: string
+    file?: File
+    fileUrl?: string
+  }) => {
+    if (doc.file) {
+      downloadBlob(doc.file, doc.fileName)
+      return
+    }
+    if (doc.fileUrl) {
+      try {
+        const response = await fetch(doc.fileUrl)
+        if (!response.ok) throw new Error('download_failed')
+        const blob = await response.blob()
+        downloadBlob(blob, doc.fileName)
+      } catch {
+        safeOpenUrl(doc.fileUrl)
+      }
+      return
+    }
+    toast.error('No document source found')
+  }
+
+  const fetchJobDocuments = async (jobId: number) => {
+    setDocumentsLoading(true)
+    try {
+      const response = await customsJobApi.getJobDocuments(jobId, { per_page: 200 })
+      const rows = Array.isArray(response?.data) ? response.data : []
+      setUploadedDocuments(
+        rows.map((row: any) => ({
+          id: Number(row.id) || Date.now(),
+          name: row.name || '-',
+          fileName: row.file_name || '-',
+          fileSize: row.file_size_bytes ? `${Math.max(1, Math.round(Number(row.file_size_bytes) / 1024))} KB` : '-',
+          date: row.created_at ? new Date(row.created_at).toLocaleDateString() : '-',
+          filePath: row.file_path || undefined,
+          fileUrl: row.file_url || undefined,
+          mimeType: row.mime_type || undefined,
+        }))
+      )
+    } catch {
+      toast.error('Failed to load uploaded documents')
+    } finally {
+      setDocumentsLoading(false)
+    }
+  }
+
+  const handleDeleteDocument = async (row: { id: number; filePath?: string }) => {
+    if (currentJobId && row.filePath) {
+      try {
+        await customsJobApi.deleteJobDocument(currentJobId, row.id)
+        setUploadedDocuments((prev) => prev.filter((item) => item.id !== row.id))
+        toast.success('Document deleted')
+      } catch {
+        toast.error('Failed to delete document')
+      }
+      return
+    }
+
+    setUploadedDocuments((prev) => prev.filter((item) => item.id !== row.id))
+  }
+
+  const normalizeCommodityField = (value: unknown): string => {
+    if (value === null || value === undefined) return ''
+    return String(value).trim()
+  }
+
+  const mapCommodityRecord = (record: Record<string, unknown>, index: number): CommodityRow => {
+    const get = (keys: string[]) => {
+      for (const key of keys) {
+        if (record[key] !== undefined) return normalizeCommodityField(record[key])
+      }
+      return ''
+    }
+
+    return {
+      itemNo: get(['Item No.', 'Item No', 'item_no', 'itemNo']) || String(index + 1),
+      commodityCode: get(['CommodityCode', 'Commodity Code', 'commodity_code', 'commodityCode']),
+      desc: get(['Desc.', 'Desc', 'Description', 'desc']),
+      modeSpecification: get(['Mode/Specification', 'Mode Specification', 'mode_specification', 'modeSpecification']),
+      component: get(['Component', 'component']),
+      quantity: get(['Quantity', 'quantity']),
+      unitPrice: get(['Unit Price', 'unit_price', 'unitPrice']),
+      itemInvPrice: get(['Item Inv.Price.', 'Item Inv.Price', 'item_inv_price', 'itemInvPrice']),
+    }
+  }
+
+  const applyCommodityRows = (rows: CommodityRow[], sourceName: string) => {
+    if (rows.length === 0) {
+      toast.error('No commodity rows found in file')
+      return
+    }
+    setCommodityRows(rows)
+    setUploadedCommodityFiles((prev) => [sourceName, ...prev.filter((n) => n !== sourceName)])
+    toast.success(`Loaded ${rows.length} commodity row(s) from ${sourceName}`)
+  }
+
+  const parseCsvFile = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const text = String(event.target?.result || '')
+      const workbook = XLSX.read(text, { type: 'string' })
+      const firstSheet = workbook.SheetNames[0]
+      if (!firstSheet) {
+        toast.error('CSV file has no worksheet')
+        return
+      }
+      const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheet], {
+        defval: '',
+      })
+      const mapped = records.map((r, i) => mapCommodityRecord(r, i))
+      applyCommodityRows(mapped, file.name)
+    }
+    reader.onerror = () => toast.error('Failed to read CSV file')
+    reader.readAsText(file)
+  }
+
+  const parseExcelFile = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const data = event.target?.result
+      if (!data) {
+        toast.error('Failed to read Excel file')
+        return
+      }
+      const workbook = XLSX.read(data, { type: 'array' })
+      const firstSheet = workbook.SheetNames[0]
+      if (!firstSheet) {
+        toast.error('Excel file has no worksheet')
+        return
+      }
+      const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheet], {
+        defval: '',
+      })
+      const mapped = records.map((r, i) => mapCommodityRecord(r, i))
+      applyCommodityRows(mapped, file.name)
+    }
+    reader.onerror = () => toast.error('Failed to read Excel file')
+    reader.readAsArrayBuffer(file)
+  }
+
+  const handleCsvFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    parseCsvFile(file)
+    e.target.value = ''
+  }
+
+  const handleExcelFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    parseExcelFile(file)
+    e.target.value = ''
+  }
+
+  const handleSave = async () => {
     if (!form.customerName.trim()) {
       toast.error('Customer name is required')
       return
     }
+
+    // Shipments created from the UI are persisted both to backend and localStorage (until list/workflow pages are fully API-driven).
+    const shipperDetails = {
+      supplierName: form.supplierName,
+      supplierAddress: form.supplierAddress,
+      consigneeName: form.consigneeName,
+      consigneeAddress: form.consigneeAddress,
+      notifyPartyName: form.notifyPartyName,
+      notifyAddress: form.notifyAddress,
+    }
+
+    const lineVesselDetails = {
+      shipping_line: form.shippingLine || null,
+      arrival_date: form.arrivalDate || null,
+      berthing_date: form.berthingDate || null,
+      carrying_date: form.carryingDate || null,
+      loading_vessel: form.loadingVessel || null,
+      loading_voyage: form.loadingVoyage || null,
+      discharging_vessel: form.dischargingVessel || null,
+      discharging_voyage: form.dischargingVoyage || null,
+      vessel_local_agent: form.vesselLocalAgent || null,
+      vessel_type: form.vesselType || null,
+      vessel_berthed_at: form.vesselBerthedAt || null,
+      icd_transfer: form.icdTransfer || null,
+      icd_transfer_location: form.icdTransferLocation || null,
+    }
+
+    const shipmentDetails = {
+      origin_country: form.originCountry || null,
+      port_of_loading: form.portOfLoading || null,
+      port_of_discharge: form.portOfDischarge || null,
+      nominated_by: form.nominatedBy || null,
+      marks: form.marks || null,
+      description: form.shipmentDescription || null,
+      total_no_of_pkgs: form.totalNoOfPkgs || null,
+      total_cr_wt: form.totalCrWt || null,
+      po_no: form.pono || null,
+      currency: form.currency || null,
+      fob_value: form.fobValue || null,
+      pre_assessment_date: form.preAssessmentDate || null,
+      final_assessment_date: form.finalAssessmentDate || null,
+    }
+
+    const jobDetails = {
+      customer_ref_no: form.customerRefNo || null,
+      reference_no: form.referenceNo || null,
+      cargo_type: form.cargoType || null,
+      type_of_cargo: form.typeOfCargo || null,
+      ucr_no: form.ucrNo || null,
+      tansad_no: form.tansadNo || null,
+      idf_tansad_date: form.idfTansadDate || null,
+      file_manager: form.fileManager || null,
+      created_by: form.createdBy || null,
+    }
+
+    const containerShipment = form.containerShipment.map((row) => ({
+      container_no: row.containerNo || null,
+      type: row.type || null,
+      seal_no: row.sealNo || null,
+      per_container_weight: row.perContainerWeight || null,
+    }))
+
+    const vehicleShipment = form.vehicleShipment.map((row) => ({
+      chasis_no: row.chasisNo || null,
+      engine_capacity: row.engineCapacity || null,
+      cbm: row.cbm || null,
+      berthing_date: row.berthingDate || null,
+      custom_release_date: row.customReleaseDate || null,
+      driver_cell_no: row.driverCellNo || null,
+      date_of_departure: row.dateOfDeparture || null,
+      date_of_arrival_at_border: row.dateOfArrivalAtBorder || null,
+      date_of_depart_at_border: row.dateOfDepartAtBorder || null,
+      date_of_delivery: row.dateOfDelivery || null,
+    }))
+
+    const looseCargoShipment = form.looseCargoShipment.map((row) => ({
+      truck_no: row.truckNo || null,
+      trailer_no: row.trailerNo || null,
+      transporter: row.transporter || null,
+      licence_no: row.licenceNo || null,
+      driver_name: row.driverName || null,
+      truck_reg_card: row.truckRegCard || null,
+      trailer_reg_card: row.trailerRegCard || null,
+    }))
+
+    const payload = {
+      customer_name: form.customerName.trim(),
+      shipment_type: form.shipmentType,
+      mbl_no: form.mblNo.trim() || null,
+      hbl_no: form.hblNo.trim() || null,
+      invoice_no: form.invoiceNo.trim() || null,
+      date_of_receipt: form.dateOfReceipt || null,
+      status: form.status,
+      line_vessel_details: lineVesselDetails,
+      shipment_details: shipmentDetails,
+      container_shipment: containerShipment,
+      vehicle_shipment: vehicleShipment,
+      loose_cargo_shipment: looseCargoShipment,
+      documents: uploadedDocuments.map((doc) => ({
+        id: doc.id,
+        name: doc.name,
+        fileName: doc.fileName,
+        fileSize: doc.fileSize,
+        date: doc.date,
+        filePath: doc.filePath || null,
+        fileUrl: doc.fileUrl || null,
+      })),
+      upload_csv: {
+        search: commoditySearch,
+        rows: commodityRows,
+        files: uploadedCommodityFiles,
+      },
+      letters: authorizationLetters,
+      notes: notes,
+      meta: {
+        job_details: jobDetails,
+        shipperDetails,
+        line_vessel_details: lineVesselDetails,
+        shipment_details: shipmentDetails,
+        container_shipment: containerShipment,
+        vehicle_shipment: vehicleShipment,
+        loose_cargo_shipment: looseCargoShipment,
+        documents: uploadedDocuments.map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          fileName: doc.fileName,
+          fileSize: doc.fileSize,
+          date: doc.date,
+          filePath: doc.filePath || null,
+          fileUrl: doc.fileUrl || null,
+        })),
+        upload_csv: {
+          search: commoditySearch,
+          rows: commodityRows,
+          files: uploadedCommodityFiles,
+        },
+        letters: authorizationLetters,
+        notes: notes,
+      },
+    }
+
+    try {
+      const res = await customsJobApi.createJob(payload)
+      const serverJob = res?.data
+      if (serverJob) {
+        setCurrentJobId(serverJob.id)
+        let uploadedServerDocs: Array<{
+          id: number
+          name: string
+          fileName: string
+          fileSize: string
+          date: string
+          filePath?: string
+          fileUrl?: string
+          mimeType?: string
+        }> = []
+
+        const docsToUpload = uploadedDocuments.filter((doc) => doc.file instanceof File)
+        if (docsToUpload.length > 0) {
+          const uploadResults = await Promise.all(
+            docsToUpload.map(async (doc) => {
+              const response = await customsJobApi.uploadJobDocument(serverJob.id, {
+                document_name: doc.name,
+                file: doc.file as File,
+              })
+              const uploaded = response?.data
+              return {
+                id: uploaded?.id || doc.id,
+                name: uploaded?.name || doc.name,
+                fileName: uploaded?.file_name || doc.fileName,
+                fileSize: doc.fileSize,
+                date: doc.date,
+                filePath: uploaded?.file_path,
+                fileUrl: uploaded?.file_url,
+                mimeType: uploaded?.mime_type,
+              }
+            })
+          )
+          uploadedServerDocs = uploadResults
+          setUploadedDocuments(uploadResults)
+        } else {
+          await fetchJobDocuments(serverJob.id)
+        }
+
+        const job: Job = {
+          id: serverJob.id,
+          jobNo: serverJob.job_no || `JOB-${Date.now().toString().slice(-6)}`,
+          customerName: serverJob.customer_name || form.customerName.trim(),
+          shipmentType: serverJob.shipment_type || form.shipmentType,
+          mblNo: serverJob.mbl_no || '',
+          hblNo: serverJob.hbl_no || '',
+          invoiceNo: serverJob.invoice_no || '',
+          status: serverJob.status || form.status,
+          stageProgress: serverJob.stage_progress || createInitialJobStageProgress(),
+          stageAssignments: serverJob.stage_assignments || createInitialJobStageAssignments(),
+          meta: serverJob.meta || {
+            job_details: jobDetails,
+            shipperDetails,
+            line_vessel_details: lineVesselDetails,
+            shipment_details: shipmentDetails,
+            container_shipment: containerShipment,
+            vehicle_shipment: vehicleShipment,
+            loose_cargo_shipment: looseCargoShipment,
+            documents: uploadedServerDocs,
+            upload_csv: {
+              search: commoditySearch,
+              rows: commodityRows,
+              files: uploadedCommodityFiles,
+            },
+            letters: authorizationLetters,
+            notes: notes,
+          },
+          dateOfReceipt: serverJob.date_of_receipt || '-',
+          createdAt: serverJob.created_at || new Date().toISOString(),
+        }
+
+        prependStoredJob(job)
+        toast.success('Job created successfully')
+        goToJobs()
+        return
+      }
+    } catch {
+      // fall back to localStorage create if backend isn't reachable
+    }
+
     const id = Date.now()
     const job: Job = {
       id,
@@ -373,11 +905,36 @@ export function CustomsCreateJob() {
       status: form.status,
       stageProgress: createInitialJobStageProgress(),
       stageAssignments: createInitialJobStageAssignments(),
+      meta: {
+        job_details: jobDetails,
+        shipperDetails,
+        line_vessel_details: lineVesselDetails,
+        shipment_details: shipmentDetails,
+        container_shipment: containerShipment,
+        vehicle_shipment: vehicleShipment,
+        loose_cargo_shipment: looseCargoShipment,
+        documents: uploadedDocuments.map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          fileName: doc.fileName,
+          fileSize: doc.fileSize,
+          date: doc.date,
+          filePath: doc.filePath || null,
+          fileUrl: doc.fileUrl || null,
+        })),
+        upload_csv: {
+          search: commoditySearch,
+          rows: commodityRows,
+          files: uploadedCommodityFiles,
+        },
+        letters: authorizationLetters,
+        notes: notes,
+      },
       dateOfReceipt: form.dateOfReceipt || '-',
       createdAt: new Date().toISOString(),
     }
     prependStoredJob(job)
-    toast.success('Job created successfully')
+    toast.success('Job created successfully (offline)')
     goToJobs()
   }
 
@@ -441,11 +998,18 @@ export function CustomsCreateJob() {
             <div className='space-y-1'><Label>MBL No.</Label><Input value={form.mblNo} onChange={(e) => updateField('mblNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>Customer Name</Label><Input value={form.customerName} onChange={(e) => updateField('customerName', e.target.value)} /></div>
             <div className='space-y-1'><Label>Date of Receipt</Label><Input type='date' value={form.dateOfReceipt} onChange={(e) => updateField('dateOfReceipt', e.target.value)} /></div>
-            <div className='space-y-1'><Label>Shipment Type</Label><Select value={form.shipmentType} onValueChange={(v) => updateField('shipmentType', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{shipmentTypeItems.map((v) => <SelectItem key={v} value={v}>{labelForShipmentType(v)}</SelectItem>)}</SelectContent></Select></div>
+            <div className='space-y-1'><Label>Reference No.</Label><Input value={form.referenceNo} onChange={(e) => updateField('referenceNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>HBL/FBO No.</Label><Input value={form.hblNo} onChange={(e) => updateField('hblNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>Customer Ref No.</Label><Input value={form.customerRefNo} onChange={(e) => updateField('customerRefNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>Cargo Type</Label><Select value={form.cargoType} onValueChange={(v) => updateField('cargoType', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{cargoTypeItems.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
             <div className='space-y-1'><Label>Type of Cargo</Label><Select value={form.typeOfCargo} onValueChange={(v) => updateField('typeOfCargo', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{typeOfCargoItems.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
+            <div className='space-y-1'><Label>Invoice No.</Label><Input value={form.invoiceNo} onChange={(e) => updateField('invoiceNo', e.target.value)} /></div>
+            <div className='space-y-1'><Label>UCR No.</Label><Input value={form.ucrNo} onChange={(e) => updateField('ucrNo', e.target.value)} /></div>
+            <div className='space-y-1'><Label>TANSAD No</Label><Input value={form.tansadNo} onChange={(e) => updateField('tansadNo', e.target.value)} /></div>
+            <div className='space-y-1'><Label>IDF/TANSAD Date</Label><Input type='date' value={form.idfTansadDate} onChange={(e) => updateField('idfTansadDate', e.target.value)} /></div>
+            <div className='space-y-1'><Label>File Manager</Label><Input value={form.fileManager} onChange={(e) => updateField('fileManager', e.target.value)} /></div>
+            <div className='space-y-1'><Label>Created By</Label><Input value={form.createdBy} onChange={(e) => updateField('createdBy', e.target.value)} /></div>
+            <div className='space-y-1'><Label>Shipment Type</Label><Select value={form.shipmentType} onValueChange={(v) => updateField('shipmentType', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{shipmentTypeItems.map((v) => <SelectItem key={v} value={v}>{labelForShipmentType(v)}</SelectItem>)}</SelectContent></Select></div>
           </div>
 
           <Tabs defaultValue='shipper' className='w-full'>
@@ -472,19 +1036,217 @@ export function CustomsCreateJob() {
 
             <TabsContent value='line-vessel' className='space-y-3 rounded-md border p-4'>
               <div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
-                <div className='space-y-1'><Label>Shipping Line</Label><Input value={form.shippingLine} onChange={(e) => updateField('shippingLine', e.target.value)} /></div>
-                <div className='space-y-1'><Label>ETA</Label><Input type='date' value={form.eta} onChange={(e) => updateField('eta', e.target.value)} /></div>
-                <div className='space-y-1'><Label>Arrival Date</Label><Input type='date' value={form.arrivalDate} onChange={(e) => updateField('arrivalDate', e.target.value)} /></div>
-                <div className='space-y-1'><Label>Berthing Date</Label><Input type='date' value={form.berthingDate} onChange={(e) => updateField('berthingDate', e.target.value)} /></div>
+                <div className='space-y-1'>
+                  <Label>Shipping Line</Label>
+                  <Input
+                    value={form.shippingLine}
+                    onChange={(e) => updateField('shippingLine', e.target.value)}
+                  />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Arrival Date</Label>
+                  <Input
+                    type='date'
+                    value={form.arrivalDate}
+                    onChange={(e) => updateField('arrivalDate', e.target.value)}
+                  />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Berthing Date</Label>
+                  <Input
+                    type='date'
+                    value={form.berthingDate}
+                    onChange={(e) => updateField('berthingDate', e.target.value)}
+                  />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Carrying Date</Label>
+                  <Input
+                    type='date'
+                    value={form.carryingDate}
+                    onChange={(e) => updateField('carryingDate', e.target.value)}
+                  />
+                </div>
+
+                <div className='space-y-1 md:col-span-2'>
+                  <Label>Loading Vessel</Label>
+                  <Select value={form.loadingVessel || '__empty__'} onValueChange={handleLoadingVesselChange}>
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='Select loading vessel' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='__empty__'>SELECT</SelectItem>
+                      {vessels.map((v) => (
+                        <SelectItem key={v.id} value={String(v.id)}>
+                          {v.vesselName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className='space-y-1 md:col-span-2'>
+                  <Label>Voyage</Label>
+                  <Input value={form.loadingVoyage} disabled />
+                </div>
+
+                <div className='space-y-1 md:col-span-2'>
+                  <Label>Discharging Vessel</Label>
+                  <Select
+                    value={form.dischargingVessel || '__empty__'}
+                    onValueChange={handleDischargingVesselChange}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='Select discharging vessel' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='__empty__'>SELECT</SelectItem>
+                      {vessels.map((v) => (
+                        <SelectItem key={v.id} value={String(v.id)}>
+                          {v.vesselName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className='space-y-1 md:col-span-2'>
+                  <Label>Voyage</Label>
+                  <Input value={form.dischargingVoyage} disabled />
+                </div>
+
+                <div className='space-y-1 md:col-span-2'>
+                  <Label>Vessel/Local Agent</Label>
+                  <Input
+                    value={form.vesselLocalAgent}
+                    onChange={(e) => updateField('vesselLocalAgent', e.target.value)}
+                  />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Type</Label>
+                  <Select
+                    value={form.vesselType || '__empty__'}
+                    onValueChange={(v) => updateField('vesselType', v)}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='Select type' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='Direct'>Direct</SelectItem>
+                      <SelectItem value='Transshipment'>Transshipment</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className='space-y-1'>
+                  <Label>Vessel Berthed At</Label>
+                  <Input
+                    type='date'
+                    value={form.vesselBerthedAt}
+                    onChange={(e) => updateField('vesselBerthedAt', e.target.value)}
+                  />
+                </div>
+
+                <div className='space-y-1'>
+                  <Label>ICD Transfer</Label>
+                  <Select
+                    value={form.icdTransfer || '__empty__'}
+                    onValueChange={(v) => updateField('icdTransfer', v)}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='Select' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='NO'>No</SelectItem>
+                      <SelectItem value='YES'>Yes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className='space-y-1 md:col-span-3'>
+                  <Label>ICD Transfer Location</Label>
+                  <Input
+                    value={form.icdTransferLocation}
+                    onChange={(e) => updateField('icdTransferLocation', e.target.value)}
+                  />
+                </div>
               </div>
             </TabsContent>
 
             <TabsContent value='shipment' className='space-y-3 rounded-md border p-4'>
               <div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
-                <div className='space-y-1'><Label>Origin Country</Label><Input value={form.originCountry} onChange={(e) => updateField('originCountry', e.target.value)} /></div>
-                <div className='space-y-1'><Label>Port Of Loading</Label><Input value={form.portOfLoading} onChange={(e) => updateField('portOfLoading', e.target.value)} /></div>
-                <div className='space-y-1'><Label>Port Of Discharge</Label><Input value={form.portOfDischarge} onChange={(e) => updateField('portOfDischarge', e.target.value)} /></div>
-                <div className='space-y-1'><Label>Nominated By</Label><Input value={form.nominatedBy} onChange={(e) => updateField('nominatedBy', e.target.value)} /></div>
+                <div className='space-y-1'>
+                  <Label>Origin Country</Label>
+                  <Input value={form.originCountry} onChange={(e) => updateField('originCountry', e.target.value)} />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Port Of Loading</Label>
+                  <Input value={form.portOfLoading} onChange={(e) => updateField('portOfLoading', e.target.value)} />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Port Of Discharge</Label>
+                  <Input value={form.portOfDischarge} onChange={(e) => updateField('portOfDischarge', e.target.value)} />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Nominated By</Label>
+                  <Select value={form.nominatedBy || '__empty__'} onValueChange={(v) => updateField('nominatedBy', v)}>
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='Select' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='Shipper'>Shipper</SelectItem>
+                      <SelectItem value='Consignee'>Consignee</SelectItem>
+                      <SelectItem value='Forwarder'>Forwarder</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className='space-y-1 md:col-span-2'>
+                  <Label>Marks</Label>
+                  <Textarea value={form.marks} onChange={(e) => updateField('marks', e.target.value)} />
+                </div>
+                <div className='space-y-1 md:col-span-2'>
+                  <Label>Description</Label>
+                  <Textarea value={form.shipmentDescription} onChange={(e) => updateField('shipmentDescription', e.target.value)} />
+                </div>
+
+                <div className='space-y-1'>
+                  <Label>Total NoOfPkgs.</Label>
+                  <Input value={form.totalNoOfPkgs} onChange={(e) => updateField('totalNoOfPkgs', e.target.value)} />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Total Cr.Wt.</Label>
+                  <Input value={form.totalCrWt} onChange={(e) => updateField('totalCrWt', e.target.value)} />
+                </div>
+                <div className='space-y-1'>
+                  <Label>P.O. No.</Label>
+                  <Input value={form.pono} onChange={(e) => updateField('pono', e.target.value)} />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Currency</Label>
+                  <Select value={form.currency || '__empty__'} onValueChange={(v) => updateField('currency', v)}>
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='Select' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='USD'>USD</SelectItem>
+                      <SelectItem value='TZS'>TZS</SelectItem>
+                      <SelectItem value='EUR'>EUR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className='space-y-1'>
+                  <Label>FOB value</Label>
+                  <Input value={form.fobValue} onChange={(e) => updateField('fobValue', e.target.value)} />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Pre Assessment Date</Label>
+                  <Input type='date' value={form.preAssessmentDate} onChange={(e) => updateField('preAssessmentDate', e.target.value)} />
+                </div>
+                <div className='space-y-1'>
+                  <Label>Final Assessment Date</Label>
+                  <Input type='date' value={form.finalAssessmentDate} onChange={(e) => updateField('finalAssessmentDate', e.target.value)} />
+                </div>
               </div>
 
               <div className='rounded-md border p-3'>
@@ -542,10 +1304,6 @@ export function CustomsCreateJob() {
                   </Button>
                 </div>
 
-                <div className='border-b px-3 py-6 text-center text-sm text-muted-foreground'>
-                  No data available in table
-                </div>
-
                 <div className='flex items-center gap-2 border-b bg-muted/40 px-3 py-2 text-sm'>
                   <span className='font-medium'>Search:</span>
                   <Input
@@ -562,10 +1320,54 @@ export function CustomsCreateJob() {
                       <TableHead>Attached File</TableHead>
                       <TableHead>File Size</TableHead>
                       <TableHead>Date</TableHead>
-                      <TableHead>Delete File</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody />
+                  <TableBody>
+                    {documentsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className='text-center text-muted-foreground'>
+                          Loading documents...
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                    {uploadedDocuments
+                      .filter((row) => {
+                        const q = documentsSearch.trim().toLowerCase()
+                        if (!q) return true
+                        return row.name.toLowerCase().includes(q) || row.fileName.toLowerCase().includes(q)
+                      })
+                      .map((row) => (
+                        <TableRow key={row.id}>
+                          <TableCell>{row.name}</TableCell>
+                          <TableCell>{row.fileName}</TableCell>
+                          <TableCell>{row.fileSize}</TableCell>
+                          <TableCell>{row.date}</TableCell>
+                          <TableCell>
+                            <div className='flex items-center gap-1'>
+                              <Button variant='ghost' size='sm' onClick={() => handlePreviewDocument(row)}>
+                                <Eye className='mr-1 h-4 w-4' />
+                                Preview
+                              </Button>
+                              <Button variant='ghost' size='sm' onClick={() => handleDownloadDocument(row)}>
+                                <Download className='mr-1 h-4 w-4' />
+                                Download
+                              </Button>
+                              <Button variant='ghost' size='sm' onClick={() => handleDeleteDocument(row)}>
+                                Delete
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    {!documentsLoading && uploadedDocuments.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className='text-center text-muted-foreground'>
+                          No data available in table
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
                 </Table>
               </div>
 
@@ -704,17 +1506,102 @@ export function CustomsCreateJob() {
                   </div>
                 </DialogContent>
               </Dialog>
+
+              <Dialog
+                open={isDocumentPreviewOpen}
+                onOpenChange={(open) => {
+                  if (!open) closeDocumentPreview()
+                }}
+              >
+                <DialogContent className='max-w-[95vw]! w-[95vw]! max-h-[90vh] overflow-y-auto sm:max-w-[1200px]!'>
+                  <DialogHeader>
+                    <DialogTitle>{documentPreviewName || 'Document Preview'}</DialogTitle>
+                  </DialogHeader>
+
+                  {detectPreviewKind(documentPreviewMimeType, documentPreviewName) === 'pdf' ? (
+                    <div className='h-[75vh] w-full overflow-hidden rounded-md border'>
+                      <iframe
+                        title='Document preview'
+                        src={documentPreviewUrl}
+                        className='h-full w-full'
+                      />
+                    </div>
+                  ) : null}
+
+                  {detectPreviewKind(documentPreviewMimeType, documentPreviewName) === 'image' ? (
+                    <div className='max-h-[75vh] w-full overflow-auto rounded-md border bg-muted/20 p-3'>
+                      <img
+                        src={documentPreviewUrl}
+                        alt={documentPreviewName || 'Document preview'}
+                        className='mx-auto h-auto max-h-[70vh] max-w-full rounded-md object-contain'
+                      />
+                    </div>
+                  ) : null}
+
+                  {detectPreviewKind(documentPreviewMimeType, documentPreviewName) === 'other' ? (
+                    <div className='rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground'>
+                      This file type cannot be previewed inline. Use download to view it.
+                    </div>
+                  ) : null}
+
+                  <DialogFooter>
+                    <Button
+                      variant='outline'
+                      onClick={() =>
+                        handleDownloadDocument({
+                          fileName: documentPreviewName,
+                          fileUrl: documentPreviewUrl,
+                        })
+                      }
+                    >
+                      <Download className='mr-1 h-4 w-4' />
+                      Download
+                    </Button>
+                    <Button variant='secondary' onClick={closeDocumentPreview}>
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
             <TabsContent value='upload' className='space-y-3 rounded-md border p-4'>
               <div className='rounded-md border'>
                 <div className='flex items-center justify-between border-b bg-muted/40 px-3 py-2 text-xs'>
-                  <Button variant='link' className='h-auto p-0 text-xs'>
+                  <Button
+                    variant='link'
+                    className='h-auto p-0 text-xs'
+                    onClick={() => csvInputRef.current?.click()}
+                  >
                     Upload Commodity CSV
                   </Button>
-                  <Button variant='link' className='h-auto p-0 text-xs'>
+                  <Button
+                    variant='link'
+                    className='h-auto p-0 text-xs'
+                    onClick={() => excelInputRef.current?.click()}
+                  >
                     Upload Commodity Excel
                   </Button>
                 </div>
+                <input
+                  ref={csvInputRef}
+                  type='file'
+                  accept='.csv,text/csv'
+                  className='hidden'
+                  onChange={handleCsvFileChange}
+                />
+                <input
+                  ref={excelInputRef}
+                  type='file'
+                  accept='.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel'
+                  className='hidden'
+                  onChange={handleExcelFileChange}
+                />
+
+                {uploadedCommodityFiles.length > 0 ? (
+                  <div className='border-b px-3 py-2 text-xs text-muted-foreground'>
+                    Uploaded files: {uploadedCommodityFiles.join(', ')}
+                  </div>
+                ) : null}
 
                 <div className='grid grid-cols-2 border-b bg-muted/20 px-3 py-2 text-center text-xs font-medium'>
                   <div>Download</div>
@@ -723,7 +1610,11 @@ export function CustomsCreateJob() {
 
                 <div className='flex items-center gap-2 border-b bg-muted/40 px-3 py-2 text-sm'>
                   <span className='font-medium'>Search:</span>
-                  <Input className='h-7 max-w-xs' />
+                  <Input
+                    className='h-7 max-w-xs'
+                    value={commoditySearch}
+                    onChange={(e) => setCommoditySearch(e.target.value)}
+                  />
                 </div>
 
                 <Table>
@@ -739,7 +1630,37 @@ export function CustomsCreateJob() {
                       <TableHead>Item Inv.Price.</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody />
+                  <TableBody>
+                    {commodityRows
+                      .filter((row) => {
+                        const q = commoditySearch.trim().toLowerCase()
+                        if (!q) return true
+                        return (
+                          row.itemNo.toLowerCase().includes(q) ||
+                          row.commodityCode.toLowerCase().includes(q) ||
+                          row.desc.toLowerCase().includes(q)
+                        )
+                      })
+                      .map((row, idx) => (
+                        <TableRow key={`commodity-${idx}`}>
+                          <TableCell>{row.itemNo}</TableCell>
+                          <TableCell>{row.commodityCode}</TableCell>
+                          <TableCell>{row.desc}</TableCell>
+                          <TableCell>{row.modeSpecification}</TableCell>
+                          <TableCell>{row.component}</TableCell>
+                          <TableCell>{row.quantity}</TableCell>
+                          <TableCell>{row.unitPrice}</TableCell>
+                          <TableCell>{row.itemInvPrice}</TableCell>
+                        </TableRow>
+                      ))}
+                    {commodityRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className='text-center text-muted-foreground'>
+                          No commodity data uploaded
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
                 </Table>
               </div>
             </TabsContent>

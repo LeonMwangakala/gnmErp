@@ -988,5 +988,44 @@ export const customsJobApi = {
       }
     )
   },
+  createJob: async (payload: {
+    customer_name: string
+    shipment_type: string
+    mbl_no?: string | null
+    hbl_no?: string | null
+    invoice_no?: string | null
+    date_of_receipt?: string | null
+    status?: string | null
+    meta?: Record<string, unknown> | null
+  }): Promise<any> => {
+    const response = await api.post('/customs/jobs', payload)
+    return response.data
+  },
+  uploadJobDocument: async (
+    jobId: number,
+    payload: { document_name?: string; file: File }
+  ): Promise<any> => {
+    const formData = new FormData()
+    if (payload.document_name) {
+      formData.append('document_name', payload.document_name)
+    }
+    formData.append('file', payload.file)
+
+    const response = await api.post(`/customs/jobs/${jobId}/documents`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+  getJobDocuments: async (
+    jobId: number,
+    params?: { per_page?: number; page?: number }
+  ): Promise<any> => {
+    const response = await api.get(`/customs/jobs/${jobId}/documents`, { params })
+    return response.data
+  },
+  deleteJobDocument: async (jobId: number, documentId: number): Promise<any> => {
+    const response = await api.delete(`/customs/jobs/${jobId}/documents/${documentId}`)
+    return response.data
+  },
 }
 

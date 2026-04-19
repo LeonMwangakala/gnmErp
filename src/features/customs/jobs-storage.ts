@@ -28,6 +28,7 @@ export type Job = {
   stageAssignments: JobStageAssignments
   stage?: JobStage
   stageStatus?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
+  meta?: Record<string, unknown>
   dateOfReceipt: string
   createdAt: string
 }
