@@ -203,8 +203,8 @@ export function InvoiceDetailModal({
   const handleSyncDiscountToCmts = async () => {
     if (!invoice) return
     const amount = Number(discountAmount)
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error('Enter a valid discount amount greater than 0.')
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast.error('Enter a valid discount amount (0 or greater).')
       return
     }
     try {
