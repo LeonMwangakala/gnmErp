@@ -397,8 +397,8 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
 
     <footer class="doc-footer">
       <strong>GNM CARGO · #JABALILABAHARI</strong>
-      <p class="doc-footer__meta">Warehouse Address: Keko Malubumbasi</p>
-      <p class="doc-footer__meta">Phone number: 06920454440</p>
+      <p class="doc-footer__meta">Warehouse Address: 35 Keko Magurumbasi B</p>
+      <p class="doc-footer__meta">Phone: +255674066253</p>
       <span class="doc-footer__credit">Powered by Torchlight</span>
     </footer>
   </div>
@@ -666,7 +666,7 @@ export function Payments() {
 
   return (
     <>
-      <Header>
+      <Header showSidebarTrigger={false}>
         <div className='flex items-center justify-between w-full'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>Receive Payments</h1>
