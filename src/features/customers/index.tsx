@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Eye, Download, RefreshCw, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Eye, Download, RefreshCw, Search, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -29,6 +29,7 @@ import { customerApi, PaginationMeta } from '@/lib/api'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { CustomerDetailModal } from './customer-detail-modal'
+import { CreateCustomerModal } from './create-customer-modal'
 
 export interface Customer {
   id: number
@@ -48,6 +49,7 @@ export function Customers() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [pagination, setPagination] = useState<PaginationMeta>({
     current_page: 1,
     per_page: 15,
@@ -137,6 +139,10 @@ export function Customers() {
             </p>
           </div>
           <div className='flex items-center gap-2'>
+            <Button variant='default' size='sm' onClick={() => setIsCreateModalOpen(true)}>
+              <Plus className='mr-2 h-4 w-4' />
+              Create customer
+            </Button>
             <Button variant='outline' size='sm'>
               <RefreshCw className='mr-2 h-4 w-4' />
               Synchronize
@@ -350,6 +356,15 @@ export function Customers() {
         customerId={selectedCustomerId}
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
+      />
+
+      <CreateCustomerModal
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+        onCreated={() => {
+          void fetchCustomers(1, pagination.per_page, search)
+          setPagination((prev) => ({ ...prev, current_page: 1 }))
+        }}
       />
     </>
   )

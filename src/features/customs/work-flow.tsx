@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { CustomsPage } from './customs-page'
 import {
@@ -16,6 +16,13 @@ import {
 import { useAuthStore } from '@/stores/auth-store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Card,
   CardContent,
@@ -38,6 +45,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useHoverDropdownDelay } from '@/hooks/use-hover-dropdown'
 
 const STAGE_LABELS: Record<JobStage, string> = {
   SHIPPING_LINE: 'Shipping Line',
@@ -93,6 +101,9 @@ export function CustomsWorkFlow() {
   const user = useAuthStore((s) => s.auth.user)
   const [jobs, setJobs] = useState<Job[]>([])
   const [activeTab, setActiveTab] = useState<JobStage>('SHIPPING_LINE')
+  const [menuOpenKey, setMenuOpenKey] = useState<string | null>(null)
+  const [inspect, setInspect] = useState<{ job: Job; stage: JobStage } | null>(null)
+  const hoverMenu = useHoverDropdownDelay()
   const isAdmin = user?.role?.includes('admin') || user?.type === 'admin' || user?.type === 'owner'
   const isSupervisor =
     (user?.employee_context?.designation_name || '').toLowerCase().includes('supervisor') ||
@@ -174,11 +185,72 @@ export function CustomsWorkFlow() {
     toast.success(`${STAGE_LABELS[stage]} completed`)
   }
 
+  const rowMenuKey = (stage: JobStage, jobId: number) => `${stage}-${jobId}`
+
   return (
     <CustomsPage
       title='Work Flow'
       description='Track and process all customs jobs by stage.'
     >
+      <Dialog open={!!inspect} onOpenChange={(open) => !open && setInspect(null)}>
+        <DialogContent className='max-w-lg'>
+          <DialogHeader>
+            <DialogTitle>{inspect ? `Job ${inspect.job.jobNo}` : 'Job'}</DialogTitle>
+          </DialogHeader>
+          {inspect ? (
+            <div className='grid gap-3 text-sm'>
+              <div className='grid grid-cols-1 gap-2 sm:grid-cols-2'>
+                <div>
+                  <p className='text-muted-foreground'>Customer</p>
+                  <p className='font-medium'>{inspect.job.customerName}</p>
+                </div>
+                <div>
+                  <p className='text-muted-foreground'>Shipment type</p>
+                  <p className='font-medium'>{inspect.job.shipmentType}</p>
+                </div>
+                <div>
+                  <p className='text-muted-foreground'>Date of receipt</p>
+                  <p className='font-medium'>{inspect.job.dateOfReceipt}</p>
+                </div>
+                <div>
+                  <p className='text-muted-foreground'>Overall status</p>
+                  <p className='font-medium'>{inspect.job.status}</p>
+                </div>
+                <div>
+                  <p className='text-muted-foreground'>MBL</p>
+                  <p className='font-medium'>{inspect.job.mblNo || '—'}</p>
+                </div>
+                <div>
+                  <p className='text-muted-foreground'>HBL</p>
+                  <p className='font-medium'>{inspect.job.hblNo || '—'}</p>
+                </div>
+              </div>
+              <div className='rounded-md border p-3'>
+                <p className='mb-2 text-xs font-medium text-muted-foreground'>Stage status</p>
+                <div className='grid grid-cols-2 gap-2 text-xs'>
+                  {WORKFLOW_TABS.map((s) => (
+                    <div key={s} className='flex justify-between gap-2'>
+                      <span className='text-muted-foreground'>{STAGE_LABELS[s]}</span>
+                      <Badge variant='outline' className='shrink-0 text-[10px]'>
+                        {inspect.job.stageProgress[s]}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className='text-xs text-muted-foreground'>
+                Opened from the <span className='font-medium'>{STAGE_LABELS[inspect.stage]}</span> tab.
+              </p>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button type='button' variant='outline' onClick={() => setInspect(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <CardHeader>
           <CardTitle>Work Flow</CardTitle>
@@ -214,7 +286,7 @@ export function CustomsWorkFlow() {
                         <TableHead>{STAGE_LABELS[stage]} Status</TableHead>
                         <TableHead>Assigned To</TableHead>
                         <TableHead>Overall Status</TableHead>
-                        <TableHead className='text-right'>Action</TableHead>
+                        <TableHead className='min-w-[120px] text-right whitespace-nowrap'>Options</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -242,37 +314,91 @@ export function CustomsWorkFlow() {
                               <Badge variant='outline'>{job.status}</Badge>
                             </TableCell>
                             <TableCell className='text-right'>
-                              <DropdownMenu modal={false}>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant='ghost' size='icon' className='ml-auto h-8 w-8'>
-                                    <MoreHorizontal className='h-4 w-4' />
-                                    <span className='sr-only'>Open actions</span>
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align='end' className='w-56'>
-                                  {(isAdmin || isSupervisor || userStage === stage) && (
-                                    <DropdownMenuItem onClick={() => assignToMe(job, stage)}>
-                                      Assign To Me
-                                    </DropdownMenuItem>
-                                  )}
-                                  {(isAdmin || isSupervisor || userStage === stage) && (
-                                    <DropdownMenuItem
-                                      disabled={
-                                        stage === 'TBS' &&
-                                        job.stageProgress.DECLARATION_TRA !== 'COMPLETED'
-                                      }
-                                      onClick={() => processStage(job, stage)}
+                              <div
+                                className='inline-flex justify-end'
+                                onPointerEnter={() => {
+                                  hoverMenu.cancel()
+                                  setMenuOpenKey(rowMenuKey(stage, job.id))
+                                }}
+                                onPointerLeave={() => {
+                                  hoverMenu.schedule(() => setMenuOpenKey(null))
+                                }}
+                              >
+                                <DropdownMenu
+                                  open={menuOpenKey === rowMenuKey(stage, job.id)}
+                                  onOpenChange={(open) => {
+                                    if (open) {
+                                      hoverMenu.cancel()
+                                      setMenuOpenKey(rowMenuKey(stage, job.id))
+                                    } else {
+                                      setMenuOpenKey(null)
+                                    }
+                                  }}
+                                  modal={false}
+                                >
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      type='button'
+                                      variant='outline'
+                                      size='sm'
+                                      className='ml-auto h-8 px-3'
                                     >
-                                      {STAGE_ACTION_LABELS[stage]}
+                                      Options
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    align='end'
+                                    className='w-56'
+                                    onPointerEnter={hoverMenu.cancel}
+                                    onPointerLeave={() => hoverMenu.schedule(() => setMenuOpenKey(null))}
+                                    onCloseAutoFocus={(e) => e.preventDefault()}
+                                  >
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        setMenuOpenKey(null)
+                                        setInspect({ job, stage })
+                                      }}
+                                    >
+                                      <Eye className='mr-2 h-4 w-4' />
+                                      View
                                     </DropdownMenuItem>
-                                  )}
-                                  {(isAdmin || isSupervisor) && (
-                                    <DropdownMenuItem onClick={() => reassignStage(job, stage)}>
-                                      Reassign
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                    {(isAdmin || isSupervisor || userStage === stage) && (
+                                      <DropdownMenuItem
+                                        onSelect={() => {
+                                          setMenuOpenKey(null)
+                                          assignToMe(job, stage)
+                                        }}
+                                      >
+                                        Assign To Me
+                                      </DropdownMenuItem>
+                                    )}
+                                    {(isAdmin || isSupervisor || userStage === stage) && (
+                                      <DropdownMenuItem
+                                        disabled={
+                                          stage === 'TBS' &&
+                                          job.stageProgress.DECLARATION_TRA !== 'COMPLETED'
+                                        }
+                                        onSelect={() => {
+                                          setMenuOpenKey(null)
+                                          processStage(job, stage)
+                                        }}
+                                      >
+                                        {STAGE_ACTION_LABELS[stage]}
+                                      </DropdownMenuItem>
+                                    )}
+                                    {(isAdmin || isSupervisor) && (
+                                      <DropdownMenuItem
+                                        onSelect={() => {
+                                          setMenuOpenKey(null)
+                                          reassignStage(job, stage)
+                                        }}
+                                      >
+                                        Reassign
+                                      </DropdownMenuItem>
+                                    )}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))

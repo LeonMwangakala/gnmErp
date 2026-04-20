@@ -59,6 +59,7 @@ import { Route as AccountingExpensesBillsRouteImport } from './routes/accounting
 import { Route as AccountingBankingTransferRouteImport } from './routes/accounting.banking.transfer'
 import { Route as AccountingBankingAccountRouteImport } from './routes/accounting.banking.account'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
+import { Route as AuthenticatedSettingsExchangeRatesRouteImport } from './routes/_authenticated/settings/exchange-rates'
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
@@ -322,6 +323,12 @@ const AuthenticatedSettingsNotificationsRoute =
     path: '/notifications',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedSettingsExchangeRatesRoute =
+  AuthenticatedSettingsExchangeRatesRouteImport.update({
+    id: '/exchange-rates',
+    path: '/exchange-rates',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 const AuthenticatedSettingsDisplayRoute =
   AuthenticatedSettingsDisplayRouteImport.update({
     id: '/display',
@@ -380,6 +387,7 @@ export interface FileRoutesByFullPath {
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/accounting/banking/account': typeof AccountingBankingAccountRoute
   '/accounting/banking/transfer': typeof AccountingBankingTransferRoute
@@ -432,6 +440,7 @@ export interface FileRoutesByTo {
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/accounting/banking/account': typeof AccountingBankingAccountRoute
   '/accounting/banking/transfer': typeof AccountingBankingTransferRoute
@@ -489,6 +498,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
+  '/_authenticated/settings/exchange-rates': typeof AuthenticatedSettingsExchangeRatesRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/accounting/banking/account': typeof AccountingBankingAccountRoute
   '/accounting/banking/transfer': typeof AccountingBankingTransferRoute
@@ -544,6 +554,7 @@ export interface FileRouteTypes {
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
+    | '/settings/exchange-rates'
     | '/settings/notifications'
     | '/accounting/banking/account'
     | '/accounting/banking/transfer'
@@ -596,6 +607,7 @@ export interface FileRouteTypes {
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
+    | '/settings/exchange-rates'
     | '/settings/notifications'
     | '/accounting/banking/account'
     | '/accounting/banking/transfer'
@@ -652,6 +664,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
+    | '/_authenticated/settings/exchange-rates'
     | '/_authenticated/settings/notifications'
     | '/accounting/banking/account'
     | '/accounting/banking/transfer'
@@ -1062,6 +1075,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsNotificationsRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/settings/exchange-rates': {
+      id: '/_authenticated/settings/exchange-rates'
+      path: '/exchange-rates'
+      fullPath: '/settings/exchange-rates'
+      preLoaderRoute: typeof AuthenticatedSettingsExchangeRatesRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
     '/_authenticated/settings/display': {
       id: '/_authenticated/settings/display'
       path: '/display'
@@ -1097,6 +1117,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
   AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
+  AuthenticatedSettingsExchangeRatesRoute: typeof AuthenticatedSettingsExchangeRatesRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
@@ -1106,6 +1127,8 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
     AuthenticatedSettingsAccountRoute: AuthenticatedSettingsAccountRoute,
     AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
     AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
+    AuthenticatedSettingsExchangeRatesRoute:
+      AuthenticatedSettingsExchangeRatesRoute,
     AuthenticatedSettingsNotificationsRoute:
       AuthenticatedSettingsNotificationsRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,

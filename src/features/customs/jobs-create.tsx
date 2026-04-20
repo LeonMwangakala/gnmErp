@@ -44,9 +44,15 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { customsJobApi } from '@/lib/api'
-import { getStoredVessels, type Vessel } from './vessels-storage'
-import { getStoredVesselVoyages, type VesselVoyage } from './vessel-voyage-storage'
+import { customsJobApi, customsShipperApi, customsVesselApi } from '@/lib/api'
+import { customsVesselVoyageApi } from '@/lib/api'
+import { getStoredVessels, saveStoredVessels, type Vessel } from './vessels-storage'
+import { type Shipper } from './shippers-storage'
+import {
+  getStoredVesselVoyages,
+  saveStoredVesselVoyages,
+  type VesselVoyage,
+} from './vessel-voyage-storage'
 
 type JobForm = {
   shipmentType: string
@@ -122,6 +128,8 @@ type JobForm = {
   documentsNotes: string
   lettersNotes: string
   internalNotes: string
+  /** Master shipper record id from API (optional) */
+  shipperId: string
 }
 
 type CommodityRow = {
@@ -195,9 +203,20 @@ const initialForm: JobForm = {
   documentsNotes: '',
   lettersNotes: '',
   internalNotes: '',
+  shipperId: '',
 }
 
 export function CustomsCreateJob() {
+  const searchParams =
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+  const pageMode = searchParams?.get('mode') === 'view'
+    ? 'view'
+    : searchParams?.get('mode') === 'update'
+      ? 'update'
+      : 'create'
+  const editingJobId =
+    searchParams && searchParams.get('id') ? Number(searchParams.get('id')) || null : null
+  const isViewMode = pageMode === 'view'
   const [currentJobId, setCurrentJobId] = useState<number | null>(null)
   const [form, setForm] = useState<JobForm>(initialForm)
   const [shipmentTypeOptions, setShipmentTypeOptions] = useState<string[]>([
@@ -271,18 +290,182 @@ export function CustomsCreateJob() {
 
   const [vessels, setVessels] = useState<Vessel[]>([])
   const [vesselVoyages, setVesselVoyages] = useState<VesselVoyage[]>([])
+  const [shipperOptions, setShipperOptions] = useState<Shipper[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+  const [loadingJob, setLoadingJob] = useState(false)
 
   const updateField = <K extends keyof JobForm>(key: K, value: JobForm[K]) => setForm((p) => ({ ...p, [key]: value }))
 
   useEffect(() => {
-    setVessels(getStoredVessels())
-    setVesselVoyages(getStoredVesselVoyages())
+    let cancelled = false
+    customsVesselApi
+      .list({ per_page: 200, page: 1 })
+      .then((res) => {
+        if (!cancelled) {
+          setVessels(res.data)
+          saveStoredVessels(res.data)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setVessels(getStoredVessels())
+      })
+    customsVesselVoyageApi
+      .list()
+      .then((rows) => {
+        if (!cancelled) {
+          setVesselVoyages(rows)
+          saveStoredVesselVoyages(rows)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setVesselVoyages(getStoredVesselVoyages())
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    customsShipperApi
+      .list({ per_page: 200, page: 1 })
+      .then((res) => {
+        if (!cancelled) setShipperOptions(res.data)
+      })
+      .catch(() => {
+        if (!cancelled) setShipperOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
     if (!currentJobId) return
     fetchJobDocuments(currentJobId)
   }, [currentJobId])
+
+  useEffect(() => {
+    if (!editingJobId || pageMode === 'create') return
+    let cancelled = false
+    setLoadingJob(true)
+    customsJobApi
+      .getJob(editingJobId)
+      .then((job) => {
+        if (!job || cancelled) return
+        const meta = (job.meta || {}) as Record<string, any>
+        const jobDetails = (meta.job_details || {}) as Record<string, any>
+        const lineVesselDetails = (meta.line_vessel_details || {}) as Record<string, any>
+        const shipmentDetails = (meta.shipment_details || {}) as Record<string, any>
+        const containerShipment = Array.isArray(meta.container_shipment) ? meta.container_shipment : []
+        const vehicleShipment = Array.isArray(meta.vehicle_shipment) ? meta.vehicle_shipment : []
+        const looseCargoShipment = Array.isArray(meta.loose_cargo_shipment) ? meta.loose_cargo_shipment : []
+        setCurrentJobId(Number(job.id) || editingJobId)
+        setForm((prev) => ({
+          ...prev,
+          shipmentType: String(job.shipment_type || prev.shipmentType),
+          mblNo: String(job.mbl_no || ''),
+          hblNo: String(job.hbl_no || ''),
+          invoiceNo: String(job.invoice_no || ''),
+          customerName: String(job.customer_name || ''),
+          customerRefNo: String(jobDetails.customer_ref_no || ''),
+          dateOfReceipt: String(job.date_of_receipt || ''),
+          cargoType: String(jobDetails.cargo_type || prev.cargoType),
+          typeOfCargo: String(jobDetails.type_of_cargo || prev.typeOfCargo),
+          referenceNo: String(jobDetails.reference_no || ''),
+          ucrNo: String(jobDetails.ucr_no || ''),
+          tansadNo: String(jobDetails.tansad_no || ''),
+          idfTansadDate: String(jobDetails.idf_tansad_date || ''),
+          fileManager: String(jobDetails.file_manager || ''),
+          createdBy: String(jobDetails.created_by || ''),
+          supplierName: String((meta.shipperDetails || {}).supplierName || ''),
+          supplierAddress: String((meta.shipperDetails || {}).supplierAddress || ''),
+          consigneeName: String((meta.shipperDetails || {}).consigneeName || ''),
+          consigneeAddress: String((meta.shipperDetails || {}).consigneeAddress || ''),
+          notifyPartyName: String((meta.shipperDetails || {}).notifyPartyName || ''),
+          notifyAddress: String((meta.shipperDetails || {}).notifyAddress || ''),
+          status: String(job.status || prev.status),
+          shippingLine: String(lineVesselDetails.shipping_line || ''),
+          carryingDate: String(lineVesselDetails.carrying_date || ''),
+          arrivalDate: String(lineVesselDetails.arrival_date || ''),
+          berthingDate: String(lineVesselDetails.berthing_date || ''),
+          loadingVessel: String(lineVesselDetails.loading_vessel || ''),
+          loadingVoyage: String(lineVesselDetails.loading_voyage || ''),
+          dischargingVessel: String(lineVesselDetails.discharging_vessel || ''),
+          dischargingVoyage: String(lineVesselDetails.discharging_voyage || ''),
+          vesselLocalAgent: String(lineVesselDetails.vessel_local_agent || ''),
+          vesselType: String(lineVesselDetails.vessel_type || ''),
+          vesselBerthedAt: String(lineVesselDetails.vessel_berthed_at || ''),
+          icdTransfer: String(lineVesselDetails.icd_transfer || ''),
+          icdTransferLocation: String(lineVesselDetails.icd_transfer_location || ''),
+          originCountry: String(shipmentDetails.origin_country || ''),
+          portOfLoading: String(shipmentDetails.port_of_loading || ''),
+          portOfDischarge: String(shipmentDetails.port_of_discharge || ''),
+          nominatedBy: String(shipmentDetails.nominated_by || ''),
+          marks: String(shipmentDetails.marks || ''),
+          shipmentDescription: String(shipmentDetails.description || ''),
+          totalNoOfPkgs: String(shipmentDetails.total_no_of_pkgs || ''),
+          totalCrWt: String(shipmentDetails.total_cr_wt || ''),
+          pono: String(shipmentDetails.po_no || ''),
+          currency: String(shipmentDetails.currency || ''),
+          fobValue: String(shipmentDetails.fob_value || ''),
+          preAssessmentDate: String(shipmentDetails.pre_assessment_date || ''),
+          finalAssessmentDate: String(shipmentDetails.final_assessment_date || ''),
+          containerShipment:
+            containerShipment.length > 0
+              ? containerShipment.map((row: any) => ({
+                  containerNo: String(row.container_no || ''),
+                  type: String(row.type || ''),
+                  sealNo: String(row.seal_no || ''),
+                  perContainerWeight: String(row.per_container_weight || ''),
+                }))
+              : prev.containerShipment,
+          vehicleShipment:
+            vehicleShipment.length > 0
+              ? vehicleShipment.map((row: any) => ({
+                  chasisNo: String(row.chasis_no || ''),
+                  engineCapacity: String(row.engine_capacity || ''),
+                  cbm: String(row.cbm || ''),
+                  berthingDate: String(row.berthing_date || ''),
+                  customReleaseDate: String(row.custom_release_date || ''),
+                  driverCellNo: String(row.driver_cell_no || ''),
+                  dateOfDeparture: String(row.date_of_departure || ''),
+                  dateOfArrivalAtBorder: String(row.date_of_arrival_at_border || ''),
+                  dateOfDepartAtBorder: String(row.date_of_depart_at_border || ''),
+                  dateOfDelivery: String(row.date_of_delivery || ''),
+                }))
+              : prev.vehicleShipment,
+          looseCargoShipment:
+            looseCargoShipment.length > 0
+              ? looseCargoShipment.map((row: any) => ({
+                  truckNo: String(row.truck_no || ''),
+                  trailerNo: String(row.trailer_no || ''),
+                  transporter: String(row.transporter || ''),
+                  licenceNo: String(row.licence_no || ''),
+                  driverName: String(row.driver_name || ''),
+                  truckRegCard: String(row.truck_reg_card || ''),
+                  trailerRegCard: String(row.trailer_reg_card || ''),
+                }))
+              : prev.looseCargoShipment,
+          shipperId: job.shipper_id ? String(job.shipper_id) : '',
+        }))
+        setCommodityRows(Array.isArray((meta.upload_csv || {}).rows) ? (meta.upload_csv || {}).rows : [])
+        setUploadedCommodityFiles(
+          Array.isArray((meta.upload_csv || {}).files) ? (meta.upload_csv || {}).files : []
+        )
+        setAuthorizationLetters(Array.isArray(meta.letters) ? meta.letters : [])
+        setNotes(Array.isArray(meta.notes) ? meta.notes : [])
+      })
+      .catch(() => {
+        toast.error('Failed to load job details')
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingJob(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [editingJobId, pageMode])
 
   const getFirstActiveVoyageForVesselId = (vesselId: string) => {
     const id = Number(vesselId)
@@ -664,6 +847,7 @@ export function CustomsCreateJob() {
   }
 
   const handleSave = async () => {
+    if (isSaving) return
     if (!form.customerName.trim()) {
       toast.error('Customer name is required')
       return
@@ -753,9 +937,14 @@ export function CustomsCreateJob() {
       trailer_reg_card: row.trailerRegCard || null,
     }))
 
+    const shipperIdNum = form.shipperId ? Number(form.shipperId) : NaN
+    const shipper_id =
+      Number.isFinite(shipperIdNum) && shipperIdNum > 0 ? shipperIdNum : null
+
     const payload = {
       customer_name: form.customerName.trim(),
       shipment_type: form.shipmentType,
+      shipper_id,
       mbl_no: form.mblNo.trim() || null,
       hbl_no: form.hblNo.trim() || null,
       invoice_no: form.invoiceNo.trim() || null,
@@ -784,6 +973,7 @@ export function CustomsCreateJob() {
       notes: notes,
       meta: {
         job_details: jobDetails,
+        shipper_id,
         shipperDetails,
         line_vessel_details: lineVesselDetails,
         shipment_details: shipmentDetails,
@@ -809,133 +999,101 @@ export function CustomsCreateJob() {
       },
     }
 
+    setIsSaving(true)
     try {
-      const res = await customsJobApi.createJob(payload)
+      const res =
+        pageMode === 'update' && editingJobId
+          ? await customsJobApi.updateJob(editingJobId, payload)
+          : await customsJobApi.createJob(payload)
       const serverJob = res?.data
-      if (serverJob) {
-        setCurrentJobId(serverJob.id)
-        let uploadedServerDocs: Array<{
-          id: number
-          name: string
-          fileName: string
-          fileSize: string
-          date: string
-          filePath?: string
-          fileUrl?: string
-          mimeType?: string
-        }> = []
-
-        const docsToUpload = uploadedDocuments.filter((doc) => doc.file instanceof File)
-        if (docsToUpload.length > 0) {
-          const uploadResults = await Promise.all(
-            docsToUpload.map(async (doc) => {
-              const response = await customsJobApi.uploadJobDocument(serverJob.id, {
-                document_name: doc.name,
-                file: doc.file as File,
-              })
-              const uploaded = response?.data
-              return {
-                id: uploaded?.id || doc.id,
-                name: uploaded?.name || doc.name,
-                fileName: uploaded?.file_name || doc.fileName,
-                fileSize: doc.fileSize,
-                date: doc.date,
-                filePath: uploaded?.file_path,
-                fileUrl: uploaded?.file_url,
-                mimeType: uploaded?.mime_type,
-              }
-            })
-          )
-          uploadedServerDocs = uploadResults
-          setUploadedDocuments(uploadResults)
-        } else {
-          await fetchJobDocuments(serverJob.id)
-        }
-
-        const job: Job = {
-          id: serverJob.id,
-          jobNo: serverJob.job_no || `JOB-${Date.now().toString().slice(-6)}`,
-          customerName: serverJob.customer_name || form.customerName.trim(),
-          shipmentType: serverJob.shipment_type || form.shipmentType,
-          mblNo: serverJob.mbl_no || '',
-          hblNo: serverJob.hbl_no || '',
-          invoiceNo: serverJob.invoice_no || '',
-          status: serverJob.status || form.status,
-          stageProgress: serverJob.stage_progress || createInitialJobStageProgress(),
-          stageAssignments: serverJob.stage_assignments || createInitialJobStageAssignments(),
-          meta: serverJob.meta || {
-            job_details: jobDetails,
-            shipperDetails,
-            line_vessel_details: lineVesselDetails,
-            shipment_details: shipmentDetails,
-            container_shipment: containerShipment,
-            vehicle_shipment: vehicleShipment,
-            loose_cargo_shipment: looseCargoShipment,
-            documents: uploadedServerDocs,
-            upload_csv: {
-              search: commoditySearch,
-              rows: commodityRows,
-              files: uploadedCommodityFiles,
-            },
-            letters: authorizationLetters,
-            notes: notes,
-          },
-          dateOfReceipt: serverJob.date_of_receipt || '-',
-          createdAt: serverJob.created_at || new Date().toISOString(),
-        }
-
-        prependStoredJob(job)
-        toast.success('Job created successfully')
-        goToJobs()
-        return
+      if (!serverJob) {
+        throw new Error('Invalid create job response')
       }
-    } catch {
-      // fall back to localStorage create if backend isn't reachable
-    }
 
-    const id = Date.now()
-    const job: Job = {
-      id,
-      jobNo: `JOB-${id.toString().slice(-6)}`,
-      customerName: form.customerName.trim(),
-      shipmentType: form.shipmentType,
-      mblNo: form.mblNo.trim(),
-      hblNo: form.hblNo.trim(),
-      invoiceNo: form.invoiceNo.trim(),
-      status: form.status,
-      stageProgress: createInitialJobStageProgress(),
-      stageAssignments: createInitialJobStageAssignments(),
-      meta: {
-        job_details: jobDetails,
-        shipperDetails,
-        line_vessel_details: lineVesselDetails,
-        shipment_details: shipmentDetails,
-        container_shipment: containerShipment,
-        vehicle_shipment: vehicleShipment,
-        loose_cargo_shipment: looseCargoShipment,
-        documents: uploadedDocuments.map((doc) => ({
-          id: doc.id,
-          name: doc.name,
-          fileName: doc.fileName,
-          fileSize: doc.fileSize,
-          date: doc.date,
-          filePath: doc.filePath || null,
-          fileUrl: doc.fileUrl || null,
-        })),
-        upload_csv: {
-          search: commoditySearch,
-          rows: commodityRows,
-          files: uploadedCommodityFiles,
+      setCurrentJobId(serverJob.id)
+      let uploadedServerDocs: Array<{
+        id: number
+        name: string
+        fileName: string
+        fileSize: string
+        date: string
+        filePath?: string
+        fileUrl?: string
+        mimeType?: string
+      }> = []
+
+      const docsToUpload = uploadedDocuments.filter((doc) => doc.file instanceof File)
+      if (docsToUpload.length > 0) {
+        const uploadResults = await Promise.all(
+          docsToUpload.map(async (doc) => {
+            const response = await customsJobApi.uploadJobDocument(serverJob.id, {
+              document_name: doc.name,
+              file: doc.file as File,
+            })
+            const uploaded = response?.data
+            return {
+              id: uploaded?.id || doc.id,
+              name: uploaded?.name || doc.name,
+              fileName: uploaded?.file_name || doc.fileName,
+              fileSize: doc.fileSize,
+              date: doc.date,
+              filePath: uploaded?.file_path,
+              fileUrl: uploaded?.file_url,
+              mimeType: uploaded?.mime_type,
+            }
+          })
+        )
+        uploadedServerDocs = uploadResults
+        setUploadedDocuments(uploadResults)
+      } else {
+        await fetchJobDocuments(serverJob.id)
+      }
+
+      const job: Job = {
+        id: serverJob.id,
+        jobNo: serverJob.job_no || `JOB-${Date.now().toString().slice(-6)}`,
+        customerName: serverJob.customer_name || form.customerName.trim(),
+        shipmentType: serverJob.shipment_type || form.shipmentType,
+        mblNo: serverJob.mbl_no || '',
+        hblNo: serverJob.hbl_no || '',
+        invoiceNo: serverJob.invoice_no || '',
+        status: serverJob.status || form.status,
+        stageProgress: serverJob.stage_progress || createInitialJobStageProgress(),
+        stageAssignments: serverJob.stage_assignments || createInitialJobStageAssignments(),
+        meta: serverJob.meta || {
+          job_details: jobDetails,
+          shipper_id,
+          shipperDetails,
+          line_vessel_details: lineVesselDetails,
+          shipment_details: shipmentDetails,
+          container_shipment: containerShipment,
+          vehicle_shipment: vehicleShipment,
+          loose_cargo_shipment: looseCargoShipment,
+          documents: uploadedServerDocs,
+          upload_csv: {
+            search: commoditySearch,
+            rows: commodityRows,
+            files: uploadedCommodityFiles,
+          },
+          letters: authorizationLetters,
+          notes: notes,
         },
-        letters: authorizationLetters,
-        notes: notes,
-      },
-      dateOfReceipt: form.dateOfReceipt || '-',
-      createdAt: new Date().toISOString(),
+        dateOfReceipt: serverJob.date_of_receipt || '-',
+        createdAt: serverJob.created_at || new Date().toISOString(),
+      }
+
+      prependStoredJob(job)
+      toast.success(pageMode === 'update' ? 'Job updated successfully' : 'Job created successfully')
+      goToJobs()
+    } catch {
+      toast.error(
+        pageMode === 'update'
+          ? 'Failed to update job. Please try again.'
+          : 'Failed to create job. Please try again.'
+      )
+    } finally {
+      setIsSaving(false)
     }
-    prependStoredJob(job)
-    toast.success('Job created successfully (offline)')
-    goToJobs()
   }
 
   const shipmentTypeItems = useMemo(
@@ -980,8 +1138,14 @@ export function CustomsCreateJob() {
 
   return (
     <CustomsPage
-      title='Create Job'
-      description='Enter new customs job details.'
+      title={pageMode === 'view' ? 'View Job' : pageMode === 'update' ? 'Update Job' : 'Create Job'}
+      description={
+        pageMode === 'view'
+          ? 'Review customs job details.'
+          : pageMode === 'update'
+            ? 'Update customs job details.'
+            : 'Enter new customs job details.'
+      }
       headerActions={
         <Button variant='outline' onClick={goToJobs}>
           Back to Jobs
@@ -990,10 +1154,11 @@ export function CustomsCreateJob() {
     >
       <Card>
         <CardHeader>
-          <CardTitle>Job Details</CardTitle>
+          <CardTitle>{loadingJob ? 'Loading Job Details...' : 'Job Details'}</CardTitle>
           <CardDescription>Use tabs to complete the shipment information.</CardDescription>
         </CardHeader>
         <CardContent className='space-y-4'>
+          <fieldset disabled={isSaving || isViewMode || loadingJob} className='space-y-4'>
           <div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
             <div className='space-y-1'><Label>MBL No.</Label><Input value={form.mblNo} onChange={(e) => updateField('mblNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>Customer Name</Label><Input value={form.customerName} onChange={(e) => updateField('customerName', e.target.value)} /></div>
@@ -1025,6 +1190,26 @@ export function CustomsCreateJob() {
 
             <TabsContent value='shipper' className='space-y-3 rounded-md border p-4'>
               <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                <div className='space-y-1 md:col-span-2'>
+                  <Label>Master shipper (optional)</Label>
+                  <Select
+                    value={form.shipperId || '__none__'}
+                    onValueChange={(v) => updateField('shipperId', v === '__none__' ? '' : v)}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='Select shipper master record' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='__none__'>None</SelectItem>
+                      {shipperOptions.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          {s.name}
+                          {s.city ? ` — ${s.city}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className='space-y-1'><Label>Supplier Name</Label><Input value={form.supplierName} onChange={(e) => updateField('supplierName', e.target.value)} /></div>
                 <div className='space-y-1'><Label>Supplier Address</Label><Textarea value={form.supplierAddress} onChange={(e) => updateField('supplierAddress', e.target.value)} /></div>
                 <div className='space-y-1'><Label>Consignee Name</Label><Input value={form.consigneeName} onChange={(e) => updateField('consigneeName', e.target.value)} /></div>
@@ -1817,15 +2002,21 @@ export function CustomsCreateJob() {
               </Dialog>
             </TabsContent>
           </Tabs>
+          </fieldset>
 
           <div className='flex items-center justify-end gap-2'>
             <Button
               variant='outline'
               onClick={goToJobs}
+              disabled={isSaving}
             >
               Cancel
             </Button>
-            <Button onClick={handleSave}>Save Job</Button>
+            {!isViewMode ? (
+              <Button onClick={handleSave} disabled={isSaving || loadingJob}>
+                {isSaving ? 'Saving...' : pageMode === 'update' ? 'Update Job' : 'Save Job'}
+              </Button>
+            ) : null}
           </div>
         </CardContent>
       </Card>

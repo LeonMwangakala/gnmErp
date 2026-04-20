@@ -1493,7 +1493,7 @@ export function Reports() {
                   {invoiceReportData.rows.length === 1 ? 'invoice' : 'invoices'})
                 </span>
               </p>
-              <ScrollArea className='min-h-0 flex-1 pr-3 -mr-1'>
+              <div className='min-h-0 flex-1 overflow-auto pr-1'>
                 <div className='space-y-4 pb-4'>
                   <div className='overflow-x-auto'>
                     <Table>
@@ -1552,7 +1552,7 @@ export function Reports() {
                     </span>
                   </div>
                 </div>
-              </ScrollArea>
+              </div>
               <DialogFooter className='mt-4 shrink-0 flex-row justify-end gap-2 border-t pt-4'>
                 <Button
                   type='button'
@@ -1606,11 +1606,11 @@ export function Reports() {
                   </span>
                 ) : null}
                 <span className='ms-2'>
-                  ({postedContainersReportData.rows.length}{' '}
-                  {postedContainersReportData.rows.length === 1 ? 'row' : 'rows'})
+                  ({postedContainersReportData.summary.row_count}{' '}
+                  {postedContainersReportData.summary.row_count === 1 ? 'row' : 'rows'})
                 </span>
               </p>
-              <ScrollArea className='min-h-0 flex-1 pr-3 -mr-1'>
+              <div className='min-h-0 flex-1 overflow-auto pr-1'>
                 <div className='space-y-4 pb-4'>
                   <div className='overflow-x-auto'>
                     <Table>
@@ -1635,12 +1635,14 @@ export function Reports() {
                           postedContainersReportData.rows.map((r) => (
                             <TableRow key={r.id}>
                               <TableCell className='whitespace-nowrap tabular-nums'>
-                                {r.posted_at}
+                                {r.posted_at || '—'}
                               </TableCell>
-                              <TableCell className='font-mono text-sm'>{r.container_no}</TableCell>
-                              <TableCell className='tabular-nums'>{r.invoice_number}</TableCell>
-                              <TableCell className='whitespace-normal'>{r.customer_name}</TableCell>
-                              <TableCell className='whitespace-normal'>{r.posted_by_name}</TableCell>
+                              <TableCell className='whitespace-nowrap font-mono text-sm'>
+                                {r.container_no || '—'}
+                              </TableCell>
+                              <TableCell className='tabular-nums'>{r.invoice_number || '—'}</TableCell>
+                              <TableCell className='whitespace-normal'>{r.customer_name || '—'}</TableCell>
+                              <TableCell className='whitespace-normal'>{r.posted_by_name || '—'}</TableCell>
                             </TableRow>
                           ))
                         )}
@@ -1648,7 +1650,7 @@ export function Reports() {
                     </Table>
                   </div>
                 </div>
-              </ScrollArea>
+              </div>
               <DialogFooter className='mt-4 shrink-0 flex-row justify-end gap-2 border-t pt-4'>
                 <Button
                   type='button'

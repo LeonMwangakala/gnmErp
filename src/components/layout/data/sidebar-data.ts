@@ -286,6 +286,11 @@ export function getSidebarData(user?: AuthUserLike): SidebarData {
               url: '/settings/display',
               icon: Monitor,
             },
+            {
+              title: 'Exchange Rates',
+              url: '/settings/exchange-rates',
+              icon: DollarSign,
+            },
           ],
         },
         {

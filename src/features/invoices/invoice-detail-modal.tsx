@@ -26,6 +26,8 @@ import {
 import { invoiceApi } from '@/lib/api'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 interface InvoiceDetail {
   id: number
@@ -143,6 +145,9 @@ export function InvoiceDetailModal({
   const [activeTab, setActiveTab] = useState('overview')
   const [totalPaidFormatted, setTotalPaidFormatted] = useState('0.00')
   const [totalCreditNoteFormatted, setTotalCreditNoteFormatted] = useState('0.00')
+  const [discountAmount, setDiscountAmount] = useState('')
+  const [discountDetails, setDiscountDetails] = useState('')
+  const [isSyncingDiscount, setIsSyncingDiscount] = useState(false)
 
   useEffect(() => {
     if (open && invoiceId) {
@@ -156,6 +161,8 @@ export function InvoiceDetailModal({
       setContainers([])
       setTotalPaidFormatted('0.00')
       setTotalCreditNoteFormatted('0.00')
+      setDiscountAmount('')
+      setDiscountDetails('')
     }
   }, [open, invoiceId])
 
@@ -183,11 +190,36 @@ export function InvoiceDetailModal({
       setIsLoading(true)
       const data = await invoiceApi.getInvoice(invoiceId)
       setInvoice(data)
+      const discount = Number(data?.totals?.discount || 0)
+      setDiscountAmount(discount > 0 && Number.isFinite(discount) ? discount.toFixed(2) : '')
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to load invoice')
       onOpenChange(false)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleSyncDiscountToCmts = async () => {
+    if (!invoice) return
+    const amount = Number(discountAmount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Enter a valid discount amount greater than 0.')
+      return
+    }
+    try {
+      setIsSyncingDiscount(true)
+      const response = await invoiceApi.syncDiscountToCmts(invoice.id, amount, discountDetails)
+      if (response?.status === 200) {
+        toast.success(response?.message || 'Discount synced to CMTS successfully.')
+        await fetchInvoice()
+      } else {
+        toast.error(response?.message || 'Failed to sync discount to CMTS.')
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to sync discount to CMTS.')
+    } finally {
+      setIsSyncingDiscount(false)
     }
   }
 
@@ -426,6 +458,39 @@ export function InvoiceDetailModal({
                     <div className='flex justify-between'>
                       <span className='text-muted-foreground'>Discount:</span>
                       <span className='font-medium'>{invoice.totals.discount_formatted}</span>
+                    </div>
+                    <div className='grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t'>
+                      <div>
+                        <p className='text-xs text-muted-foreground mb-1'>Discount Amount (CMTS)</p>
+                        <Input
+                          type='number'
+                          min='0'
+                          step='0.01'
+                          value={discountAmount}
+                          onChange={(e) => setDiscountAmount(e.target.value)}
+                          disabled={isSyncingDiscount}
+                          placeholder='0.00'
+                        />
+                      </div>
+                      <div className='md:col-span-2'>
+                        <p className='text-xs text-muted-foreground mb-1'>Details (optional)</p>
+                        <Input
+                          value={discountDetails}
+                          onChange={(e) => setDiscountDetails(e.target.value)}
+                          placeholder='Discount reason/details'
+                          disabled={isSyncingDiscount}
+                        />
+                      </div>
+                    </div>
+                    <div className='flex justify-end'>
+                      <Button
+                        type='button'
+                        size='sm'
+                        onClick={() => void handleSyncDiscountToCmts()}
+                        disabled={isSyncingDiscount}
+                      >
+                        {isSyncingDiscount ? 'Syncing...' : 'Sync Discount to CMTS'}
+                      </Button>
                     </div>
                     <div className='flex justify-between border-t pt-2'>
                       <span className='font-semibold'>Total:</span>

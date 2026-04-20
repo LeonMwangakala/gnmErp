@@ -1,6 +1,8 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { mapShipperFromApi, type Shipper } from '@/features/customs/shippers-storage'
+import { mapVesselFromApi, type Vessel } from '@/features/customs/vessels-storage'
 
 // Get API base URL from environment variable or use default
 const API_BASE_URL =
@@ -162,6 +164,40 @@ export const userApi = {
   },
 }
 
+export type CreateCustomerPayload = {
+  name: string
+  contact: string
+  email: string
+  short_name: string
+  customer_number?: string
+  tax_number?: string
+  vrn?: string
+  billing_name?: string
+  billing_phone?: string
+  billing_address?: string
+  billing_city?: string
+  billing_state?: string
+  billing_country?: string
+  billing_zip?: string
+  shipping_name?: string
+  shipping_phone?: string
+  shipping_address?: string
+  shipping_city?: string
+  shipping_state?: string
+  shipping_country?: string
+  shipping_zip?: string
+}
+
+export type CreateCustomerResponseData = {
+  id: number
+  customer_id?: number
+  customer_number?: string
+  name?: string
+  email?: string
+  contact?: string
+  short_name?: string
+}
+
 export const customerApi = {
   getCustomers: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
     const response = await api.get('/customers', { params })
@@ -200,6 +236,32 @@ export const customerApi = {
       params: { search, limit },
     })
     return response.data.data || []
+  },
+
+  /**
+   * Creates a customer (same handler as legacy POST /customer/create).
+   * Backend may return HTTP 200 with JSON status 422/403 for validation or permission errors.
+   */
+  createCustomer: async (
+    payload: CreateCustomerPayload
+  ): Promise<
+    | { ok: true; data: CreateCustomerResponseData }
+    | { ok: false; message: string; errors?: unknown }
+  > => {
+    const response = await api.post('/customers', payload)
+    const body = response.data as {
+      status?: number
+      message?: string
+      data?: CreateCustomerResponseData | Record<string, unknown>
+    }
+    if (body?.status === 200 && body.data && typeof body.data === 'object' && 'id' in body.data) {
+      return { ok: true, data: body.data as CreateCustomerResponseData }
+    }
+    return {
+      ok: false,
+      message: body?.message || 'Failed to create customer',
+      errors: body?.data,
+    }
   },
 }
 
@@ -243,13 +305,9 @@ export const invoiceApi = {
         ...(params.container_no?.trim() ? { container_no: params.container_no.trim() } : {}),
       },
     })
-    const body = response.data as {
-      status?: number
-      message?: string
-      data?: PostedContainersReportData
-    }
+    const body = response.data as { status?: number; message?: string; data?: unknown }
     if (body?.status === 200 && body.data) {
-      return { ok: true, data: body.data }
+      return { ok: true, data: normalizePostedContainersReportData(body.data) }
     }
     return { ok: false, message: body?.message || 'Failed to load report' }
   },
@@ -342,6 +400,13 @@ export const invoiceApi = {
     const response = await externalApi.post(`${CMTS_BILLING_API_BASE}/sync-invoice-to-erp`, {
       invoice_no: invoiceNo.trim(),
       force,
+    })
+    return response.data
+  },
+  syncDiscountToCmts: async (invoiceId: number, amount: number, details?: string) => {
+    const response = await api.post(`/invoices/${invoiceId}/sync-discount-cmts`, {
+      amount,
+      details: details?.trim() || undefined,
     })
     return response.data
   },
@@ -441,6 +506,87 @@ export interface PostedContainersReportData {
   summary: { row_count: number }
 }
 
+export interface CompanyCurrencyRow {
+  currencyId: number
+  currencyNumber: string
+  currencyCode: string
+  currencyName: string
+  currencySymbol: string
+  exchangeRate: number | null
+  base: boolean
+  position: string
+  decimalNumber: number
+  decimalSeparator: string
+  thousandSeparator: string
+  updatedAt: string | null
+}
+
+export type VesselVoyage = {
+  id: number
+  status: 'ACTIVE' | 'INACTIVE'
+  vesselId: number | null
+  vesselName: string
+  voyage: string
+  arrivalDate: string
+  berthingDate: string
+  carryingDate: string
+  documentDeadline: string
+  paymentCutOff: string
+  manifestReadyTraDate: string
+  manifestReadyInvoiceDate: string
+  portOperator: string
+  createdAt: string
+}
+
+function mapVesselVoyageFromApi(row: Record<string, unknown>): VesselVoyage {
+  return {
+    id: Number(row.id) || 0,
+    status: row.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+    vesselId:
+      row.vesselId === null || row.vesselId === undefined || row.vesselId === ''
+        ? null
+        : Number(row.vesselId) || null,
+    vesselName: String(row.vesselName ?? ''),
+    voyage: String(row.voyage ?? ''),
+    arrivalDate: String(row.arrivalDate ?? ''),
+    berthingDate: String(row.berthingDate ?? ''),
+    carryingDate: String(row.carryingDate ?? ''),
+    documentDeadline: String(row.documentDeadline ?? ''),
+    paymentCutOff: String(row.paymentCutOff ?? ''),
+    manifestReadyTraDate: String(row.manifestReadyTraDate ?? ''),
+    manifestReadyInvoiceDate: String(row.manifestReadyInvoiceDate ?? ''),
+    portOperator: String(row.portOperator ?? ''),
+    createdAt: typeof row.createdAt === 'string' ? row.createdAt : new Date().toISOString(),
+  }
+}
+
+function normalizePostedContainersReportData(data: unknown): PostedContainersReportData {
+  const src = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+  const rawRows = Array.isArray(src.rows) ? src.rows : []
+  const rows: PostedContainersReportRow[] = rawRows.map((item, index) => {
+    const r = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+    const idNum = Number(r.id)
+    return {
+      id: Number.isFinite(idNum) && idNum > 0 ? idNum : index + 1,
+      container_no: String(r.container_no ?? r.containerNo ?? '').trim(),
+      invoice_number: String(r.invoice_number ?? r.invoice_no ?? r.invoiceNumber ?? '').trim(),
+      customer_name: String(r.customer_name ?? r.customer ?? '').trim(),
+      posted_at: String(r.posted_at ?? r.postedAt ?? '').trim(),
+      posted_at_raw:
+        r.posted_at_raw == null ? null : String(r.posted_at_raw ?? r.postedAtRaw ?? '').trim(),
+      posted_by_name: String(r.posted_by_name ?? r.posted_by ?? r.postedBy ?? '').trim(),
+    }
+  })
+  const rowCount = Number((src.summary as { row_count?: unknown } | undefined)?.row_count)
+  return {
+    date_from: String(src.date_from ?? ''),
+    date_to: String(src.date_to ?? ''),
+    container_no_filter: String(src.container_no_filter ?? src.container_no ?? ''),
+    rows,
+    summary: { row_count: Number.isFinite(rowCount) ? rowCount : rows.length },
+  }
+}
+
 export const paymentApi = {
   getInvoicePaymentsReport: async (params: {
     date_from: string
@@ -519,6 +665,43 @@ export const paymentApi = {
       params: { search, limit, usage },
     })
     return response.data.data || []
+  },
+}
+
+function mapCompanyCurrencyRow(row: Record<string, unknown>): CompanyCurrencyRow {
+  return {
+    currencyId: Number(row.currencyId) || 0,
+    currencyNumber: String(row.currencyNumber ?? ''),
+    currencyCode: String(row.currencyCode ?? ''),
+    currencyName: String(row.currencyName ?? ''),
+    currencySymbol: String(row.currencySymbol ?? ''),
+    exchangeRate:
+      row.exchangeRate === null || row.exchangeRate === undefined || row.exchangeRate === ''
+        ? null
+        : Number(row.exchangeRate),
+    base: Boolean(row.base),
+    position: String(row.position ?? ''),
+    decimalNumber: Number(row.decimalNumber) || 0,
+    decimalSeparator: String(row.decimalSeparator ?? ''),
+    thousandSeparator: String(row.thousandSeparator ?? ''),
+    updatedAt: row.updatedAt ? String(row.updatedAt) : null,
+  }
+}
+
+export const companyCurrencyApi = {
+  list: async (): Promise<CompanyCurrencyRow[]> => {
+    const response = await api.get('/company-currencies')
+    const raw = (response.data?.data || []) as Record<string, unknown>[]
+    return raw.map((row) => mapCompanyCurrencyRow(row))
+  },
+  updateExchangeRate: async (
+    currencyId: number,
+    exchangeRate: number
+  ): Promise<CompanyCurrencyRow> => {
+    const response = await api.put(`/company-currencies/${currencyId}/exchange-rate`, {
+      exchangeRate,
+    })
+    return mapCompanyCurrencyRow((response.data?.data || {}) as Record<string, unknown>)
   },
 }
 
@@ -977,7 +1160,237 @@ export type CustomsJobFormOptions = {
   type_of_cargo: string[]
 }
 
+export type SaveShipperPayload = {
+  name: string
+  address1?: string
+  address2?: string
+  address3?: string
+  city?: string
+  country?: string
+  email?: string
+  contactName?: string
+  designation?: string
+  telNo?: string
+  extNo?: string
+  faxNo?: string
+  contactEmail?: string
+  mobile?: string
+  ieCode?: string
+}
+
+export const customsShipperApi = {
+  list: async (params?: {
+    search?: string
+    per_page?: number
+    page?: number
+  }): Promise<{
+    data: Shipper[]
+    pagination: PaginationMeta
+  }> => {
+    const response = await api.get('/customs/shippers', { params })
+    const raw = (response.data?.data || []) as Record<string, unknown>[]
+    return {
+      data: raw.map((row) => mapShipperFromApi(row)),
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 50,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+
+  get: async (id: number): Promise<Shipper> => {
+    const response = await api.get(`/customs/shippers/${id}`)
+    return mapShipperFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  create: async (payload: SaveShipperPayload): Promise<Shipper> => {
+    const response = await api.post('/customs/shippers', payload)
+    return mapShipperFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  update: async (id: number, payload: SaveShipperPayload): Promise<Shipper> => {
+    const response = await api.put(`/customs/shippers/${id}`, payload)
+    return mapShipperFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/customs/shippers/${id}`)
+  },
+
+  syncVesselShipperLinks: async (
+    vessels: Array<{ external_id: string; shipper_ids: number[] }>
+  ): Promise<void> => {
+    await api.post('/customs/vessel-shipper-links/sync', { vessels })
+  },
+}
+
+export type CreateVesselPayload = {
+  vesselName: string
+  imo?: string | null
+  mmsi?: string | null
+  built?: number | null
+  grossTonnage?: number | null
+  deadweight?: number | null
+  size?: string | null
+  image?: File | null
+}
+
+export const customsVesselApi = {
+  list: async (params?: {
+    search?: string
+    per_page?: number
+    page?: number
+  }): Promise<{
+    data: Vessel[]
+    pagination: PaginationMeta
+  }> => {
+    const response = await api.get('/customs/vessels', { params })
+    const raw = (response.data?.data || []) as Record<string, unknown>[]
+    return {
+      data: raw.map((row) => mapVesselFromApi(row)),
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 100,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+
+  create: async (payload: CreateVesselPayload): Promise<Vessel> => {
+    const imageFile = payload.image instanceof File ? payload.image : null
+    if (imageFile) {
+      const fd = new FormData()
+      fd.append('vesselName', payload.vesselName)
+      if (payload.imo) fd.append('imo', payload.imo)
+      if (payload.mmsi) fd.append('mmsi', payload.mmsi)
+      if (payload.built != null && Number.isFinite(payload.built)) {
+        fd.append('built', String(payload.built))
+      }
+      if (payload.grossTonnage != null && Number.isFinite(payload.grossTonnage)) {
+        fd.append('grossTonnage', String(payload.grossTonnage))
+      }
+      if (payload.deadweight != null && Number.isFinite(payload.deadweight)) {
+        fd.append('deadweight', String(payload.deadweight))
+      }
+      if (payload.size) fd.append('size', payload.size)
+      fd.append('image', imageFile)
+      const response = await api.post('/customs/vessels', fd, {
+        transformRequest: [
+          (data, headers) => {
+            if (data instanceof FormData) {
+              delete headers['Content-Type']
+            }
+            return data
+          },
+        ],
+      })
+      return mapVesselFromApi((response.data?.data || {}) as Record<string, unknown>)
+    }
+
+    const body: Record<string, unknown> = { vesselName: payload.vesselName }
+    if (payload.imo) body.imo = payload.imo
+    if (payload.mmsi) body.mmsi = payload.mmsi
+    if (payload.built != null && Number.isFinite(payload.built)) body.built = payload.built
+    if (payload.grossTonnage != null && Number.isFinite(payload.grossTonnage)) {
+      body.grossTonnage = payload.grossTonnage
+    }
+    if (payload.deadweight != null && Number.isFinite(payload.deadweight)) {
+      body.deadweight = payload.deadweight
+    }
+    if (payload.size) body.size = payload.size
+
+    const response = await api.post('/customs/vessels', body)
+    return mapVesselFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  update: async (id: number, payload: CreateVesselPayload): Promise<Vessel> => {
+    const imageFile = payload.image instanceof File ? payload.image : null
+    if (imageFile) {
+      const fd = new FormData()
+      fd.append('vesselName', payload.vesselName)
+      if (payload.imo) fd.append('imo', payload.imo)
+      if (payload.mmsi) fd.append('mmsi', payload.mmsi)
+      if (payload.built != null && Number.isFinite(payload.built)) {
+        fd.append('built', String(payload.built))
+      }
+      if (payload.grossTonnage != null && Number.isFinite(payload.grossTonnage)) {
+        fd.append('grossTonnage', String(payload.grossTonnage))
+      }
+      if (payload.deadweight != null && Number.isFinite(payload.deadweight)) {
+        fd.append('deadweight', String(payload.deadweight))
+      }
+      if (payload.size) fd.append('size', payload.size)
+      fd.append('image', imageFile)
+      const response = await api.put(`/customs/vessels/${id}`, fd, {
+        transformRequest: [
+          (data, headers) => {
+            if (data instanceof FormData) {
+              delete headers['Content-Type']
+            }
+            return data
+          },
+        ],
+      })
+      return mapVesselFromApi((response.data?.data || {}) as Record<string, unknown>)
+    }
+
+    const body: Record<string, unknown> = { vesselName: payload.vesselName }
+    if (payload.imo) body.imo = payload.imo
+    if (payload.mmsi) body.mmsi = payload.mmsi
+    if (payload.built != null && Number.isFinite(payload.built)) body.built = payload.built
+    if (payload.grossTonnage != null && Number.isFinite(payload.grossTonnage)) {
+      body.grossTonnage = payload.grossTonnage
+    }
+    if (payload.deadweight != null && Number.isFinite(payload.deadweight)) {
+      body.deadweight = payload.deadweight
+    }
+    if (payload.size) body.size = payload.size
+
+    const response = await api.put(`/customs/vessels/${id}`, body)
+    return mapVesselFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/customs/vessels/${id}`)
+  },
+}
+
 export const customsJobApi = {
+  listJobs: async (params?: {
+    search?: string
+    per_page?: number
+    page?: number
+  }): Promise<{
+    data: any[]
+    pagination: {
+      current_page: number
+      last_page: number
+      per_page: number
+      total: number
+    }
+  }> => {
+    const response = await api.get('/customs/jobs', { params })
+    return {
+      data: response.data?.data || [],
+      pagination: response.data?.pagination || {
+        current_page: 1,
+        last_page: 1,
+        per_page: params?.per_page || 50,
+        total: Array.isArray(response.data?.data) ? response.data.data.length : 0,
+      },
+    }
+  },
+  getJob: async (id: number): Promise<any> => {
+    const response = await api.get(`/customs/jobs/${id}`)
+    return response.data?.data || null
+  },
   getFormOptions: async (): Promise<CustomsJobFormOptions> => {
     const response = await api.get('/customs/jobs/form-options')
     return (
@@ -991,6 +1404,7 @@ export const customsJobApi = {
   createJob: async (payload: {
     customer_name: string
     shipment_type: string
+    shipper_id?: number | null
     mbl_no?: string | null
     hbl_no?: string | null
     invoice_no?: string | null
@@ -999,6 +1413,27 @@ export const customsJobApi = {
     meta?: Record<string, unknown> | null
   }): Promise<any> => {
     const response = await api.post('/customs/jobs', payload)
+    return response.data
+  },
+  updateJob: async (
+    id: number,
+    payload: {
+      customer_name: string
+      shipment_type: string
+      shipper_id?: number | null
+      mbl_no?: string | null
+      hbl_no?: string | null
+      invoice_no?: string | null
+      date_of_receipt?: string | null
+      status?: string | null
+      meta?: Record<string, unknown> | null
+    }
+  ): Promise<any> => {
+    const response = await api.put(`/customs/jobs/${id}`, payload)
+    return response.data
+  },
+  deleteJob: async (id: number): Promise<any> => {
+    const response = await api.delete(`/customs/jobs/${id}`)
     return response.data
   },
   uploadJobDocument: async (
@@ -1026,6 +1461,52 @@ export const customsJobApi = {
   deleteJobDocument: async (jobId: number, documentId: number): Promise<any> => {
     const response = await api.delete(`/customs/jobs/${jobId}/documents/${documentId}`)
     return response.data
+  },
+}
+
+export const customsVesselVoyageApi = {
+  list: async (params?: { search?: string }): Promise<VesselVoyage[]> => {
+    const response = await api.get('/customs/vessel-voyages', { params })
+    const raw = (response.data?.data || []) as Record<string, unknown>[]
+    return raw.map((row) => mapVesselVoyageFromApi(row))
+  },
+  create: async (payload: {
+    vesselId: number
+    voyage: string
+    arrivalDate?: string | null
+    berthingDate?: string | null
+    carryingDate?: string | null
+    documentDeadline?: string | null
+    paymentCutOff?: string | null
+    manifestReadyTraDate?: string | null
+    manifestReadyInvoiceDate?: string | null
+    portOperator?: string | null
+    status?: 'ACTIVE' | 'INACTIVE'
+  }): Promise<VesselVoyage> => {
+    const response = await api.post('/customs/vessel-voyages', payload)
+    return mapVesselVoyageFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+  update: async (
+    id: number,
+    payload: {
+      vesselId: number
+      voyage: string
+      arrivalDate?: string | null
+      berthingDate?: string | null
+      carryingDate?: string | null
+      documentDeadline?: string | null
+      paymentCutOff?: string | null
+      manifestReadyTraDate?: string | null
+      manifestReadyInvoiceDate?: string | null
+      portOperator?: string | null
+      status?: 'ACTIVE' | 'INACTIVE'
+    }
+  ): Promise<VesselVoyage> => {
+    const response = await api.put(`/customs/vessel-voyages/${id}`, payload)
+    return mapVesselVoyageFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/customs/vessel-voyages/${id}`)
   },
 }
 
