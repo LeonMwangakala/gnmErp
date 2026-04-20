@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Eye,
   Download,
@@ -39,13 +39,16 @@ import {
 } from '@/components/ui/select'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { invoiceApi, paymentApi, PaginationMeta } from '@/lib/api'
+import { invoiceApi, paymentApi, PaginationMeta, userApi, type StaffUserOption } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth-store'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { AddPaymentModal } from './add-payment-modal'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -80,6 +83,7 @@ export interface Payment {
   currency_code?: string | null
   currency_symbol?: string | null
   cmts_sync_status?: 'pending' | 'success' | 'failed' | string
+  created_by?: number | null
 }
 
 function paymentSlipLogoUrl(): string {
@@ -94,6 +98,20 @@ function escapeHtml(value: string | number | null | undefined): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+function cashierSummaryLabel(
+  createdBy: number | null | undefined,
+  staff: StaffUserOption[]
+): string {
+  if (createdBy == null || createdBy === 0) {
+    return 'Not set'
+  }
+  const match = staff.find((u) => u.id === createdBy)
+  if (match) {
+    return `${match.name} (${match.email}) · id ${match.id}`
+  }
+  return `User id ${createdBy}`
 }
 
 function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): string {
@@ -407,6 +425,8 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
 }
 
 export function Payments() {
+  const user = useAuthStore((s) => s.auth.user)
+  const isCreatorUser = (user?.type || '').toLowerCase() === 'company'
   const [payments, setPayments] = useState<Payment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [exportDate, setExportDate] = useState<string>(() => {
@@ -418,6 +438,7 @@ export function Payments() {
   const [isExporting, setIsExporting] = useState(false)
   const [isExportModalOpen, setIsExportModalOpen] = useState(false)
   const [isFixing, setIsFixing] = useState(false)
+  const [isUpdatingCreatedByPaymentId, setIsUpdatingCreatedByPaymentId] = useState<number | null>(null)
   const [isSyncingPaymentId, setIsSyncingPaymentId] = useState<number | null>(null)
   const [isDeletingPaymentId, setIsDeletingPaymentId] = useState<number | null>(null)
   const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null)
@@ -443,6 +464,20 @@ export function Payments() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [searchInput, setSearchInput] = useState('')
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [cashierModalPayment, setCashierModalPayment] = useState<Payment | null>(null)
+  /** Finance department employees only — options for "New cashier" */
+  const [cashierFinanceStaff, setCashierFinanceStaff] = useState<StaffUserOption[]>([])
+  /** Extra users (e.g. past cashiers) to resolve names for "Current cashier" */
+  const [cashierLookupExtras, setCashierLookupExtras] = useState<StaffUserOption[]>([])
+  const [cashierStaffLoading, setCashierStaffLoading] = useState(false)
+  const [newCashierUserId, setNewCashierUserId] = useState<string | undefined>(undefined)
+
+  const cashierLookupMerged = useMemo(() => {
+    const byId = new Map<number, StaffUserOption>()
+    for (const u of cashierFinanceStaff) byId.set(u.id, u)
+    for (const u of cashierLookupExtras) byId.set(u.id, u)
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }, [cashierFinanceStaff, cashierLookupExtras])
 
   // Debounce search
   useEffect(() => {
@@ -461,6 +496,45 @@ export function Payments() {
     fetchPayments()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.current_page, pagination.per_page, sortBy, sortOrder, search])
+
+  useEffect(() => {
+    if (!cashierModalPayment) {
+      setCashierFinanceStaff([])
+      setCashierLookupExtras([])
+      setNewCashierUserId(undefined)
+      setCashierStaffLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setCashierStaffLoading(true)
+    setNewCashierUserId(undefined)
+
+    Promise.all([
+      userApi.getFinanceStaffUsersForCashier(),
+      userApi.getStaffUsersForReports(),
+    ])
+      .then(([financeList, reportStaff]) => {
+        if (!cancelled) {
+          setCashierFinanceStaff(financeList)
+          setCashierLookupExtras(reportStaff)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          toast.error('Failed to load finance staff')
+          setCashierFinanceStaff([])
+          setCashierLookupExtras([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCashierStaffLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [cashierModalPayment?.id])
 
   const fetchPayments = async (
     page?: number,
@@ -664,6 +738,44 @@ export function Payments() {
     }
   }
 
+  const handleSubmitCashierUpdate = async () => {
+    if (!isCreatorUser || !cashierModalPayment) return
+    const toCreatedBy = Number(newCashierUserId)
+    if (!Number.isFinite(toCreatedBy) || toCreatedBy <= 0) {
+      toast.error('Select the new cashier.')
+      return
+    }
+
+    const fromId = cashierModalPayment.created_by
+    const payload: {
+      to_created_by: number
+      payment_ids: number[]
+      from_created_by?: number
+    } = {
+      to_created_by: toCreatedBy,
+      payment_ids: [cashierModalPayment.id],
+    }
+    if (typeof fromId === 'number' && fromId > 0) {
+      payload.from_created_by = fromId
+    }
+
+    try {
+      setIsUpdatingCreatedByPaymentId(cashierModalPayment.id)
+      const response = await paymentApi.updateInvoicePaymentCreatedBy(payload)
+      if (response?.status === 200) {
+        toast.success(response?.message || 'Cashier updated.')
+        setCashierModalPayment(null)
+        fetchPayments(pagination.current_page, pagination.per_page, search)
+      } else {
+        toast.error(response?.message || 'Failed to update cashier.')
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to update cashier.')
+    } finally {
+      setIsUpdatingCreatedByPaymentId(null)
+    }
+  }
+
   return (
     <>
       <Header showSidebarTrigger={false}>
@@ -805,6 +917,22 @@ export function Payments() {
                             >
                               <Wrench className='h-4 w-4' />
                             </Button>
+                            {isCreatorUser && (
+                              <Button
+                                variant='ghost'
+                                size='sm'
+                                className='h-8 px-2 text-[11px]'
+                                onClick={() => setCashierModalPayment(payment)}
+                                title='Update cashier'
+                                disabled={isUpdatingCreatedByPaymentId === payment.id}
+                              >
+                                {isUpdatingCreatedByPaymentId === payment.id ? (
+                                  <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                                ) : (
+                                  'Cashier'
+                                )}
+                              </Button>
+                            )}
                             <Button
                               variant='ghost'
                               size='sm'
@@ -974,6 +1102,106 @@ export function Payments() {
         onOpenChange={setIsConsignmentModalOpen}
         invoiceNo={consignmentInvoiceNo}
       />
+
+      <Dialog
+        open={Boolean(cashierModalPayment)}
+        onOpenChange={(open) => {
+          if (!open && isUpdatingCreatedByPaymentId === null) {
+            setCashierModalPayment(null)
+          }
+        }}
+      >
+        <DialogContent className='w-[92vw] max-w-md'>
+          <DialogHeader>
+            <DialogTitle>Update cashier</DialogTitle>
+            <DialogDescription>
+              Reassign who is recorded as the cashier for this payment.
+              {cashierModalPayment ? (
+                <>
+                  {' '}
+                  Payment #{cashierModalPayment.id}, invoice{' '}
+                  {cashierModalPayment.invoice_number}.
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='space-y-4'>
+            <div className='space-y-2'>
+              <p className='text-sm font-medium'>Current cashier</p>
+              {cashierStaffLoading ? (
+                <div className='flex items-center gap-2 text-sm text-muted-foreground'>
+                  <Loader2 className='h-4 w-4 animate-spin' />
+                  Loading…
+                </div>
+              ) : (
+                <p className='rounded-md border bg-muted/40 px-3 py-2 text-sm'>
+                  {cashierModalPayment
+                    ? cashierSummaryLabel(cashierModalPayment.created_by, cashierLookupMerged)
+                    : '—'}
+                </p>
+              )}
+            </div>
+
+            <div className='space-y-2'>
+              <label htmlFor='new-cashier-select' className='text-sm font-medium'>
+                New cashier (Finance)
+              </label>
+              <Select
+                value={newCashierUserId}
+                onValueChange={setNewCashierUserId}
+                disabled={cashierStaffLoading || cashierFinanceStaff.length === 0}
+              >
+                <SelectTrigger id='new-cashier-select' className='w-full'>
+                  <SelectValue placeholder='Select finance team member' />
+                </SelectTrigger>
+                <SelectContent>
+                  {cashierFinanceStaff.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.name} ({u.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!cashierStaffLoading && cashierFinanceStaff.length === 0 ? (
+                <p className='text-xs text-muted-foreground'>
+                  No finance employees with linked user accounts. Link users to employees whose
+                  department name includes the word Finance.
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setCashierModalPayment(null)}
+              disabled={isUpdatingCreatedByPaymentId !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              type='button'
+              onClick={() => void handleSubmitCashierUpdate()}
+              disabled={
+                cashierStaffLoading ||
+                !newCashierUserId ||
+                isUpdatingCreatedByPaymentId !== null
+              }
+            >
+              {isUpdatingCreatedByPaymentId !== null ? (
+                <>
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  Saving…
+                </>
+              ) : (
+                'Save'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={isViewModalOpen}

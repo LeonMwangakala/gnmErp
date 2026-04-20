@@ -162,6 +162,14 @@ export const userApi = {
     }
     return response.data.data || []
   },
+  /** Employees in a Finance department (linked users), for payment cashier reassignment */
+  getFinanceStaffUsersForCashier: async (): Promise<StaffUserOption[]> => {
+    const response = await api.get('/users/finance-staff-for-cashier')
+    if (response.data?.status === 403) {
+      return []
+    }
+    return response.data.data || []
+  },
 }
 
 export type CreateCustomerPayload = {
@@ -636,6 +644,15 @@ export const paymentApi = {
     const response = await api.post('/payments/fix-invoice-payments', {
       invoice_number: invoiceNumber,
     })
+    return response.data
+  },
+  updateInvoicePaymentCreatedBy: async (payload: {
+    to_created_by: number
+    from_created_by?: number
+    invoice_number?: string
+    payment_ids?: number[]
+  }): Promise<any> => {
+    const response = await api.post('/payments/update-created-by', payload)
     return response.data
   },
   syncPaymentToCmts: async (id: number): Promise<any> => {
