@@ -166,7 +166,7 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Payment receipt — ${inv}</title>
   <style>
-    /* Layout tuned for 80mm thermal paper (e.g. Epson TM-T20III, ~72mm printable width). */
+    /* Layout tuned for 58mm thermal paper (~54mm printable width). */
     * { box-sizing: border-box; }
     html {
       -webkit-print-color-adjust: economy;
@@ -174,16 +174,16 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
     }
     body {
       margin: 0;
-      padding: 10px 6px 14px;
+      padding: 6px 3px 8px;
       font-family: Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
-      font-size: 10pt;
-      line-height: 1.35;
+      font-size: 8.5pt;
+      line-height: 1.25;
       color: #000;
       background: #fff;
     }
     .sheet {
       width: 100%;
-      max-width: 72mm;
+      max-width: 54mm;
       margin: 0 auto;
       border: 1px solid #000;
       padding: 0;
@@ -194,8 +194,8 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
       border-bottom: 1px solid #000;
     }
     .doc-header img {
-      width: 44px;
-      height: 44px;
+      width: 32px;
+      height: 32px;
       object-fit: contain;
       margin: 0 auto 4px;
       display: block;
@@ -204,7 +204,7 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
     }
     .doc-title {
       margin: 0;
-      font-size: 11pt;
+      font-size: 9pt;
       font-weight: 700;
       letter-spacing: 0.02em;
       text-transform: uppercase;
@@ -214,12 +214,12 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
       max-width: 100%;
       table-layout: fixed;
       border-collapse: collapse;
-      font-size: 8.5pt;
+      font-size: 7.5pt;
     }
     .kv-table th,
     .kv-table td {
       border: 1px solid #000;
-      padding: 4px 5px;
+      padding: 3px 3px;
       vertical-align: top;
       text-align: left;
       word-wrap: break-word;
@@ -232,7 +232,7 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
     }
     .amount-row td {
       font-weight: 700;
-      font-size: 10pt;
+      font-size: 8.5pt;
     }
     .amount-row .amt {
       text-align: right;
@@ -240,34 +240,34 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
     }
     .section-head {
       margin: 0;
-      padding: 6px 6px 4px;
-      font-size: 8.5pt;
+      padding: 4px 4px 3px;
+      font-size: 7.5pt;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.04em;
       border-bottom: 1px solid #000;
     }
     .section-body {
-      padding: 6px 4px 8px;
+      padding: 4px 3px 5px;
     }
     .empty-note {
       margin: 0;
-      padding: 8px 6px;
+      padding: 6px 4px;
       border: 1px dashed #000;
-      font-size: 8.5pt;
+      font-size: 7.5pt;
       text-align: center;
       word-wrap: break-word;
     }
     .consignment-card {
-      margin-bottom: 8px;
+      margin-bottom: 5px;
       border: 1px solid #000;
       break-inside: avoid;
       page-break-inside: avoid;
     }
     .consignment-card:last-child { margin-bottom: 0; }
     .consignment-card__head {
-      padding: 4px 5px;
-      font-size: 8pt;
+      padding: 3px 3px;
+      font-size: 7pt;
       font-weight: 700;
       border-bottom: 1px solid #000;
       word-wrap: break-word;
@@ -277,12 +277,12 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
       max-width: 100%;
       table-layout: fixed;
       border-collapse: collapse;
-      font-size: 7.5pt;
+      font-size: 6.8pt;
     }
     .line-table th,
     .line-table td {
       border: 1px solid #000;
-      padding: 3px 4px;
+      padding: 2px 2px;
       vertical-align: top;
       word-wrap: break-word;
       overflow-wrap: anywhere;
@@ -301,12 +301,12 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
     }
     .description-box {
       margin: 0;
-      padding: 6px 6px;
+      padding: 4px 4px;
       border-top: 1px solid #000;
-      font-size: 8.5pt;
+      font-size: 7.2pt;
     }
     .description-box__label {
-      font-size: 7pt;
+      font-size: 6.5pt;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.04em;
@@ -319,57 +319,57 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
     }
     .doc-footer {
       text-align: center;
-      padding: 6px 4px 8px;
+      padding: 4px 3px 5px;
       border-top: 1px solid #000;
-      font-size: 7pt;
+      font-size: 6.5pt;
       color: #000;
     }
     .doc-footer strong {
       display: block;
-      font-size: 8pt;
+      font-size: 7pt;
       margin-bottom: 4px;
     }
     .doc-footer__meta {
       margin: 0 0 3px;
-      font-size: 7pt;
+      font-size: 6.2pt;
       line-height: 1.35;
     }
     .doc-footer__credit {
       display: block;
-      margin-top: 6px;
-      font-size: 7pt;
+      margin-top: 4px;
+      font-size: 6.2pt;
     }
     @page {
-      size: 80mm auto;
+      size: 58mm auto;
       margin: 0;
     }
     @media print {
       html, body {
-        width: 72mm;
-        max-width: 72mm;
+        width: 54mm;
+        max-width: 54mm;
         margin: 0 auto;
-        padding: 1mm 2mm 2mm;
-        font-size: 9pt;
+        padding: 1mm 1mm 1.5mm;
+        font-size: 8pt;
       }
       .sheet {
-        width: 72mm;
-        max-width: 72mm;
+        width: 54mm;
+        max-width: 54mm;
         border: none;
         margin: 0;
       }
       .doc-header img {
-        width: 40px;
-        height: 40px;
+        width: 28px;
+        height: 28px;
         filter: none;
       }
-      .doc-title { font-size: 10pt; }
-      .kv-table { font-size: 8pt; }
+      .doc-title { font-size: 8pt; }
+      .kv-table { font-size: 7pt; }
       .kv-table th,
-      .kv-table td { padding: 3px 4px; }
-      .amount-row td { font-size: 9.5pt; }
-      .line-table { font-size: 7pt; }
+      .kv-table td { padding: 2px 2px; }
+      .amount-row td { font-size: 8pt; }
+      .line-table { font-size: 6.5pt; }
       .line-table th,
-      .line-table td { padding: 2px 3px; }
+      .line-table td { padding: 1px 2px; }
     }
   </style>
 </head>
