@@ -322,6 +322,7 @@ export function CustomsCreateJob() {
   const [loadingJob, setLoadingJob] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null)
   const [selectedFileManager, setSelectedFileManager] = useState<FileManagerOption | null>(null)
+  const [fileManagerSeedOptions, setFileManagerSeedOptions] = useState<FileManagerOption[]>([])
 
   const updateField = <K extends keyof JobForm>(key: K, value: JobForm[K]) => setForm((p) => ({ ...p, [key]: value }))
 
@@ -356,7 +357,7 @@ export function CustomsCreateJob() {
     try {
       const results = await customsJobApi.searchFileManagers(search, 20)
       if (!Array.isArray(results)) return []
-      return results
+      const mapped = results
         .map((row: any) => {
           const id = Number(row.id || 0)
           if (!Number.isFinite(id) || id <= 0) return null
@@ -370,10 +371,47 @@ export function CustomsCreateJob() {
           } as FileManagerOption
         })
         .filter(Boolean) as FileManagerOption[]
+      if (search === '') {
+        setFileManagerSeedOptions(mapped)
+      }
+      if (mapped.length > 0) return mapped
+      if (fileManagerSeedOptions.length === 0) return []
+      const needle = search.toLowerCase()
+      return fileManagerSeedOptions.filter((opt) => {
+        if (!needle) return true
+        return (
+          opt.name.toLowerCase().includes(needle) ||
+          opt.label.toLowerCase().includes(needle) ||
+          (opt.email || '').toLowerCase().includes(needle) ||
+          (opt.department_name || '').toLowerCase().includes(needle)
+        )
+      })
     } catch {
-      return []
+      if (fileManagerSeedOptions.length === 0) return []
+      const needle = search.toLowerCase()
+      return fileManagerSeedOptions.filter((opt) => {
+        if (!needle) return true
+        return (
+          opt.name.toLowerCase().includes(needle) ||
+          opt.label.toLowerCase().includes(needle) ||
+          (opt.email || '').toLowerCase().includes(needle) ||
+          (opt.department_name || '').toLowerCase().includes(needle)
+        )
+      })
     }
   }
+
+  useEffect(() => {
+    let cancelled = false
+    loadFileManagerOptions('').then((options) => {
+      if (!cancelled && options.length > 0) {
+        setFileManagerSeedOptions(options)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -428,6 +466,9 @@ export function CustomsCreateJob() {
     if (!editingJobId || pageMode === 'create') return
     let cancelled = false
     setLoadingJob(true)
+    setForm(initialForm)
+    setSelectedCustomer(null)
+    setSelectedFileManager(null)
     customsJobApi
       .getJob(editingJobId)
       .then((job) => {
@@ -572,12 +613,13 @@ export function CustomsCreateJob() {
 
   useEffect(() => {
     if (!loggedInUser) return
+    if (pageMode !== 'create') return
     setForm((prev) => ({
       ...prev,
       createdBy: loggedInUser.name || prev.createdBy,
       createdById: String(loggedInUser.id || prev.createdById),
     }))
-  }, [loggedInUser?.id, loggedInUser?.name])
+  }, [pageMode, loggedInUser?.id, loggedInUser?.name])
 
   const getFirstActiveVoyageForVesselId = (vesselId: string) => {
     const id = Number(vesselId)
@@ -1393,6 +1435,8 @@ export function CustomsCreateJob() {
               <AsyncSelect<FileManagerOption>
                 value={selectedFileManager}
                 loadOptions={loadFileManagerOptions}
+                defaultOptions={fileManagerSeedOptions}
+                cacheOptions
                 onChange={(option) => {
                   const selected = option || null
                   setSelectedFileManager(selected)
@@ -1402,9 +1446,7 @@ export function CustomsCreateJob() {
                 placeholder='Type staff.'
                 isDisabled={isViewMode}
                 isClearable
-                noOptionsMessage={({ inputValue }) =>
-                  inputValue.length < 2 ? 'Type at least 2 characters' : 'No staff found'
-                }
+                noOptionsMessage={() => 'No staff found'}
                 loadingMessage={() => 'Searching staff...'}
                 className='react-select-container'
                 classNamePrefix='react-select'
