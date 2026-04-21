@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useLocation } from '@tanstack/react-router'
 import AsyncSelect from 'react-select/async'
 import { ChevronDown, ChevronRight, Download, Eye, Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -234,15 +235,40 @@ const initialForm: JobForm = {
 
 export function CustomsCreateJob() {
   const loggedInUser = useAuthStore((s) => s.auth.user)
-  const searchParams =
-    typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-  const pageMode = searchParams?.get('mode') === 'view'
+  const locationHref = useLocation({ select: (l) => l.href })
+  const locationPathname = useLocation({ select: (l) => l.pathname })
+  const searchParams = useMemo(() => {
+    const parsed = new URL(locationHref, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    const direct = new URLSearchParams(parsed.search || '')
+    const hash = parsed.hash || ''
+    const queryIndex = hash.indexOf('?')
+    if (queryIndex === -1) return direct
+    const hashQuery = new URLSearchParams(hash.slice(queryIndex + 1))
+    hashQuery.forEach((value, key) => {
+      if (!direct.has(key)) direct.set(key, value)
+    })
+    return direct
+  }, [locationHref])
+  const pageMode = (searchParams.get('mode') || '').toLowerCase() === 'view'
     ? 'view'
-    : searchParams?.get('mode') === 'update'
+    : (searchParams.get('mode') || '').toLowerCase() === 'update'
       ? 'update'
       : 'create'
-  const editingJobId =
-    searchParams && searchParams.get('id') ? Number(searchParams.get('id')) || null : null
+  const editingJobId = useMemo(() => {
+    const candidates = [
+      searchParams.get('id'),
+      searchParams.get('jobId'),
+      searchParams.get('job_id'),
+    ].filter(Boolean) as string[]
+    for (const raw of candidates) {
+      const n = Number(raw)
+      if (Number.isFinite(n) && n > 0) return n
+    }
+    const pathParts = (locationPathname || '').split('/').filter(Boolean)
+    const pathTail = pathParts.length > 0 ? pathParts[pathParts.length - 1] : ''
+    const pathId = Number(pathTail)
+    return Number.isFinite(pathId) && pathId > 0 ? pathId : null
+  }, [searchParams, locationPathname])
   const isViewMode = pageMode === 'view'
   const [currentJobId, setCurrentJobId] = useState<number | null>(null)
   const [form, setForm] = useState<JobForm>(initialForm)
