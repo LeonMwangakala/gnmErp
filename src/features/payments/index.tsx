@@ -642,6 +642,102 @@ export function Payments() {
     win.print()
   }
 
+  const handleDownloadReceiptPdf = async () => {
+    const currentPayment = viewPayment
+    if (!currentPayment) {
+      toast.info('No receipt available')
+      return
+    }
+
+    try {
+      const candidates: string[] = []
+      if (currentPayment.receipt_url) {
+        candidates.push(currentPayment.receipt_url)
+      }
+      if (currentPayment.receipt) {
+        const raw = currentPayment.receipt.trim()
+        if (raw) {
+          if (/^https?:\/\//i.test(raw)) {
+            candidates.push(raw)
+          } else {
+            candidates.push(`${window.location.origin}/uploads/payment/${raw}`)
+            candidates.push(`${window.location.origin}/storage/uploads/payment/${raw}`)
+          }
+        }
+      }
+      const uniqueCandidates = [...new Set(candidates)]
+      if (uniqueCandidates.length === 0) {
+        throw new Error('No receipt file path found for this payment')
+      }
+
+      let response: Response | null = null
+      for (const candidate of uniqueCandidates) {
+        try {
+          const r = await fetch(candidate)
+          if (r.ok) {
+            response = r
+            break
+          }
+        } catch {
+          // try next candidate
+        }
+      }
+      if (!response) {
+        throw new Error('Unable to load receipt file from known paths')
+      }
+
+      const blob = await response.blob()
+      const blobType = (blob.type || '').toLowerCase()
+      const baseName = `receipt-payment-${currentPayment.id || 'file'}`
+
+      // If backend already serves PDF, download it directly.
+      if (blobType.includes('pdf')) {
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${baseName}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        return
+      }
+
+      if (!blobType.startsWith('image/')) {
+        throw new Error('Receipt file is not an image or PDF')
+      }
+
+      const imageUrl = URL.createObjectURL(blob)
+      const imageElement = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => resolve(img)
+        img.onerror = () => reject(new Error('Unable to process receipt image'))
+        img.src = imageUrl
+      })
+
+      const { jsPDF } = await import('jspdf')
+      const orientation = imageElement.width > imageElement.height ? 'landscape' : 'portrait'
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation })
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const margin = 10
+      const maxWidth = pageWidth - margin * 2
+      const maxHeight = pageHeight - margin * 2
+      const scale = Math.min(maxWidth / imageElement.width, maxHeight / imageElement.height)
+      const renderWidth = imageElement.width * scale
+      const renderHeight = imageElement.height * scale
+      const x = (pageWidth - renderWidth) / 2
+      const y = (pageHeight - renderHeight) / 2
+      const imageFormat = blobType.includes('png') ? 'PNG' : 'JPEG'
+
+      pdf.addImage(imageElement, imageFormat, x, y, renderWidth, renderHeight, undefined, 'FAST')
+      pdf.save(`${baseName}.pdf`)
+      URL.revokeObjectURL(imageUrl)
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to download receipt as PDF')
+    }
+  }
+
   const getCmtsSyncBadgeVariant = (status?: string): 'default' | 'destructive' | 'secondary' => {
     const normalized = (status || 'pending').toLowerCase()
     if (normalized === 'success') return 'default'
@@ -1298,6 +1394,15 @@ export function Payments() {
             ) : null}
           </div>
           <div className='flex shrink-0 justify-end gap-2 border-t px-6 py-4'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => void handleDownloadReceiptPdf()}
+              disabled={!viewPayment}
+            >
+              <Download className='mr-2 h-4 w-4' />
+              Receipt PDF
+            </Button>
             <Button type='button' variant='outline' onClick={() => setIsSlipModalOpen(false)}>
               Close
             </Button>
