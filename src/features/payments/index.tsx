@@ -650,89 +650,46 @@ export function Payments() {
     }
 
     try {
-      const candidates: string[] = []
-      if (currentPayment.receipt_url) {
-        candidates.push(currentPayment.receipt_url)
-      }
-      if (currentPayment.receipt) {
-        const raw = currentPayment.receipt.trim()
-        if (raw) {
-          if (/^https?:\/\//i.test(raw)) {
-            candidates.push(raw)
-          } else {
-            candidates.push(`${window.location.origin}/uploads/payment/${raw}`)
-            candidates.push(`${window.location.origin}/storage/uploads/payment/${raw}`)
-          }
-        }
-      }
-      const uniqueCandidates = [...new Set(candidates)]
-      if (uniqueCandidates.length === 0) {
-        throw new Error('No receipt file path found for this payment')
-      }
-
-      let response: Response | null = null
-      for (const candidate of uniqueCandidates) {
-        try {
-          const r = await fetch(candidate)
-          if (r.ok) {
-            response = r
-            break
-          }
-        } catch {
-          // try next candidate
-        }
-      }
-      if (!response) {
-        throw new Error('Unable to load receipt file from known paths')
-      }
-
-      const blob = await response.blob()
-      const blobType = (blob.type || '').toLowerCase()
       const baseName = `receipt-payment-${currentPayment.id || 'file'}`
-
-      // If backend already serves PDF, download it directly.
-      if (blobType.includes('pdf')) {
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `${baseName}.pdf`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-        return
-      }
-
-      if (!blobType.startsWith('image/')) {
-        throw new Error('Receipt file is not an image or PDF')
-      }
-
-      const imageUrl = URL.createObjectURL(blob)
-      const imageElement = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const img = new Image()
-        img.onload = () => resolve(img)
-        img.onerror = () => reject(new Error('Unable to process receipt image'))
-        img.src = imageUrl
-      })
-
       const { jsPDF } = await import('jspdf')
-      const orientation = imageElement.width > imageElement.height ? 'landscape' : 'portrait'
-      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation })
-      const pageWidth = pdf.internal.pageSize.getWidth()
-      const pageHeight = pdf.internal.pageSize.getHeight()
-      const margin = 10
-      const maxWidth = pageWidth - margin * 2
-      const maxHeight = pageHeight - margin * 2
-      const scale = Math.min(maxWidth / imageElement.width, maxHeight / imageElement.height)
-      const renderWidth = imageElement.width * scale
-      const renderHeight = imageElement.height * scale
-      const x = (pageWidth - renderWidth) / 2
-      const y = (pageHeight - renderHeight) / 2
-      const imageFormat = blobType.includes('png') ? 'PNG' : 'JPEG'
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+      let y = 16
+      const left = 14
+      const rightWidth = 182
+      const lineGap = 8
+      const write = (label: string, value: string) => {
+        pdf.setFont('helvetica', 'bold')
+        pdf.text(`${label}:`, left, y)
+        pdf.setFont('helvetica', 'normal')
+        const wrapped = pdf.splitTextToSize(value || '-', rightWidth - 28)
+        pdf.text(wrapped, left + 28, y)
+        y += Math.max(lineGap, wrapped.length * 6)
+      }
 
-      pdf.addImage(imageElement, imageFormat, x, y, renderWidth, renderHeight, undefined, 'FAST')
+      pdf.setFontSize(16)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Payment Receipt', left, y)
+      y += 10
+      pdf.setFontSize(11)
+      pdf.setFont('helvetica', 'normal')
+
+      write('Payment ID', String(currentPayment.id))
+      write('Invoice Number', currentPayment.invoice_number || '-')
+      write('Customer', currentPayment.customer_name || '-')
+      write('Date', currentPayment.date || '-')
+      write('Amount', currentPayment.amount_formatted || '-')
+      write('Account', currentPayment.account_name || '-')
+      write('Reference', currentPayment.reference || '-')
+      write('Description', currentPayment.description || '-')
+      write('Cashier User ID', currentPayment.created_by != null ? String(currentPayment.created_by) : '-')
+
+      if (currentPayment.receipt_url) {
+        write('Original Receipt URL', currentPayment.receipt_url)
+      } else if (currentPayment.receipt) {
+        write('Receipt File', currentPayment.receipt)
+      }
+
       pdf.save(`${baseName}.pdf`)
-      URL.revokeObjectURL(imageUrl)
     } catch (error: any) {
       toast.error(error?.message || 'Failed to download receipt as PDF')
     }

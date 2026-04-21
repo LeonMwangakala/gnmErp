@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import AsyncSelect from 'react-select/async'
 import { ChevronDown, ChevronRight, Download, Eye, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
@@ -44,7 +45,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { customsJobApi, customsShipperApi, customsVesselApi } from '@/lib/api'
+import { customerApi, customsJobApi, customsShipperApi, customsVesselApi } from '@/lib/api'
 import { customsVesselVoyageApi } from '@/lib/api'
 import { getStoredVessels, saveStoredVessels, type Vessel } from './vessels-storage'
 import { type Shipper } from './shippers-storage'
@@ -60,6 +61,7 @@ type JobForm = {
   hblNo: string
   invoiceNo: string
   customerName: string
+  customerId: string
   customerRefNo: string
   dateOfReceipt: string
   cargoType: string
@@ -143,12 +145,22 @@ type CommodityRow = {
   itemInvPrice: string
 }
 
+type CustomerOption = {
+  value: string
+  label: string
+  id: number
+  name: string
+  email?: string
+  customer_number?: string
+}
+
 const initialForm: JobForm = {
   shipmentType: 'SEA',
   mblNo: '',
   hblNo: '',
   invoiceNo: '',
   customerName: '',
+  customerId: '',
   customerRefNo: '',
   dateOfReceipt: '',
   cargoType: 'FCL',
@@ -293,8 +305,35 @@ export function CustomsCreateJob() {
   const [shipperOptions, setShipperOptions] = useState<Shipper[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [loadingJob, setLoadingJob] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null)
 
   const updateField = <K extends keyof JobForm>(key: K, value: JobForm[K]) => setForm((p) => ({ ...p, [key]: value }))
+
+  const loadCustomerOptions = async (inputValue: string): Promise<CustomerOption[]> => {
+    const search = inputValue.trim()
+    if (search.length < 2) return []
+    try {
+      const results = await customerApi.searchCustomers(search, 20)
+      if (!Array.isArray(results)) return []
+      return results
+        .map((row: any) => {
+          const id = Number(row.id ?? row.customer_id ?? 0)
+          if (!Number.isFinite(id) || id <= 0) return null
+          const name = String(row.name || '')
+          return {
+            value: String(id),
+            label: `${name}${row.customer_number ? ` (${row.customer_number})` : ''}`,
+            id,
+            name,
+            email: row.email ? String(row.email) : undefined,
+            customer_number: row.customer_number ? String(row.customer_number) : undefined,
+          } as CustomerOption
+        })
+        .filter(Boolean) as CustomerOption[]
+    } catch {
+      return []
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -368,6 +407,7 @@ export function CustomsCreateJob() {
           hblNo: String(job.hbl_no || ''),
           invoiceNo: String(job.invoice_no || ''),
           customerName: String(job.customer_name || ''),
+          customerId: job.customer_id ? String(job.customer_id) : '',
           customerRefNo: String(jobDetails.customer_ref_no || ''),
           dateOfReceipt: String(job.date_of_receipt || ''),
           cargoType: String(jobDetails.cargo_type || prev.cargoType),
@@ -449,6 +489,16 @@ export function CustomsCreateJob() {
               : prev.looseCargoShipment,
           shipperId: job.shipper_id ? String(job.shipper_id) : '',
         }))
+        if (job.customer_id) {
+          setSelectedCustomer({
+            value: String(job.customer_id),
+            id: Number(job.customer_id),
+            name: String(job.customer_name || ''),
+            label: String(job.customer_name || `Customer #${job.customer_id}`),
+          })
+        } else {
+          setSelectedCustomer(null)
+        }
         setCommodityRows(Array.isArray((meta.upload_csv || {}).rows) ? (meta.upload_csv || {}).rows : [])
         setUploadedCommodityFiles(
           Array.isArray((meta.upload_csv || {}).files) ? (meta.upload_csv || {}).files : []
@@ -848,8 +898,8 @@ export function CustomsCreateJob() {
 
   const handleSave = async () => {
     if (isSaving) return
-    if (!form.customerName.trim()) {
-      toast.error('Customer name is required')
+    if (!form.customerId) {
+      toast.error('Customer is required')
       return
     }
 
@@ -942,6 +992,7 @@ export function CustomsCreateJob() {
       Number.isFinite(shipperIdNum) && shipperIdNum > 0 ? shipperIdNum : null
 
     const payload = {
+      customer_id: Number(form.customerId),
       customer_name: form.customerName.trim(),
       shipment_type: form.shipmentType,
       shipper_id,
@@ -1161,7 +1212,28 @@ export function CustomsCreateJob() {
           <fieldset disabled={isSaving || isViewMode || loadingJob} className='space-y-4'>
           <div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
             <div className='space-y-1'><Label>MBL No.</Label><Input value={form.mblNo} onChange={(e) => updateField('mblNo', e.target.value)} /></div>
-            <div className='space-y-1'><Label>Customer Name</Label><Input value={form.customerName} onChange={(e) => updateField('customerName', e.target.value)} /></div>
+            <div className='space-y-1'>
+              <Label>Customer</Label>
+              <AsyncSelect<CustomerOption>
+                value={selectedCustomer}
+                loadOptions={loadCustomerOptions}
+                onChange={(option) => {
+                  const selected = option || null
+                  setSelectedCustomer(selected)
+                  updateField('customerId', selected ? String(selected.id) : '')
+                  updateField('customerName', selected?.name ?? '')
+                }}
+                placeholder='Type customer name...'
+                isDisabled={isViewMode}
+                isClearable
+                noOptionsMessage={({ inputValue }) =>
+                  inputValue.length < 2 ? 'Type at least 2 characters' : 'No customers found'
+                }
+                loadingMessage={() => 'Searching customers...'}
+                className='react-select-container'
+                classNamePrefix='react-select'
+              />
+            </div>
             <div className='space-y-1'><Label>Date of Receipt</Label><Input type='date' value={form.dateOfReceipt} onChange={(e) => updateField('dateOfReceipt', e.target.value)} /></div>
             <div className='space-y-1'><Label>Reference No.</Label><Input value={form.referenceNo} onChange={(e) => updateField('referenceNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>HBL/FBO No.</Label><Input value={form.hblNo} onChange={(e) => updateField('hblNo', e.target.value)} /></div>

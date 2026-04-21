@@ -1419,6 +1419,7 @@ export const customsJobApi = {
     )
   },
   createJob: async (payload: {
+    customer_id?: number | null
     customer_name: string
     shipment_type: string
     shipper_id?: number | null
@@ -1435,6 +1436,7 @@ export const customsJobApi = {
   updateJob: async (
     id: number,
     payload: {
+      customer_id?: number | null
       customer_name: string
       shipment_type: string
       shipper_id?: number | null
