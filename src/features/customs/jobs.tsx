@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { ChevronDown, Eye, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { CustomsPage } from './customs-page'
 import {
@@ -107,6 +108,7 @@ function normalizeJob(job: Job): Job {
 }
 
 export function CustomsJobs() {
+  const navigate = useNavigate()
   const [jobs, setJobs] = useState<Job[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -177,8 +179,9 @@ export function CustomsJobs() {
               <CardDescription>List of customs clearance jobs</CardDescription>
             </div>
             <Button
+              type='button'
               onClick={() => {
-                window.location.assign('/customs/jobs/create')
+                void navigate({ to: '/customs/jobs/create' })
               }}
             >
               <Plus className='mr-2 h-4 w-4' />
@@ -257,7 +260,10 @@ export function CustomsJobs() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() =>
-                                window.location.assign(`/customs/jobs/create?mode=view&id=${job.id}`)
+                                void navigate({
+                                  to: '/customs/jobs/create',
+                                  search: { mode: 'view', id: String(job.id) },
+                                })
                               }
                             >
                               <Eye className='mr-2 h-4 w-4' />
@@ -265,7 +271,10 @@ export function CustomsJobs() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
-                                window.location.assign(`/customs/jobs/create?mode=update&id=${job.id}`)
+                                void navigate({
+                                  to: '/customs/jobs/create',
+                                  search: { mode: 'update', id: String(job.id) },
+                                })
                               }
                             >
                               <Pencil className='mr-2 h-4 w-4' />

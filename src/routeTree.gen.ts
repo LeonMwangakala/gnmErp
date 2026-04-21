@@ -40,6 +40,7 @@ import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-p
 import { Route as ClerkAuthenticatedRouteRouteImport } from './routes/clerk/_authenticated/route'
 import { Route as ClerkauthRouteRouteImport } from './routes/clerk/(auth)/route'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
+import { Route as CustomsJobsIndexRouteImport } from './routes/customs.jobs.index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedTasksIndexRouteImport } from './routes/_authenticated/tasks/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
@@ -218,6 +219,11 @@ const AuthenticatedSettingsRouteRoute =
     path: '/settings',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const CustomsJobsIndexRoute = CustomsJobsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => CustomsJobsRoute,
+} as any)
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
   id: '/users/',
   path: '/users/',
@@ -407,6 +413,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/tasks/': typeof AuthenticatedTasksIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
+  '/customs/jobs/': typeof CustomsJobsIndexRoute
 }
 export interface FileRoutesByTo {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -430,7 +437,6 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
   '/customs/dashboard': typeof CustomsDashboardRoute
-  '/customs/jobs': typeof CustomsJobsRouteWithChildren
   '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
   '/customs/vessels': typeof CustomsVesselsRoute
@@ -460,6 +466,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/customs/jobs': typeof CustomsJobsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -518,6 +525,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/customs/jobs/': typeof CustomsJobsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -574,6 +582,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/tasks/'
     | '/users/'
+    | '/customs/jobs/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/clerk'
@@ -597,7 +606,6 @@ export interface FileRouteTypes {
     | '/503'
     | '/customers/$id'
     | '/customs/dashboard'
-    | '/customs/jobs'
     | '/customs/shipper'
     | '/customs/vessel-voyage'
     | '/customs/vessels'
@@ -627,6 +635,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tasks'
     | '/users'
+    | '/customs/jobs'
   id:
     | '__root__'
     | '/_authenticated'
@@ -684,6 +693,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/'
     | '/_authenticated/tasks/'
     | '/_authenticated/users/'
+    | '/customs/jobs/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -941,6 +951,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings'
       preLoaderRoute: typeof AuthenticatedSettingsRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/customs/jobs/': {
+      id: '/customs/jobs/'
+      path: '/'
+      fullPath: '/customs/jobs/'
+      preLoaderRoute: typeof CustomsJobsIndexRouteImport
+      parentRoute: typeof CustomsJobsRoute
     }
     '/_authenticated/users/': {
       id: '/_authenticated/users/'
@@ -1221,10 +1238,12 @@ const CustomersRouteWithChildren = CustomersRoute._addFileChildren(
 
 interface CustomsJobsRouteChildren {
   CustomsJobsCreateRoute: typeof CustomsJobsCreateRoute
+  CustomsJobsIndexRoute: typeof CustomsJobsIndexRoute
 }
 
 const CustomsJobsRouteChildren: CustomsJobsRouteChildren = {
   CustomsJobsCreateRoute: CustomsJobsCreateRoute,
+  CustomsJobsIndexRoute: CustomsJobsIndexRoute,
 }
 
 const CustomsJobsRouteWithChildren = CustomsJobsRoute._addFileChildren(

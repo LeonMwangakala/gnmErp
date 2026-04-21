@@ -1,6 +1,5 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { AuthenticatedLayout } from '@/components/layout/authenticated-layout'
-import { CustomsJobs } from '@/features/customs/jobs'
 import { useAuthStore } from '@/stores/auth-store'
 
 export const Route = createFileRoute('/customs/jobs')({
@@ -13,11 +12,9 @@ export const Route = createFileRoute('/customs/jobs')({
       })
     }
   },
-  component: () => {
-    return (
-      <AuthenticatedLayout>
-        <CustomsJobs />
-      </AuthenticatedLayout>
-    )
-  },
+  component: () => (
+    <AuthenticatedLayout>
+      <Outlet />
+    </AuthenticatedLayout>
+  ),
 })
