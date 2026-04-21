@@ -1232,6 +1232,86 @@ export function CustomsCreateJob() {
                 loadingMessage={() => 'Searching customers...'}
                 className='react-select-container'
                 classNamePrefix='react-select'
+                styles={{
+                  control: (base, state) => ({
+                    ...base,
+                    minHeight: '36px',
+                    height: '36px',
+                    borderColor: state.isFocused ? 'hsl(var(--ring))' : 'hsl(var(--input))',
+                    backgroundColor: 'transparent',
+                    borderRadius: 'calc(var(--radius) - 2px)',
+                    borderWidth: '1px',
+                    boxShadow: state.isFocused
+                      ? '0 0 0 3px hsl(var(--ring) / 0.5)'
+                      : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+                    '&:hover': {
+                      borderColor: state.isFocused ? 'hsl(var(--ring))' : 'hsl(var(--input))',
+                    },
+                  }),
+                  placeholder: (base) => ({
+                    ...base,
+                    color: 'hsl(var(--muted-foreground))',
+                    fontSize: '0.875rem',
+                  }),
+                  input: (base) => ({
+                    ...base,
+                    color: 'hsl(var(--foreground))',
+                    fontSize: '0.875rem',
+                    margin: 0,
+                    padding: 0,
+                  }),
+                  singleValue: (base) => ({
+                    ...base,
+                    color: 'hsl(var(--foreground))',
+                    fontSize: '0.875rem',
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 'calc(var(--radius) - 2px)',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                    zIndex: 50,
+                  }),
+                  menuList: (base) => ({
+                    ...base,
+                    padding: '0.25rem',
+                  }),
+                  option: (base, state) => ({
+                    ...base,
+                    backgroundColor: state.isFocused || state.isSelected ? '#f3f4f6' : '#ffffff',
+                    color: '#111827',
+                    fontSize: '0.875rem',
+                    padding: '0.375rem 0.5rem',
+                    borderRadius: 'calc(var(--radius) - 4px)',
+                    cursor: 'pointer',
+                    '&:active': {
+                      backgroundColor: '#e5e7eb',
+                    },
+                    '&:hover': {
+                      backgroundColor: '#f3f4f6',
+                    },
+                  }),
+                  indicatorSeparator: () => ({
+                    display: 'none',
+                  }),
+                  dropdownIndicator: (base) => ({
+                    ...base,
+                    color: 'hsl(var(--muted-foreground))',
+                    padding: '0 8px',
+                    '&:hover': {
+                      color: 'hsl(var(--foreground))',
+                    },
+                  }),
+                  clearIndicator: (base) => ({
+                    ...base,
+                    color: 'hsl(var(--muted-foreground))',
+                    padding: '0 8px',
+                    '&:hover': {
+                      color: 'hsl(var(--foreground))',
+                    },
+                  }),
+                }}
               />
             </div>
             <div className='space-y-1'><Label>Date of Receipt</Label><Input type='date' value={form.dateOfReceipt} onChange={(e) => updateField('dateOfReceipt', e.target.value)} /></div>
