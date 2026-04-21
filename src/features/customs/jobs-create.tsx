@@ -1237,7 +1237,7 @@ export function CustomsCreateJob() {
                     ...base,
                     minHeight: '36px',
                     height: '36px',
-                    borderColor: state.isFocused ? 'hsl(var(--ring))' : 'hsl(var(--input))',
+                    borderColor: state.isFocused ? 'hsl(var(--ring))' : '#E2E8F1',
                     backgroundColor: 'transparent',
                     borderRadius: 'calc(var(--radius) - 2px)',
                     borderWidth: '1px',
@@ -1245,7 +1245,7 @@ export function CustomsCreateJob() {
                       ? '0 0 0 3px hsl(var(--ring) / 0.5)'
                       : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
                     '&:hover': {
-                      borderColor: state.isFocused ? 'hsl(var(--ring))' : 'hsl(var(--input))',
+                      borderColor: state.isFocused ? 'hsl(var(--ring))' : '#E2E8F1',
                     },
                   }),
                   placeholder: (base) => ({
