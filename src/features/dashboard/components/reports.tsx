@@ -54,7 +54,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { ContainerPaymentReportPanel } from './container-payment-report'
 
 function escapeCsvCell(value: string): string {
@@ -1334,7 +1333,7 @@ export function Reports() {
                   {invoicePaymentReportData.rows.length === 1 ? 'payment' : 'payments'})
                 </span>
               </p>
-              <ScrollArea className='min-h-0 flex-1 pr-3 -mr-1'>
+              <div className='min-h-0 flex-1 overflow-auto pr-1'>
                 <div className='space-y-6 pb-4'>
                   <div className='overflow-x-auto'>
                   <Table>
@@ -1437,7 +1436,7 @@ export function Reports() {
                     </p>
                   </div>
                 </div>
-              </ScrollArea>
+              </div>
               <DialogFooter className='mt-4 shrink-0 flex-row justify-end gap-2 border-t pt-4'>
                 <Button
                   type='button'
