@@ -47,6 +47,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { customerApi, customsJobApi, customsShipperApi, customsVesselApi } from '@/lib/api'
 import { customsVesselVoyageApi } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth-store'
 import { getStoredVessels, saveStoredVessels, type Vessel } from './vessels-storage'
 import { type Shipper } from './shippers-storage'
 import {
@@ -71,7 +72,9 @@ type JobForm = {
   tansadNo: string
   idfTansadDate: string
   fileManager: string
+  fileManagerId: string
   createdBy: string
+  createdById: string
   supplierName: string
   supplierAddress: string
   consigneeName: string
@@ -154,6 +157,15 @@ type CustomerOption = {
   customer_number?: string
 }
 
+type FileManagerOption = {
+  value: string
+  label: string
+  id: number
+  name: string
+  email?: string
+  department_name?: string
+}
+
 const initialForm: JobForm = {
   shipmentType: 'SEA',
   mblNo: '',
@@ -170,7 +182,9 @@ const initialForm: JobForm = {
   tansadNo: '',
   idfTansadDate: '',
   fileManager: '',
+  fileManagerId: '',
   createdBy: '',
+  createdById: '',
   supplierName: '',
   supplierAddress: '',
   consigneeName: '',
@@ -219,6 +233,7 @@ const initialForm: JobForm = {
 }
 
 export function CustomsCreateJob() {
+  const loggedInUser = useAuthStore((s) => s.auth.user)
   const searchParams =
     typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
   const pageMode = searchParams?.get('mode') === 'view'
@@ -306,6 +321,7 @@ export function CustomsCreateJob() {
   const [isSaving, setIsSaving] = useState(false)
   const [loadingJob, setLoadingJob] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null)
+  const [selectedFileManager, setSelectedFileManager] = useState<FileManagerOption | null>(null)
 
   const updateField = <K extends keyof JobForm>(key: K, value: JobForm[K]) => setForm((p) => ({ ...p, [key]: value }))
 
@@ -330,6 +346,31 @@ export function CustomsCreateJob() {
           } as CustomerOption
         })
         .filter(Boolean) as CustomerOption[]
+    } catch {
+      return []
+    }
+  }
+
+  const loadFileManagerOptions = async (inputValue: string): Promise<FileManagerOption[]> => {
+    const search = inputValue.trim()
+    if (search.length < 2) return []
+    try {
+      const results = await customsJobApi.searchFileManagers(search, 20)
+      if (!Array.isArray(results)) return []
+      return results
+        .map((row: any) => {
+          const id = Number(row.id || 0)
+          if (!Number.isFinite(id) || id <= 0) return null
+          return {
+            value: String(id),
+            label: String(row.label || row.name || `User #${id}`),
+            id,
+            name: String(row.name || ''),
+            email: row.email ? String(row.email) : undefined,
+            department_name: row.department_name ? String(row.department_name) : undefined,
+          } as FileManagerOption
+        })
+        .filter(Boolean) as FileManagerOption[]
     } catch {
       return []
     }
@@ -417,7 +458,9 @@ export function CustomsCreateJob() {
           tansadNo: String(jobDetails.tansad_no || ''),
           idfTansadDate: String(jobDetails.idf_tansad_date || ''),
           fileManager: String(jobDetails.file_manager || ''),
-          createdBy: String(jobDetails.created_by || ''),
+          fileManagerId: String(jobDetails.file_manager_id || ''),
+          createdBy: String(jobDetails.created_by || loggedInUser?.name || ''),
+          createdById: String(jobDetails.created_by_id || loggedInUser?.id || ''),
           supplierName: String((meta.shipperDetails || {}).supplierName || ''),
           supplierAddress: String((meta.shipperDetails || {}).supplierAddress || ''),
           consigneeName: String((meta.shipperDetails || {}).consigneeName || ''),
@@ -499,6 +542,17 @@ export function CustomsCreateJob() {
         } else {
           setSelectedCustomer(null)
         }
+        const managerId = Number(jobDetails.file_manager_id || 0)
+        if (managerId > 0) {
+          setSelectedFileManager({
+            value: String(managerId),
+            id: managerId,
+            name: String(jobDetails.file_manager || ''),
+            label: String(jobDetails.file_manager || `User #${managerId}`),
+          })
+        } else {
+          setSelectedFileManager(null)
+        }
         setCommodityRows(Array.isArray((meta.upload_csv || {}).rows) ? (meta.upload_csv || {}).rows : [])
         setUploadedCommodityFiles(
           Array.isArray((meta.upload_csv || {}).files) ? (meta.upload_csv || {}).files : []
@@ -515,7 +569,16 @@ export function CustomsCreateJob() {
     return () => {
       cancelled = true
     }
-  }, [editingJobId, pageMode])
+  }, [editingJobId, pageMode, loggedInUser?.id, loggedInUser?.name])
+
+  useEffect(() => {
+    if (!loggedInUser) return
+    setForm((prev) => ({
+      ...prev,
+      createdBy: loggedInUser.name || prev.createdBy,
+      createdById: String(loggedInUser.id || prev.createdById),
+    }))
+  }, [loggedInUser?.id, loggedInUser?.name])
 
   const getFirstActiveVoyageForVesselId = (vesselId: string) => {
     const id = Number(vesselId)
@@ -954,7 +1017,9 @@ export function CustomsCreateJob() {
       tansad_no: form.tansadNo || null,
       idf_tansad_date: form.idfTansadDate || null,
       file_manager: form.fileManager || null,
-      created_by: form.createdBy || null,
+      file_manager_id: form.fileManagerId ? Number(form.fileManagerId) : null,
+      created_by: loggedInUser?.name || form.createdBy || null,
+      created_by_id: loggedInUser?.id || (form.createdById ? Number(form.createdById) : null),
     }
 
     const containerShipment = form.containerShipment.map((row) => ({
@@ -1324,8 +1389,109 @@ export function CustomsCreateJob() {
             <div className='space-y-1'><Label>UCR No.</Label><Input value={form.ucrNo} onChange={(e) => updateField('ucrNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>TANSAD No</Label><Input value={form.tansadNo} onChange={(e) => updateField('tansadNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>IDF/TANSAD Date</Label><Input type='date' value={form.idfTansadDate} onChange={(e) => updateField('idfTansadDate', e.target.value)} /></div>
-            <div className='space-y-1'><Label>File Manager</Label><Input value={form.fileManager} onChange={(e) => updateField('fileManager', e.target.value)} /></div>
-            <div className='space-y-1'><Label>Created By</Label><Input value={form.createdBy} onChange={(e) => updateField('createdBy', e.target.value)} /></div>
+            <div className='space-y-1'>
+              <Label>File Manager</Label>
+              <AsyncSelect<FileManagerOption>
+                value={selectedFileManager}
+                loadOptions={loadFileManagerOptions}
+                onChange={(option) => {
+                  const selected = option || null
+                  setSelectedFileManager(selected)
+                  updateField('fileManagerId', selected ? String(selected.id) : '')
+                  updateField('fileManager', selected?.name ?? '')
+                }}
+                placeholder='Type staff.'
+                isDisabled={isViewMode}
+                isClearable
+                noOptionsMessage={({ inputValue }) =>
+                  inputValue.length < 2 ? 'Type at least 2 characters' : 'No staff found'
+                }
+                loadingMessage={() => 'Searching staff...'}
+                className='react-select-container'
+                classNamePrefix='react-select'
+                styles={{
+                  control: (base, state) => ({
+                    ...base,
+                    minHeight: '36px',
+                    height: '36px',
+                    borderColor: state.isFocused ? 'hsl(var(--ring))' : '#E2E8F1',
+                    backgroundColor: 'transparent',
+                    borderRadius: 'calc(var(--radius) - 2px)',
+                    borderWidth: '1px',
+                    boxShadow: state.isFocused
+                      ? '0 0 0 3px hsl(var(--ring) / 0.5)'
+                      : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+                    '&:hover': {
+                      borderColor: state.isFocused ? 'hsl(var(--ring))' : '#E2E8F1',
+                    },
+                  }),
+                  placeholder: (base) => ({
+                    ...base,
+                    color: 'hsl(var(--muted-foreground))',
+                    fontSize: '0.875rem',
+                  }),
+                  input: (base) => ({
+                    ...base,
+                    color: 'hsl(var(--foreground))',
+                    fontSize: '0.875rem',
+                    margin: 0,
+                    padding: 0,
+                  }),
+                  singleValue: (base) => ({
+                    ...base,
+                    color: 'hsl(var(--foreground))',
+                    fontSize: '0.875rem',
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 'calc(var(--radius) - 2px)',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                    zIndex: 50,
+                  }),
+                  menuList: (base) => ({
+                    ...base,
+                    padding: '0.25rem',
+                  }),
+                  option: (base, state) => ({
+                    ...base,
+                    backgroundColor: state.isFocused || state.isSelected ? '#f3f4f6' : '#ffffff',
+                    color: '#111827',
+                    fontSize: '0.875rem',
+                    padding: '0.375rem 0.5rem',
+                    borderRadius: 'calc(var(--radius) - 4px)',
+                    cursor: 'pointer',
+                    '&:active': {
+                      backgroundColor: '#e5e7eb',
+                    },
+                    '&:hover': {
+                      backgroundColor: '#f3f4f6',
+                    },
+                  }),
+                  indicatorSeparator: () => ({
+                    display: 'none',
+                  }),
+                  dropdownIndicator: (base) => ({
+                    ...base,
+                    color: 'hsl(var(--muted-foreground))',
+                    padding: '0 8px',
+                    '&:hover': {
+                      color: 'hsl(var(--foreground))',
+                    },
+                  }),
+                  clearIndicator: (base) => ({
+                    ...base,
+                    color: 'hsl(var(--muted-foreground))',
+                    padding: '0 8px',
+                    '&:hover': {
+                      color: 'hsl(var(--foreground))',
+                    },
+                  }),
+                }}
+              />
+            </div>
+            <div className='space-y-1'><Label>Created By</Label><Input value={form.createdBy} disabled /></div>
             <div className='space-y-1'><Label>Shipment Type</Label><Select value={form.shipmentType} onValueChange={(v) => updateField('shipmentType', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{shipmentTypeItems.map((v) => <SelectItem key={v} value={v}>{labelForShipmentType(v)}</SelectItem>)}</SelectContent></Select></div>
           </div>
 

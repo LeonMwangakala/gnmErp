@@ -1418,6 +1418,12 @@ export const customsJobApi = {
       }
     )
   },
+  searchFileManagers: async (search: string, limit: number = 20): Promise<any[]> => {
+    const response = await api.get('/customs/jobs/file-managers', {
+      params: { search, limit },
+    })
+    return response.data?.data || []
+  },
   createJob: async (payload: {
     customer_id?: number | null
     customer_name: string
