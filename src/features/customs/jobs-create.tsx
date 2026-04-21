@@ -353,7 +353,6 @@ export function CustomsCreateJob() {
 
   const loadFileManagerOptions = async (inputValue: string): Promise<FileManagerOption[]> => {
     const search = inputValue.trim()
-    if (search.length < 2) return []
     try {
       const results = await customsJobApi.searchFileManagers(search, 20)
       if (!Array.isArray(results)) return []
