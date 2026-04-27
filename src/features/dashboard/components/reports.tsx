@@ -46,6 +46,7 @@ import {
   type InvoiceReportData,
   type PostedContainersReportData,
 } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   Table,
   TableBody,
@@ -104,17 +105,14 @@ function downloadInvoicePaymentReportCsv(data: InvoicePaymentReportData) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `invoice-payments-report-${data.date_from}-to-${data.date_to}.csv`
+  a.download = `invoice_payment_report_${data.date_from}_to_${data.date_to}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
 
-function printInvoicePaymentReportAsPdf(data: InvoicePaymentReportData) {
-  const w = window.open('', '_blank')
-  if (!w) {
-    toast.error('Pop-up blocked. Allow pop-ups to print or save as PDF.')
-    return
-  }
+async function downloadInvoicePaymentReportPdf(data: InvoicePaymentReportData, printedByName?: string) {
+  const logoUrl =
+    typeof window !== 'undefined' ? `${window.location.origin}/images/gnm_cargo.png` : '/images/gnm_cargo.png'
   const totals = data.totals_by_currency ?? []
   const rowHtml = data.rows
     .map(
@@ -134,28 +132,111 @@ function printInvoicePaymentReportAsPdf(data: InvoicePaymentReportData) {
         `<tr><td class="num">${escapeHtml(t.total_formatted)}</td><td>${t.payment_count}</td></tr>`
     )
     .join('')
-  w.document.write(`<!DOCTYPE html><html><head><title>Invoice payments report</title>
+  const printedAt = new Date().toLocaleString()
+  const printedBy = (printedByName || '').trim() || 'System'
+  const html = `<!DOCTYPE html><html><head><title>Invoice payments report</title>
 <style>
-body{font-family:system-ui,sans-serif;padding:16px;font-size:12px;}
-h1{font-size:16px;margin-bottom:8px;}
+@page{size:A4 portrait;margin:0;}
+body{font-family:system-ui,sans-serif;padding:10mm;font-size:12px;margin:0;}
+h1{font-size:16px;margin:8px 0 8px;text-align:center;text-transform:uppercase;letter-spacing:.04em;}
 h2{font-size:14px;margin-top:20px;margin-bottom:8px;}
 table{border-collapse:collapse;width:100%;margin-top:12px;}
 th,td{border:1px solid #ccc;padding:6px;text-align:left;}
 th{background:#f0f0f0;}
 td.num{text-align:right;}
-.meta{color:#444;margin-bottom:16px;}
+.meta{color:#444;margin-bottom:16px;text-align:center;}
+.logo-wrap{text-align:center;}
+.logo{height:68px;object-fit:contain;}
+.print-meta{margin-top:16px;padding-top:8px;border-top:1px solid #ccc;color:#444;line-height:1.5;}
+.print-meta__label{font-size:12px;font-weight:700;}
+.print-meta__value{font-size:12px;}
 </style></head><body>
-<h1>Invoice payments report</h1>
-<div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}</div>
+<div class="logo-wrap"><img src="${logoUrl}" alt="GNM Cargo logo" class="logo" /></div>
+<h1>INVOICE PAYMENTS REPORT</h1>
+<div class="meta"><strong>START DATE:</strong> ${escapeHtml(data.date_from)} &nbsp; | &nbsp; <strong>END DATE:</strong> ${escapeHtml(data.date_to)}</div>
 <table><thead><tr><th>Date</th><th>Customer</th><th>Invoice</th><th>Amount</th><th>Paid</th><th>Account</th><th>Status</th><th>Cashier</th></tr></thead>
 <tbody>${rowHtml}</tbody></table>
 <h2>Summary by account</h2>
 <table><thead><tr><th>Account</th><th>Total</th></tr></thead><tbody>${sumHtml}</tbody></table>
 <h2>Totals by currency</h2>
 <table><thead><tr><th>Total</th><th>Payments</th></tr></thead><tbody>${curTotalsHtml}</tbody></table>
-<script>window.onload=function(){window.print();}</script>
-</body></html>`)
-  w.document.close()
+<div class="print-meta"><span class="print-meta__label">Printed by:</span> <span class="print-meta__value">${escapeHtml(printedBy)}</span><br /><span class="print-meta__label">Printed time:</span> <span class="print-meta__value">${escapeHtml(printedAt)}</span></div>
+</body></html>`
+
+  try {
+    const { jsPDF } = await import('jspdf')
+    const { default: html2canvas } = await import('html2canvas')
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.left = '-99999px'
+    iframe.style.top = '0'
+    iframe.style.width = '1400px'
+    iframe.style.height = '2200px'
+    iframe.style.opacity = '0'
+    iframe.setAttribute('aria-hidden', 'true')
+    document.body.appendChild(iframe)
+
+    try {
+      const doc = iframe.contentDocument
+      if (!doc) throw new Error('Unable to prepare PDF content')
+      doc.open()
+      doc.write(html)
+      doc.close()
+
+      await new Promise<void>((resolve) => {
+        iframe.onload = () => resolve()
+        setTimeout(() => resolve(), 400)
+      })
+
+      const target = doc.documentElement as HTMLElement | null
+      if (!target) throw new Error('Unable to render PDF content')
+      const contentWidth = Math.max(
+        doc.documentElement.scrollWidth,
+        doc.body?.scrollWidth || 0,
+        1024
+      )
+      const contentHeight = Math.max(
+        doc.documentElement.scrollHeight,
+        doc.body?.scrollHeight || 0,
+        1200
+      )
+      iframe.style.width = `${contentWidth}px`
+      iframe.style.height = `${contentHeight}px`
+
+      const canvas = await html2canvas(target, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,
+        width: contentWidth,
+        height: contentHeight,
+        windowWidth: contentWidth,
+        windowHeight: contentHeight,
+        scrollX: 0,
+        scrollY: 0,
+      })
+
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+      const pageWidth = 210
+      const pageHeight = 297
+      const imageWidthAtFullPage = pageWidth
+      const imageHeightAtFullPage = (canvas.height * imageWidthAtFullPage) / canvas.width
+      const scale = Math.min(1, pageHeight / imageHeightAtFullPage)
+      const finalWidth = imageWidthAtFullPage * scale
+      const finalHeight = imageHeightAtFullPage * scale
+      const x = (pageWidth - finalWidth) / 2
+      const y = (pageHeight - finalHeight) / 2
+
+      // Always fit the report into a single A4 page.
+      pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight)
+
+      pdf.save(`invoice_payment_report_${data.date_from}_to_${data.date_to}.pdf`)
+    } finally {
+      document.body.removeChild(iframe)
+    }
+  } catch (error: any) {
+    toast.error(error?.message || 'Failed to download invoice payments PDF')
+  }
 }
 
 function invoiceReportStatusFilterLabel(filter: string): string {
@@ -468,6 +549,7 @@ function isPostedContainersFilters(
 }
 
 export function Reports() {
+  const loggedInUser = useAuthStore((s) => s.auth.user)
   const [open, setOpen] = useState(false)
   const [selectedReport, setSelectedReport] = useState<ReportDefinition | null>(null)
   const [filters, setFilters] = useState<ReportFilters | null>(null)
@@ -1456,7 +1538,7 @@ export function Reports() {
                   size='sm'
                   onClick={() => {
                     if (invoicePaymentReportData) {
-                      printInvoicePaymentReportAsPdf(invoicePaymentReportData)
+                      void downloadInvoicePaymentReportPdf(invoicePaymentReportData, loggedInUser?.name)
                     }
                   }}
                 >

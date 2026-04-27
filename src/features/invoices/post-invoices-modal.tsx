@@ -39,6 +39,7 @@ type TorchlightInvoiceDetails = {
   amount_formatted: string
   status: number
   status_label?: string
+  is_overdue?: boolean
 }
 
 type Row = {
@@ -51,9 +52,12 @@ type Row = {
   syncMessage?: string
 }
 
-/** Only Draft (0) invoices can be bulk-posted; already sent/posted must stay disabled. */
+/** Draft (0) and overdue invoices are postable in this flow. */
 function isRowPostable(row: Row): boolean {
-  return row.torchlight !== null && row.torchlight.status === 0
+  return (
+    row.torchlight !== null &&
+    (row.torchlight.status === 0 || Boolean(row.torchlight.is_overdue))
+  )
 }
 
 function roundOffAmount(value: number | null | undefined): number {
@@ -427,8 +431,8 @@ export function PostInvoicesModal({
         <DialogHeader>
           <DialogTitle>Post Invoices</DialogTitle>
           <DialogDescription>
-            Load invoices by container. Only <span className='font-medium'>Draft</span> invoices in Torchlight can be
-            selected and posted; already sent or posted invoices stay visible but disabled.
+            Load invoices by container. <span className='font-medium'>Draft and Overdue</span> invoices in Torchlight
+            can be selected and posted; already sent or paid invoices stay visible but disabled.
           </DialogDescription>
         </DialogHeader>
 
@@ -482,7 +486,7 @@ export function PostInvoicesModal({
             <>
               {rows.length > 0 && postableRows.length === 0 && (
                 <div className='rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100'>
-                  <span className='font-medium'>No draft invoices to post.</span>{' '}
+                  <span className='font-medium'>No draft/overdue invoices to post.</span>{' '}
                   <span className='text-muted-foreground'>
                     All matching Torchlight invoices are already sent or not found. Nothing can be submitted.
                   </span>
@@ -549,7 +553,7 @@ export function PostInvoicesModal({
                       />
                     </TableCell>
                     <TableCell colSpan={5} className='text-sm text-muted-foreground'>
-                      {selectedCount} draft invoice(s) selected
+                      {selectedCount} draft/overdue invoice(s) selected
                       {postableRows.length < rows.length && (
                         <span className='ml-2'>
                           ({rows.length - postableRows.length} not postable — already sent or missing)

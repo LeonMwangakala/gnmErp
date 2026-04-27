@@ -253,7 +253,7 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
       font-size: 8.5pt;
     }
     .amount-row .amt {
-      text-align: right;
+      text-align: left;
       font-variant-numeric: tabular-nums;
     }
     .section-head {
@@ -414,7 +414,7 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
     <div class="section-body">${consignmentsSection}</div>
 
     <footer class="doc-footer">
-      <strong>GNM CARGO · #JABALILABAHARI</strong>
+      <strong>GNM CARGO · JABALI LA BAHARI ·</strong>
       <p class="doc-footer__meta">Warehouse Address: 35 Keko Magurumbasi B</p>
       <p class="doc-footer__meta">Phone: +255674066253</p>
       <span class="doc-footer__credit">Powered by Torchlight</span>
@@ -650,46 +650,72 @@ export function Payments() {
     }
 
     try {
-      const baseName = `receipt-payment-${currentPayment.id || 'file'}`
+      const toSafeFilePart = (value: string) =>
+        value
+          .trim()
+          .replace(/[\\/:*?"<>|]+/g, ' ')
+          .replace(/\s+/g, '_')
+          .replace(/^_+|_+$/g, '')
+      const customerPart = toSafeFilePart(currentPayment.customer_name || '')
+      const referencePart = toSafeFilePart(currentPayment.reference || '')
+      const baseName = `${customerPart || 'customer'}_${referencePart || 'reference'}`
       const { jsPDF } = await import('jspdf')
-      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
-      let y = 16
-      const left = 14
-      const rightWidth = 182
-      const lineGap = 8
-      const write = (label: string, value: string) => {
-        pdf.setFont('helvetica', 'bold')
-        pdf.text(`${label}:`, left, y)
-        pdf.setFont('helvetica', 'normal')
-        const wrapped = pdf.splitTextToSize(value || '-', rightWidth - 28)
-        pdf.text(wrapped, left + 28, y)
-        y += Math.max(lineGap, wrapped.length * 6)
+      const { default: html2canvas } = await import('html2canvas')
+      const slipMarkup = buildPaymentSlipHtml(currentPayment, slipConsignments)
+
+      const iframe = document.createElement('iframe')
+      iframe.style.position = 'fixed'
+      iframe.style.left = '-99999px'
+      iframe.style.top = '0'
+      iframe.style.width = '420px'
+      iframe.style.height = '1600px'
+      iframe.style.opacity = '0'
+      iframe.setAttribute('aria-hidden', 'true')
+      document.body.appendChild(iframe)
+
+      try {
+        const doc = iframe.contentDocument
+        if (!doc) {
+          throw new Error('Unable to prepare receipt preview')
+        }
+        doc.open()
+        doc.write(slipMarkup)
+        doc.close()
+
+        await new Promise<void>((resolve) => {
+          iframe.onload = () => resolve()
+          setTimeout(() => resolve(), 350)
+        })
+
+        const receiptRoot = doc.querySelector('.sheet') as HTMLElement | null
+        const target = receiptRoot || (doc.body as HTMLElement | null)
+        if (!target) {
+          throw new Error('Unable to render receipt content')
+        }
+
+        const canvas = await html2canvas(target, {
+          backgroundColor: '#ffffff',
+          scale: 3,
+          useCORS: true,
+        })
+
+        const imgData = canvas.toDataURL('image/png')
+        // Use a wider printable receipt width for better readability.
+        const receiptWidthMm = 80
+        const contentHeightMm = (canvas.height * receiptWidthMm) / canvas.width
+        const marginMm = 4
+        const pdfWidthMm = receiptWidthMm + marginMm * 2
+        const pdfHeightMm = contentHeightMm + marginMm * 2
+        const pdf = new jsPDF({
+          unit: 'mm',
+          format: [pdfWidthMm, pdfHeightMm],
+          orientation: 'portrait',
+        })
+        pdf.addImage(imgData, 'PNG', marginMm, marginMm, receiptWidthMm, contentHeightMm)
+        pdf.save(`${baseName}.pdf`)
+      } finally {
+        document.body.removeChild(iframe)
       }
-
-      pdf.setFontSize(16)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('Payment Receipt', left, y)
-      y += 10
-      pdf.setFontSize(11)
-      pdf.setFont('helvetica', 'normal')
-
-      write('Payment ID', String(currentPayment.id))
-      write('Invoice Number', currentPayment.invoice_number || '-')
-      write('Customer', currentPayment.customer_name || '-')
-      write('Date', currentPayment.date || '-')
-      write('Amount', currentPayment.amount_formatted || '-')
-      write('Account', currentPayment.account_name || '-')
-      write('Reference', currentPayment.reference || '-')
-      write('Description', currentPayment.description || '-')
-      write('Cashier User ID', currentPayment.created_by != null ? String(currentPayment.created_by) : '-')
-
-      if (currentPayment.receipt_url) {
-        write('Original Receipt URL', currentPayment.receipt_url)
-      } else if (currentPayment.receipt) {
-        write('Receipt File', currentPayment.receipt)
-      }
-
-      pdf.save(`${baseName}.pdf`)
     } catch (error: any) {
       toast.error(error?.message || 'Failed to download receipt as PDF')
     }
@@ -1358,14 +1384,14 @@ export function Payments() {
               disabled={!viewPayment}
             >
               <Download className='mr-2 h-4 w-4' />
-              Receipt PDF
-            </Button>
-            <Button type='button' variant='outline' onClick={() => setIsSlipModalOpen(false)}>
-              Close
+              Download
             </Button>
             <Button type='button' onClick={handlePrintPaymentSlip} disabled={!slipHtml}>
               <Printer className='mr-2 h-4 w-4' />
               Print
+            </Button>
+            <Button type='button' variant='outline' onClick={() => setIsSlipModalOpen(false)}>
+              Close
             </Button>
           </div>
         </DialogContent>
