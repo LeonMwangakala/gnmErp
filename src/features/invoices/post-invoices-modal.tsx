@@ -74,6 +74,44 @@ function getSyncFailureMessage(syncResp: any): string {
   return rawMessage || 'Failed to sync invoice to ERP'
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  worker: (item: T, index: number) => Promise<R>,
+  concurrency: number
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+
+  const runWorker = async () => {
+    while (true) {
+      const current = nextIndex
+      nextIndex += 1
+      if (current >= items.length) return
+      results[current] = await worker(items[current], current)
+    }
+  }
+
+  const workers = Array.from({ length: Math.max(1, concurrency) }, () => runWorker())
+  await Promise.all(workers)
+  return results
+}
+
+async function fetchInvoiceWithRetry(invoiceNo: string, maxAttempts: number = 3) {
+  let lastError: unknown = null
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const torch = await invoiceApi.getInvoiceByInvoiceNumber(invoiceNo)
+      return torch as TorchlightInvoiceDetails
+    } catch (error) {
+      lastError = error
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt))
+      }
+    }
+  }
+  throw lastError
+}
+
 function isCancelledBillSyncError(syncResp: any): boolean {
   const msg = String(syncResp?.message || syncResp?.error || '').toLowerCase()
   return msg.includes('cannot post cancelled bill')
@@ -157,16 +195,30 @@ export function PostInvoicesModal({
         return
       }
 
-      // Fetch torchlight invoice details for each invoice number
-      const torchlightResults = await Promise.all(
-        sourceInvoices.map(async (inv) => {
+      // Fetch invoice details with limited concurrency + retry to avoid request bursts.
+      const torchlightResults = await mapWithConcurrency(
+        sourceInvoices,
+        async (inv) => {
           try {
-            const torch = await invoiceApi.getInvoiceByInvoiceNumber(inv.invoice_no)
-            return { source: inv, torchlight: torch as TorchlightInvoiceDetails, syncAttempted: false, syncFailed: false, syncMessage: '' }
-          } catch (e) {
-            return { source: inv, torchlight: null, syncAttempted: false, syncFailed: false, syncMessage: '' }
+            const torch = await fetchInvoiceWithRetry(inv.invoice_no, 3)
+            return {
+              source: inv,
+              torchlight: torch,
+              syncAttempted: false,
+              syncFailed: false,
+              syncMessage: '',
+            }
+          } catch {
+            return {
+              source: inv,
+              torchlight: null,
+              syncAttempted: false,
+              syncFailed: false,
+              syncMessage: '',
+            }
           }
-        })
+        },
+        4
       )
 
       const nextRows: Row[] = torchlightResults.map((res) => {
