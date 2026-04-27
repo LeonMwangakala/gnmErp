@@ -74,6 +74,16 @@ function getSyncFailureMessage(syncResp: any): string {
   return rawMessage || 'Failed to sync invoice to ERP'
 }
 
+function isCancelledBillSyncError(syncResp: any): boolean {
+  const msg = String(syncResp?.message || syncResp?.error || '').toLowerCase()
+  return msg.includes('cannot post cancelled bill')
+}
+
+function isAlreadyExistsSyncError(syncResp: any): boolean {
+  const msg = String(syncResp?.message || syncResp?.error || '').toLowerCase()
+  return msg.includes('already exists')
+}
+
 export function PostInvoicesModal({
   open,
   onOpenChange,
@@ -293,7 +303,12 @@ export function PostInvoicesModal({
         syncResp.status === true &&
         (syncResp.synced === true || syncResp.already_posted_to_erp === true)
 
-      if (!syncOk) {
+      if (!syncOk && !isAlreadyExistsSyncError(syncResp)) {
+        if (isCancelledBillSyncError(syncResp)) {
+          setRows((prev) => prev.filter((r) => r.source.invoice_no !== invoiceNo))
+          toast.info(`Invoice ${invoiceNo} was cancelled in source and was removed from posting list.`)
+          return
+        }
         const failureMessage = getSyncFailureMessage(syncResp)
         setRows((prev) =>
           prev.map((r) =>
@@ -346,7 +361,11 @@ export function PostInvoicesModal({
               : r
           )
         )
-        toast.error(`Invoice ${invoiceNo} not found in Torchlight yet. Try again shortly.`)
+        if (isAlreadyExistsSyncError(syncResp)) {
+          toast.error(`Invoice ${invoiceNo} exists in source but is still not found in Torchlight.`)
+        } else {
+          toast.error(`Invoice ${invoiceNo} not found in Torchlight yet. Try again shortly.`)
+        }
       }
     } finally {
       setSyncingInvoiceNos((prev) => ({ ...prev, [invoiceNo]: false }))
@@ -366,7 +385,11 @@ export function PostInvoicesModal({
           syncResp &&
           syncResp.status === true &&
           (syncResp.synced === true || syncResp.already_posted_to_erp === true)
-        if (!syncOk) {
+        if (!syncOk && !isAlreadyExistsSyncError(syncResp)) {
+          if (isCancelledBillSyncError(syncResp)) {
+            setRows((prev) => prev.filter((r) => r.source.invoice_no !== invoiceNo))
+            continue
+          }
           const failureMessage = getSyncFailureMessage(syncResp)
           setRows((prev) =>
             prev.map((r) =>
