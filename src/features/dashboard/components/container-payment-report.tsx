@@ -79,6 +79,56 @@ function escapeCsvCell(val: string | number | undefined | null): string {
   return s
 }
 
+const CONTAINER_REPORT_CONCURRENCY = 4
+const CONTAINER_REPORT_RETRIES = 3
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchWithRetry<T>(
+  request: () => Promise<T>,
+  retries = CONTAINER_REPORT_RETRIES
+): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    try {
+      return await request()
+    } catch (error) {
+      lastError = error
+      if (attempt < retries - 1) {
+        await sleep(300 * 2 ** attempt)
+      }
+    }
+  }
+  throw lastError
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (!items.length) return []
+  const safeConcurrency = Math.max(1, Math.min(concurrency, items.length))
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+
+  const worker = async () => {
+    while (true) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      if (currentIndex >= items.length) return
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex)
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: safeConcurrency }, () => worker())
+  )
+  return results
+}
+
 export function ContainerPaymentReportPanel() {
   const [containerNo, setContainerNo] = useState('')
   const [rows, setRows] = useState<ContainerInvoiceReportRow[]>([])
@@ -102,71 +152,84 @@ export function ContainerPaymentReportPanel() {
         return
       }
 
-      const collected: ContainerInvoiceReportRow[] = []
+      const rowResults = await mapWithConcurrency(
+        invoiceNos,
+        CONTAINER_REPORT_CONCURRENCY,
+        async (invoiceNo): Promise<ContainerInvoiceReportRow | null> => {
+          let invBrief: { id?: number } | null = null
+          try {
+            invBrief = await fetchWithRetry(() =>
+              invoiceApi.getInvoiceByInvoiceNumber(invoiceNo)
+            )
+          } catch {
+            return null
+          }
+          if (!invBrief?.id) {
+            return null
+          }
 
-      for (const invoiceNo of invoiceNos) {
-        let invBrief: { id?: number } | null = null
-        try {
-          invBrief = await invoiceApi.getInvoiceByInvoiceNumber(invoiceNo)
-        } catch {
-          continue
+          let invDetail: any
+          let cgPayload: InvoiceConsignmentsGoodsPayload | null = null
+          try {
+            ;[invDetail, cgPayload] = await Promise.all([
+              fetchWithRetry(() => invoiceApi.getInvoice(invBrief.id!)),
+              fetchWithRetry(() =>
+                invoiceApi.getInvoiceConsignmentsGoods(invoiceNo)
+              ).catch((): InvoiceConsignmentsGoodsPayload | null => null),
+            ])
+          } catch {
+            return null
+          }
+
+          const totals = invDetail?.totals
+          if (!totals) {
+            return null
+          }
+
+          const total = Number(totals.total ?? 0)
+          const tax = Number(totals.tax ?? 0)
+          const subtotal = Number(totals.subtotal ?? 0)
+          const discountNum = Number(totals.discount ?? 0)
+          const paidNum = Number(totals.paid ?? 0)
+          const dueNum = Number(totals.due ?? 0)
+
+          // Amount: API subtotal (= total - tax + discount) — gross pre-tax before invoice discount net
+          const amountStr = totals.subtotal_formatted ?? formatMoney(subtotal)
+          const discountStr =
+            totals.discount_formatted ?? formatMoney(discountNum)
+          // Net sales = amount - discount (pre-tax net after all discounts)
+          const netSalesNum = total - tax
+          const netSalesStr = formatMoney(netSalesNum)
+
+          const paidStr = totals.paid_formatted ?? formatMoney(paidNum)
+          const balanceStr = totals.due_formatted ?? formatMoney(dueNum)
+
+          const customerName = invDetail?.customer?.name || '—'
+
+          const customerDetail = buildCustomerDetail(
+            customerName,
+            trimmed,
+            cgPayload && typeof cgPayload === 'object' && 'status' in cgPayload
+              ? (cgPayload as InvoiceConsignmentsGoodsPayload)
+              : null
+          )
+
+          return {
+            invoice_id: invBrief.id,
+            invoice_number: invDetail.invoice_number || invoiceNo,
+            customer_detail: customerDetail,
+            amount: amountStr,
+            discount: discountStr,
+            net_sales: netSalesStr,
+            paid: paidStr,
+            balance: balanceStr,
+          }
         }
-        if (!invBrief?.id) {
-          continue
-        }
+      )
 
-        const [invDetail, cgPayload] = await Promise.all([
-          invoiceApi.getInvoice(invBrief.id),
-          invoiceApi
-            .getInvoiceConsignmentsGoods(invoiceNo)
-            .catch((): InvoiceConsignmentsGoodsPayload | null => null),
-        ])
-
-        const totals = invDetail?.totals
-        if (!totals) {
-          continue
-        }
-
-        const total = Number(totals.total ?? 0)
-        const tax = Number(totals.tax ?? 0)
-        const subtotal = Number(totals.subtotal ?? 0)
-        const discountNum = Number(totals.discount ?? 0)
-        const paidNum = Number(totals.paid ?? 0)
-        const dueNum = Number(totals.due ?? 0)
-
-        // Amount: API subtotal (= total - tax + discount) — gross pre-tax before invoice discount net
-        const amountStr =
-          totals.subtotal_formatted ?? formatMoney(subtotal)
-        const discountStr =
-          totals.discount_formatted ?? formatMoney(discountNum)
-        // Net sales = amount - discount (pre-tax net after all discounts)
-        const netSalesNum = total - tax
-        const netSalesStr = formatMoney(netSalesNum)
-
-        const paidStr = totals.paid_formatted ?? formatMoney(paidNum)
-        const balanceStr = totals.due_formatted ?? formatMoney(dueNum)
-
-        const customerName = invDetail?.customer?.name || '—'
-
-        const customerDetail = buildCustomerDetail(
-          customerName,
-          trimmed,
-          cgPayload && typeof cgPayload === 'object' && 'status' in cgPayload
-            ? (cgPayload as InvoiceConsignmentsGoodsPayload)
-            : null
-        )
-
-        collected.push({
-          invoice_id: invBrief.id,
-          invoice_number: invDetail.invoice_number || invoiceNo,
-          customer_detail: customerDetail,
-          amount: amountStr,
-          discount: discountStr,
-          net_sales: netSalesStr,
-          paid: paidStr,
-          balance: balanceStr,
-        })
-      }
+      const collected = rowResults.filter(
+        (row): row is ContainerInvoiceReportRow => row !== null
+      )
 
       collected.sort((a, b) =>
         a.invoice_number.localeCompare(b.invoice_number, undefined, {
