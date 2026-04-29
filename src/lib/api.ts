@@ -418,11 +418,11 @@ export const invoiceApi = {
     })
     return response.data
   },
-  updateInvoiceAmountAndPayments: async (
-    invoiceId: number,
-    payload: { target_total: number }
-  ) => {
-    const response = await api.post(`/invoices/${invoiceId}/update-amount`, payload)
+  updateInvoiceAmount: async (invoiceId: number, amount: number, details?: string) => {
+    const response = await api.post(`/invoices/${invoiceId}/update-amount`, {
+      amount,
+      details: details?.trim() || undefined,
+    })
     return response.data
   },
 }

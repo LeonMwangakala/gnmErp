@@ -8,6 +8,7 @@ import {
   Send,
   Filter,
   Info,
+  Pencil,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +42,8 @@ import { Badge } from '@/components/ui/badge'
 import { InvoiceDetailModal } from './invoice-detail-modal'
 import { PostInvoicesModal } from './post-invoices-modal'
 import { InvoiceConsignmentsGoodsModal } from './invoice-consignments-goods-modal'
+import { UpdateInvoiceAmountModal } from './update-invoice-amount-modal'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -95,6 +98,10 @@ export function Invoices() {
   const [isPostInvoicesModalOpen, setIsPostInvoicesModalOpen] = useState(false)
   const [cargoModalOpen, setCargoModalOpen] = useState(false)
   const [cargoInvoiceNo, setCargoInvoiceNo] = useState<string | null>(null)
+  const [updateAmountModalOpen, setUpdateAmountModalOpen] = useState(false)
+  const [selectedInvoiceForAmountUpdate, setSelectedInvoiceForAmountUpdate] = useState<Invoice | null>(null)
+  const authUser = useAuthStore((state) => state.auth.user)
+  const isAdminUser = authUser?.role?.includes('admin') === true
 
   // Debounce search
   useEffect(() => {
@@ -434,6 +441,23 @@ export function Invoices() {
                             >
                               <Info className='h-4 w-4' />
                             </Button>
+                            {isAdminUser && (
+                              <Button
+                                type='button'
+                                variant='ghost'
+                                size='sm'
+                                className='h-8 w-8 p-0'
+                                title='Update invoice amount'
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setSelectedInvoiceForAmountUpdate(invoice)
+                                  setUpdateAmountModalOpen(true)
+                                }}
+                              >
+                                <Pencil className='h-4 w-4' />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -519,6 +543,24 @@ export function Invoices() {
           if (!o) setCargoInvoiceNo(null)
         }}
         invoiceNo={cargoInvoiceNo}
+      />
+
+      <UpdateInvoiceAmountModal
+        open={updateAmountModalOpen}
+        onOpenChange={(open) => {
+          setUpdateAmountModalOpen(open)
+          if (!open) setSelectedInvoiceForAmountUpdate(null)
+        }}
+        invoice={
+          selectedInvoiceForAmountUpdate
+            ? {
+                id: selectedInvoiceForAmountUpdate.id,
+                invoice_number: selectedInvoiceForAmountUpdate.invoice_number,
+                amount: selectedInvoiceForAmountUpdate.amount,
+              }
+            : null
+        }
+        onUpdated={() => fetchInvoices()}
       />
     </>
   )

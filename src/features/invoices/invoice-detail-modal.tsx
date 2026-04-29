@@ -28,7 +28,6 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useAuthStore } from '@/stores/auth-store'
 
 interface InvoiceDetail {
   id: number
@@ -149,10 +148,6 @@ export function InvoiceDetailModal({
   const [discountAmount, setDiscountAmount] = useState('')
   const [discountDetails, setDiscountDetails] = useState('')
   const [isSyncingDiscount, setIsSyncingDiscount] = useState(false)
-  const [targetInvoiceAmount, setTargetInvoiceAmount] = useState('')
-  const [isUpdatingInvoiceAmount, setIsUpdatingInvoiceAmount] = useState(false)
-  const currentUser = useAuthStore((s) => s.auth.user)
-  const isAdminUser = Boolean(currentUser?.role?.includes('admin'))
 
   useEffect(() => {
     if (open && invoiceId) {
@@ -168,7 +163,6 @@ export function InvoiceDetailModal({
       setTotalCreditNoteFormatted('0.00')
       setDiscountAmount('')
       setDiscountDetails('')
-      setTargetInvoiceAmount('')
     }
   }, [open, invoiceId])
 
@@ -198,8 +192,6 @@ export function InvoiceDetailModal({
       setInvoice(data)
       const discount = Number(data?.totals?.discount || 0)
       setDiscountAmount(discount > 0 && Number.isFinite(discount) ? discount.toFixed(2) : '')
-      const total = Number(data?.totals?.total || 0)
-      setTargetInvoiceAmount(Number.isFinite(total) ? total.toFixed(2) : '')
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to load invoice')
       onOpenChange(false)
@@ -228,40 +220,6 @@ export function InvoiceDetailModal({
       toast.error(error?.response?.data?.message || 'Failed to sync discount to CMTS.')
     } finally {
       setIsSyncingDiscount(false)
-    }
-  }
-
-  const handleUpdateInvoiceAmount = async () => {
-    if (!invoice) return
-    const targetTotal = Number(targetInvoiceAmount)
-    if (!Number.isFinite(targetTotal) || targetTotal < 0) {
-      toast.error('Enter a valid invoice amount (0 or greater).')
-      return
-    }
-
-    const confirmed = window.confirm(
-      'Update invoice total and rebalance linked invoice payment amounts?'
-    )
-    if (!confirmed) return
-
-    try {
-      setIsUpdatingInvoiceAmount(true)
-      const response = await invoiceApi.updateInvoiceAmountAndPayments(invoice.id, {
-        target_total: targetTotal,
-      })
-      if (response?.status === 200) {
-        toast.success(response?.message || 'Invoice amount updated successfully.')
-        await fetchInvoice()
-        if (activeTab === 'payments') {
-          await fetchPayments()
-        }
-      } else {
-        toast.error(response?.message || 'Failed to update invoice amount.')
-      }
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to update invoice amount.')
-    } finally {
-      setIsUpdatingInvoiceAmount(false)
     }
   }
 
@@ -534,43 +492,6 @@ export function InvoiceDetailModal({
                         {isSyncingDiscount ? 'Syncing...' : 'Sync Discount to CMTS'}
                       </Button>
                     </div>
-                    {isAdminUser && (
-                      <>
-                        <div className='grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t'>
-                          <div>
-                            <p className='text-xs text-muted-foreground mb-1'>
-                              Update Invoice Amount
-                            </p>
-                            <Input
-                              type='number'
-                              min='0'
-                              step='0.01'
-                              value={targetInvoiceAmount}
-                              onChange={(e) => setTargetInvoiceAmount(e.target.value)}
-                              disabled={isUpdatingInvoiceAmount}
-                              placeholder='0.00'
-                            />
-                          </div>
-                          <div className='md:col-span-2 flex items-end justify-end'>
-                            <Button
-                              type='button'
-                              size='sm'
-                              variant='destructive'
-                              onClick={() => void handleUpdateInvoiceAmount()}
-                              disabled={isUpdatingInvoiceAmount}
-                            >
-                              {isUpdatingInvoiceAmount
-                                ? 'Updating...'
-                                : 'Update Invoice + Payments'}
-                            </Button>
-                          </div>
-                        </div>
-                        <p className='text-xs text-muted-foreground'>
-                          Admin only: this recalculates invoice discount and adjusts linked
-                          invoice payment amounts.
-                        </p>
-                      </>
-                    )}
                     <div className='flex justify-between border-t pt-2'>
                       <span className='font-semibold'>Total:</span>
                       <span className='font-semibold text-lg'>{invoice.totals.total_formatted}</span>
