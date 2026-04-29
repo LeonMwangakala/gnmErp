@@ -101,7 +101,7 @@ export function Invoices() {
   const [updateAmountModalOpen, setUpdateAmountModalOpen] = useState(false)
   const [selectedInvoiceForAmountUpdate, setSelectedInvoiceForAmountUpdate] = useState<Invoice | null>(null)
   const authUser = useAuthStore((state) => state.auth.user)
-  const isAdminUser = authUser?.role?.includes('admin') === true
+  const canSeeUpdateAmountAction = (authUser?.email || '').toLowerCase().startsWith('admin@')
 
   // Debounce search
   useEffect(() => {
@@ -441,7 +441,7 @@ export function Invoices() {
                             >
                               <Info className='h-4 w-4' />
                             </Button>
-                            {isAdminUser && (
+                            {canSeeUpdateAmountAction && (
                               <Button
                                 type='button'
                                 variant='ghost'
