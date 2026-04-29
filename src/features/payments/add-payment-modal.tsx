@@ -73,6 +73,54 @@ interface InvoiceOption {
   currency_exchange_rate: number
 }
 
+const CONTAINER_INVOICE_LOOKUP_CONCURRENCY = 4
+const CONTAINER_INVOICE_LOOKUP_RETRIES = 3
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchWithRetry<T>(
+  request: () => Promise<T>,
+  retries = CONTAINER_INVOICE_LOOKUP_RETRIES
+): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    try {
+      return await request()
+    } catch (error) {
+      lastError = error
+      if (attempt < retries - 1) {
+        await sleep(300 * 2 ** attempt)
+      }
+    }
+  }
+  throw lastError
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (!items.length) return []
+  const safeConcurrency = Math.max(1, Math.min(concurrency, items.length))
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+
+  const worker = async () => {
+    while (true) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      if (currentIndex >= items.length) return
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex)
+    }
+  }
+
+  await Promise.all(Array.from({ length: safeConcurrency }, () => worker()))
+  return results
+}
+
 export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -259,10 +307,14 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
         return
       }
 
-      const results = await Promise.all(
-        invoiceNos.map(async (invoiceNo) => {
+      const results = await mapWithConcurrency(
+        invoiceNos,
+        CONTAINER_INVOICE_LOOKUP_CONCURRENCY,
+        async (invoiceNo) => {
           try {
-            const found = await paymentApi.searchInvoices(invoiceNo, 5, 'payment')
+            const found = await fetchWithRetry(() =>
+              paymentApi.searchInvoices(invoiceNo, 5, 'payment')
+            )
             const match = Array.isArray(found)
               ? found.find((x: any) => x.invoice_number === invoiceNo) || found[0]
               : null
@@ -287,7 +339,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
           } catch {
             return null
           }
-        })
+        }
       )
 
       const options = results.filter(Boolean) as InvoiceOption[]
@@ -296,8 +348,16 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
         return
       }
 
-      // Sort by invoice number for stability
-      options.sort((a, b) => a.invoice_number.localeCompare(b.invoice_number))
+      // Sort alphabetically by customer name (then invoice number for stable ordering).
+      options.sort((a, b) => {
+        const byCustomer = (a.customer_name || '').localeCompare(
+          b.customer_name || '',
+          undefined,
+          { sensitivity: 'base' }
+        )
+        if (byCustomer !== 0) return byCustomer
+        return (a.invoice_number || '').localeCompare(b.invoice_number || '')
+      })
       setContainerInvoices(options)
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to load invoices for container.')
