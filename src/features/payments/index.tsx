@@ -1072,7 +1072,7 @@ export function Payments() {
                 <div className='text-sm text-muted-foreground'>
                   Showing {pagination.from} to {pagination.to} of {pagination.total} payments
                 </div>
-                <div className='flex items-center gap-2'>
+                <div className='flex flex-wrap items-center justify-end gap-2'>
                   <Select
                     value={String(pagination.per_page)}
                     onValueChange={(value) => handlePerPageChange(Number(value))}
@@ -1097,9 +1097,19 @@ export function Payments() {
                     <ChevronLeft className='h-4 w-4' />
                     Previous
                   </Button>
-                  <div className='flex items-center gap-1'>
-                    {Array.from({ length: pagination.last_page }, (_, i) => i + 1).map(
-                      (pageNum) => (
+                  <div className='flex shrink-0 items-center gap-1'>
+                    {Array.from({ length: Math.min(5, pagination.last_page) }, (_, i) => {
+                      let pageNum: number
+                      if (pagination.last_page <= 5) {
+                        pageNum = i + 1
+                      } else if (pagination.current_page <= 3) {
+                        pageNum = i + 1
+                      } else if (pagination.current_page >= pagination.last_page - 2) {
+                        pageNum = pagination.last_page - 4 + i
+                      } else {
+                        pageNum = pagination.current_page - 2 + i
+                      }
+                      return (
                         <Button
                           key={pageNum}
                           variant={
@@ -1107,11 +1117,12 @@ export function Payments() {
                           }
                           size='sm'
                           onClick={() => handlePageChange(pageNum)}
+                          className='w-10'
                         >
                           {pageNum}
                         </Button>
                       )
-                    )}
+                    })}
                   </div>
                   <Button
                     variant='outline'
