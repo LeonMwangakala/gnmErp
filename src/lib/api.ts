@@ -1252,6 +1252,73 @@ export const customsShipperApi = {
   },
 }
 
+export type CustomsIcd = {
+  id: number
+  name: string
+  description?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type SaveCustomsIcdPayload = {
+  name: string
+  description?: string
+}
+
+function mapIcdFromApi(row: Record<string, unknown>): CustomsIcd {
+  return {
+    id: Number(row.id) || 0,
+    name: String(row.name ?? ''),
+    description: row.description != null ? String(row.description) : undefined,
+    createdAt: typeof row.createdAt === 'string' ? row.createdAt : undefined,
+    updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : undefined,
+  }
+}
+
+export const customsIcdApi = {
+  list: async (params?: {
+    search?: string
+    per_page?: number
+    page?: number
+  }): Promise<{
+    data: CustomsIcd[]
+    pagination: PaginationMeta
+  }> => {
+    const response = await api.get('/customs/icds', { params })
+    const raw = (response.data?.data || []) as Record<string, unknown>[]
+    return {
+      data: raw.map((row) => mapIcdFromApi(row)),
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 50,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+
+  get: async (id: number): Promise<CustomsIcd> => {
+    const response = await api.get(`/customs/icds/${id}`)
+    return mapIcdFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  create: async (payload: SaveCustomsIcdPayload): Promise<CustomsIcd> => {
+    const response = await api.post('/customs/icds', payload)
+    return mapIcdFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  update: async (id: number, payload: SaveCustomsIcdPayload): Promise<CustomsIcd> => {
+    const response = await api.put(`/customs/icds/${id}`, payload)
+    return mapIcdFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/customs/icds/${id}`)
+  },
+}
+
 export type CreateVesselPayload = {
   vesselName: string
   imo?: string | null

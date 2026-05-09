@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { useLocation } from '@tanstack/react-router'
+import { getRouteApi } from '@tanstack/react-router'
 import AsyncSelect from 'react-select/async'
 import { ChevronDown, ChevronRight, Download, Eye, Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -51,6 +51,8 @@ import { customsVesselVoyageApi } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { getStoredVessels, saveStoredVessels, type Vessel } from './vessels-storage'
 import { type Shipper } from './shippers-storage'
+
+const jobsCreateRoute = getRouteApi('/customs/jobs/create')
 import {
   getStoredVesselVoyages,
   saveStoredVesselVoyages,
@@ -235,40 +237,21 @@ const initialForm: JobForm = {
 
 export function CustomsCreateJob() {
   const loggedInUser = useAuthStore((s) => s.auth.user)
-  const locationHref = useLocation({ select: (l) => l.href })
-  const locationPathname = useLocation({ select: (l) => l.pathname })
-  const searchParams = useMemo(() => {
-    const parsed = new URL(locationHref, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
-    const direct = new URLSearchParams(parsed.search || '')
-    const hash = parsed.hash || ''
-    const queryIndex = hash.indexOf('?')
-    if (queryIndex === -1) return direct
-    const hashQuery = new URLSearchParams(hash.slice(queryIndex + 1))
-    hashQuery.forEach((value, key) => {
-      if (!direct.has(key)) direct.set(key, value)
-    })
-    return direct
-  }, [locationHref])
-  const pageMode = (searchParams.get('mode') || '').toLowerCase() === 'view'
-    ? 'view'
-    : (searchParams.get('mode') || '').toLowerCase() === 'update'
-      ? 'update'
-      : 'create'
+  const routerSearch = jobsCreateRoute.useSearch()
+  const pageMode = useMemo(() => {
+    const m = (routerSearch.mode || '').toLowerCase()
+    if (m === 'view') return 'view'
+    if (m === 'update') return 'update'
+    return 'create'
+  }, [routerSearch.mode])
   const editingJobId = useMemo(() => {
-    const candidates = [
-      searchParams.get('id'),
-      searchParams.get('jobId'),
-      searchParams.get('job_id'),
-    ].filter(Boolean) as string[]
+    const candidates = [routerSearch.id, routerSearch.jobId, routerSearch.job_id].filter(Boolean) as string[]
     for (const raw of candidates) {
       const n = Number(raw)
       if (Number.isFinite(n) && n > 0) return n
     }
-    const pathParts = (locationPathname || '').split('/').filter(Boolean)
-    const pathTail = pathParts.length > 0 ? pathParts[pathParts.length - 1] : ''
-    const pathId = Number(pathTail)
-    return Number.isFinite(pathId) && pathId > 0 ? pathId : null
-  }, [searchParams, locationPathname])
+    return null
+  }, [routerSearch.id, routerSearch.jobId, routerSearch.job_id])
   const isViewMode = pageMode === 'view'
   const [currentJobId, setCurrentJobId] = useState<number | null>(null)
   const [form, setForm] = useState<JobForm>(initialForm)
@@ -483,6 +466,25 @@ export function CustomsCreateJob() {
     }
   }, [])
 
+  /** Shipping line is stored as free text (`shipping_line`); options come from customs shippers by name. */
+  const shippingLineSelectOptions = useMemo(() => {
+    const byName = new Map<string, string>()
+    for (const s of shipperOptions) {
+      const name = String(s.name || '').trim()
+      if (!name) continue
+      const label = `${name}${s.city ? ` — ${s.city}` : ''}`
+      if (!byName.has(name)) byName.set(name, label)
+    }
+    const rows = [...byName.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([value, label]) => ({ value, label }))
+    const current = form.shippingLine.trim()
+    if (current && !byName.has(current)) {
+      rows.unshift({ value: current, label: `${current} (saved)` })
+    }
+    return rows
+  }, [shipperOptions, form.shippingLine])
+
   useEffect(() => {
     if (!currentJobId) return
     fetchJobDocuments(currentJobId)
@@ -500,12 +502,27 @@ export function CustomsCreateJob() {
       .then((job) => {
         if (!job || cancelled) return
         const meta = (job.meta || {}) as Record<string, any>
-        const jobDetails = (meta.job_details || {}) as Record<string, any>
-        const lineVesselDetails = (meta.line_vessel_details || {}) as Record<string, any>
-        const shipmentDetails = (meta.shipment_details || {}) as Record<string, any>
-        const containerShipment = Array.isArray(meta.container_shipment) ? meta.container_shipment : []
-        const vehicleShipment = Array.isArray(meta.vehicle_shipment) ? meta.vehicle_shipment : []
-        const looseCargoShipment = Array.isArray(meta.loose_cargo_shipment) ? meta.loose_cargo_shipment : []
+        const jobDetails = (meta.job_details ?? job.job_details ?? {}) as Record<string, any>
+        const lineVesselDetails = (meta.line_vessel_details ?? job.line_vessel_details ?? {}) as Record<
+          string,
+          any
+        >
+        const shipmentDetails = (meta.shipment_details ?? job.shipment_details ?? {}) as Record<string, any>
+        const containerShipment = Array.isArray(meta.container_shipment)
+          ? meta.container_shipment
+          : Array.isArray(job.container_shipment)
+            ? job.container_shipment
+            : []
+        const vehicleShipment = Array.isArray(meta.vehicle_shipment)
+          ? meta.vehicle_shipment
+          : Array.isArray(job.vehicle_shipment)
+            ? job.vehicle_shipment
+            : []
+        const looseCargoShipment = Array.isArray(meta.loose_cargo_shipment)
+          ? meta.loose_cargo_shipment
+          : Array.isArray(job.loose_cargo_shipment)
+            ? job.loose_cargo_shipment
+            : []
         setCurrentJobId(Number(job.id) || editingJobId)
         setForm((prev) => ({
           ...prev,
@@ -619,12 +636,17 @@ export function CustomsCreateJob() {
         } else {
           setSelectedFileManager(null)
         }
-        setCommodityRows(Array.isArray((meta.upload_csv || {}).rows) ? (meta.upload_csv || {}).rows : [])
+        const uploadCsv =
+          meta.upload_csv ??
+          (typeof job.upload_csv === 'object' && job.upload_csv !== null ? job.upload_csv : {})
+        setCommodityRows(Array.isArray((uploadCsv as { rows?: unknown }).rows) ? (uploadCsv as { rows: CommodityRow[] }).rows : [])
         setUploadedCommodityFiles(
-          Array.isArray((meta.upload_csv || {}).files) ? (meta.upload_csv || {}).files : []
+          Array.isArray((uploadCsv as { files?: unknown }).files) ? (uploadCsv as { files: string[] }).files : []
         )
-        setAuthorizationLetters(Array.isArray(meta.letters) ? meta.letters : [])
-        setNotes(Array.isArray(meta.notes) ? meta.notes : [])
+        setAuthorizationLetters(
+          Array.isArray(meta.letters) ? meta.letters : Array.isArray(job.letters) ? job.letters : []
+        )
+        setNotes(Array.isArray(meta.notes) ? meta.notes : Array.isArray(job.notes) ? job.notes : [])
       })
       .catch(() => {
         toast.error('Failed to load job details')
@@ -1608,10 +1630,22 @@ export function CustomsCreateJob() {
               <div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
                 <div className='space-y-1'>
                   <Label>Shipping Line</Label>
-                  <Input
-                    value={form.shippingLine}
-                    onChange={(e) => updateField('shippingLine', e.target.value)}
-                  />
+                  <Select
+                    value={form.shippingLine.trim() ? form.shippingLine : '__none__'}
+                    onValueChange={(v) => updateField('shippingLine', v === '__none__' ? '' : v)}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='Select shipping line (from shippers)' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='__none__'>None</SelectItem>
+                      {shippingLineSelectOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className='space-y-1'>
                   <Label>Arrival Date</Label>
