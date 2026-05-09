@@ -46,7 +46,14 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { customerApi, customsJobApi, customsShipperApi, customsVesselApi } from '@/lib/api'
+import {
+  customerApi,
+  customsIcdApi,
+  customsJobApi,
+  customsShipperApi,
+  customsVesselApi,
+  type CustomsIcd,
+} from '@/lib/api'
 import { customsVesselVoyageApi } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { getStoredVessels, saveStoredVessels, type Vessel } from './vessels-storage'
@@ -327,6 +334,7 @@ export function CustomsCreateJob() {
   const [vessels, setVessels] = useState<Vessel[]>([])
   const [vesselVoyages, setVesselVoyages] = useState<VesselVoyage[]>([])
   const [shipperOptions, setShipperOptions] = useState<Shipper[]>([])
+  const [icdOptions, setIcdOptions] = useState<CustomsIcd[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [loadingJob, setLoadingJob] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null)
@@ -484,6 +492,34 @@ export function CustomsCreateJob() {
     }
     return rows
   }, [shipperOptions, form.shippingLine])
+
+  const icdTransferLocationSelectOptions = useMemo(() => {
+    const names = icdOptions
+      .map((row) => String(row.name || '').trim())
+      .filter(Boolean)
+    const uniqueSorted = [...new Set(names)].sort((a, b) => a.localeCompare(b))
+    const opts = uniqueSorted.map((value) => ({ value, label: value }))
+    const current = form.icdTransferLocation.trim()
+    if (current && !uniqueSorted.includes(current)) {
+      opts.unshift({ value: current, label: `${current} (saved)` })
+    }
+    return opts
+  }, [icdOptions, form.icdTransferLocation])
+
+  useEffect(() => {
+    let cancelled = false
+    customsIcdApi
+      .list({ per_page: 500, page: 1 })
+      .then((res) => {
+        if (!cancelled) setIcdOptions(res.data)
+      })
+      .catch(() => {
+        if (!cancelled) setIcdOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!currentJobId) return
@@ -1768,10 +1804,22 @@ export function CustomsCreateJob() {
 
                 <div className='space-y-1 md:col-span-3'>
                   <Label>ICD Transfer Location</Label>
-                  <Input
-                    value={form.icdTransferLocation}
-                    onChange={(e) => updateField('icdTransferLocation', e.target.value)}
-                  />
+                  <Select
+                    value={form.icdTransferLocation.trim() ? form.icdTransferLocation : '__none__'}
+                    onValueChange={(v) => updateField('icdTransferLocation', v === '__none__' ? '' : v)}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='Select ICD location' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='__none__'>None</SelectItem>
+                      {icdTransferLocationSelectOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </TabsContent>

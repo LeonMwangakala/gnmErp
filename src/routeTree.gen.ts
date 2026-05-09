@@ -25,6 +25,7 @@ import { Route as CustomsVesselsRouteImport } from './routes/customs.vessels'
 import { Route as CustomsVesselVoyageRouteImport } from './routes/customs.vessel-voyage'
 import { Route as CustomsShipperRouteImport } from './routes/customs.shipper'
 import { Route as CustomsJobsRouteImport } from './routes/customs.jobs'
+import { Route as CustomsIcdRouteImport } from './routes/customs.icd'
 import { Route as CustomsDashboardRouteImport } from './routes/customs.dashboard'
 import { Route as CustomersIdRouteImport } from './routes/customers.$id'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
@@ -143,6 +144,11 @@ const CustomsShipperRoute = CustomsShipperRouteImport.update({
 const CustomsJobsRoute = CustomsJobsRouteImport.update({
   id: '/customs/jobs',
   path: '/customs/jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomsIcdRoute = CustomsIcdRouteImport.update({
+  id: '/customs/icd',
+  path: '/customs/icd',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CustomsDashboardRoute = CustomsDashboardRouteImport.update({
@@ -384,6 +390,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
   '/customs/dashboard': typeof CustomsDashboardRoute
+  '/customs/icd': typeof CustomsIcdRoute
   '/customs/jobs': typeof CustomsJobsRouteWithChildren
   '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
@@ -437,6 +444,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
   '/customs/dashboard': typeof CustomsDashboardRoute
+  '/customs/icd': typeof CustomsIcdRoute
   '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
   '/customs/vessels': typeof CustomsVesselsRoute
@@ -495,6 +503,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
   '/customs/dashboard': typeof CustomsDashboardRoute
+  '/customs/icd': typeof CustomsIcdRoute
   '/customs/jobs': typeof CustomsJobsRouteWithChildren
   '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
@@ -553,6 +562,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/customers/$id'
     | '/customs/dashboard'
+    | '/customs/icd'
     | '/customs/jobs'
     | '/customs/shipper'
     | '/customs/vessel-voyage'
@@ -606,6 +616,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/customers/$id'
     | '/customs/dashboard'
+    | '/customs/icd'
     | '/customs/shipper'
     | '/customs/vessel-voyage'
     | '/customs/vessels'
@@ -663,6 +674,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/customers/$id'
     | '/customs/dashboard'
+    | '/customs/icd'
     | '/customs/jobs'
     | '/customs/shipper'
     | '/customs/vessel-voyage'
@@ -718,6 +730,7 @@ export interface RootRouteChildren {
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
   CustomsDashboardRoute: typeof CustomsDashboardRoute
+  CustomsIcdRoute: typeof CustomsIcdRoute
   CustomsJobsRoute: typeof CustomsJobsRouteWithChildren
   CustomsShipperRoute: typeof CustomsShipperRoute
   CustomsVesselVoyageRoute: typeof CustomsVesselVoyageRoute
@@ -845,6 +858,13 @@ declare module '@tanstack/react-router' {
       path: '/customs/jobs'
       fullPath: '/customs/jobs'
       preLoaderRoute: typeof CustomsJobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customs/icd': {
+      id: '/customs/icd'
+      path: '/customs/icd'
+      fullPath: '/customs/icd'
+      preLoaderRoute: typeof CustomsIcdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/customs/dashboard': {
@@ -1272,6 +1292,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors500Route: errors500Route,
   errors503Route: errors503Route,
   CustomsDashboardRoute: CustomsDashboardRoute,
+  CustomsIcdRoute: CustomsIcdRoute,
   CustomsJobsRoute: CustomsJobsRouteWithChildren,
   CustomsShipperRoute: CustomsShipperRoute,
   CustomsVesselVoyageRoute: CustomsVesselVoyageRoute,

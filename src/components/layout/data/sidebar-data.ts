@@ -30,6 +30,7 @@ import {
   Ship,
   Route,
   Workflow,
+  Warehouse,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -79,6 +80,11 @@ export function getSidebarData(user?: AuthUserLike): SidebarData {
       icon: Users,
     },
     {
+      title: 'ICD locations',
+      url: '/customs/icd',
+      icon: Warehouse,
+    },
+    {
       title: 'Work Flow',
       url: '/customs/work-flow',
       icon: Workflow,
@@ -117,6 +123,7 @@ export function getSidebarData(user?: AuthUserLike): SidebarData {
         customsItems[3],
         customsItems[4],
         customsItems[5],
+        customsItems[6],
       ]
     : [
         {

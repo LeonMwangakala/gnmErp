@@ -17,7 +17,7 @@ type IcdFormModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   icdId: number | null
-  onSaved: (row: CustomsIcd) => void
+  onSaved: () => void
   viewOnly?: boolean
 }
 
@@ -92,9 +92,12 @@ export function IcdFormModal({
     }
     setSaving(true)
     try {
-      const row =
-        icdId != null ? await customsIcdApi.update(icdId, payload) : await customsIcdApi.create(payload)
-      onSaved(row)
+      if (icdId != null) {
+        await customsIcdApi.update(icdId, payload)
+      } else {
+        await customsIcdApi.create(payload)
+      }
+      onSaved()
       toast.success(icdId != null ? 'ICD location updated' : 'ICD location created')
       onOpenChange(false)
     } catch {
