@@ -1319,6 +1319,275 @@ export const customsIcdApi = {
   },
 }
 
+export type CustomsCountry = {
+  id: number
+  name: string
+  portsCount: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type SaveCustomsCountryPayload = {
+  name: string
+}
+
+export type CustomsPort = {
+  id: number
+  countryId: number
+  countryName: string
+  name: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type SaveCustomsPortPayload = {
+  country_id: number
+  name: string
+}
+
+function mapCustomsCountryFromApi(row: Record<string, unknown>): CustomsCountry {
+  return {
+    id: Number(row.id) || 0,
+    name: String(row.name ?? ''),
+    portsCount: Number(row.portsCount ?? row.ports_count ?? 0) || 0,
+    createdAt: typeof row.createdAt === 'string' ? row.createdAt : undefined,
+    updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : undefined,
+  }
+}
+
+function mapCustomsPortFromApi(row: Record<string, unknown>): CustomsPort {
+  return {
+    id: Number(row.id) || 0,
+    countryId: Number(row.countryId ?? row.country_id ?? 0) || 0,
+    countryName: String(row.countryName ?? row.country_name ?? ''),
+    name: String(row.name ?? ''),
+    createdAt: typeof row.createdAt === 'string' ? row.createdAt : undefined,
+    updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : undefined,
+  }
+}
+
+export const customsCountryApi = {
+  list: async (params?: {
+    search?: string
+    per_page?: number
+    page?: number
+  }): Promise<{ data: CustomsCountry[]; pagination: PaginationMeta }> => {
+    const response = await api.get('/customs/countries', { params })
+    const raw = (response.data?.data || []) as Record<string, unknown>[]
+    return {
+      data: raw.map((row) => mapCustomsCountryFromApi(row)),
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 50,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+
+  get: async (id: number): Promise<CustomsCountry> => {
+    const response = await api.get(`/customs/countries/${id}`)
+    return mapCustomsCountryFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  create: async (payload: SaveCustomsCountryPayload): Promise<CustomsCountry> => {
+    const response = await api.post('/customs/countries', payload)
+    return mapCustomsCountryFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  update: async (id: number, payload: SaveCustomsCountryPayload): Promise<CustomsCountry> => {
+    const response = await api.put(`/customs/countries/${id}`, payload)
+    return mapCustomsCountryFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/customs/countries/${id}`)
+  },
+}
+
+export const customsPortApi = {
+  list: async (params?: {
+    country_id?: number
+    search?: string
+    per_page?: number
+    page?: number
+  }): Promise<{ data: CustomsPort[]; pagination: PaginationMeta }> => {
+    const response = await api.get('/customs/ports', { params })
+    const raw = (response.data?.data || []) as Record<string, unknown>[]
+    return {
+      data: raw.map((row) => mapCustomsPortFromApi(row)),
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 50,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+
+  get: async (id: number): Promise<CustomsPort> => {
+    const response = await api.get(`/customs/ports/${id}`)
+    return mapCustomsPortFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  create: async (payload: SaveCustomsPortPayload): Promise<CustomsPort> => {
+    const response = await api.post('/customs/ports', payload)
+    return mapCustomsPortFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  update: async (id: number, payload: SaveCustomsPortPayload): Promise<CustomsPort> => {
+    const response = await api.put(`/customs/ports/${id}`, payload)
+    return mapCustomsPortFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/customs/ports/${id}`)
+  },
+}
+
+/** Matches customs job workflow stages (document category). */
+export type CustomsDocumentStageCode =
+  | 'SHIPPING_LINE'
+  | 'DECLARATION_TRA'
+  | 'PORT'
+  | 'TBS'
+
+export const CUSTOMS_DOCUMENT_STAGE_CODES: readonly CustomsDocumentStageCode[] = [
+  'SHIPPING_LINE',
+  'DECLARATION_TRA',
+  'PORT',
+  'TBS',
+] as const
+
+export function labelForCustomsDocumentStage(code: string): string {
+  switch (code) {
+    case 'SHIPPING_LINE':
+      return 'Shipping'
+    case 'DECLARATION_TRA':
+      return 'Declaration'
+    case 'PORT':
+      return 'Port'
+    case 'TBS':
+      return 'TBS'
+    default:
+      return code
+  }
+}
+
+function normalizeDocumentStageFromApi(value: unknown): CustomsDocumentStageCode {
+  const s = String(value ?? '').trim()
+  if (
+    s === 'SHIPPING_LINE' ||
+    s === 'DECLARATION_TRA' ||
+    s === 'PORT' ||
+    s === 'TBS'
+  ) {
+    return s
+  }
+  return 'SHIPPING_LINE'
+}
+
+/** Default document types when API is unreachable — names and stages match API seed/backfill. */
+export const FALLBACK_JOB_DOCUMENT_TYPES: ReadonlyArray<{
+  name: string
+  stage: CustomsDocumentStageCode
+}> = [
+  { name: 'TBS PERMIT', stage: 'TBS' },
+  { name: 'INVOICE OF CARGO', stage: 'SHIPPING_LINE' },
+  { name: 'MASTER BILL OF LADING', stage: 'SHIPPING_LINE' },
+  { name: 'PACKING LIST OF CARGO', stage: 'SHIPPING_LINE' },
+  { name: 'C36 FORM', stage: 'DECLARATION_TRA' },
+  { name: 'CHEMICAL PERMIT', stage: 'DECLARATION_TRA' },
+  { name: 'AUTHORIZATION LETTER', stage: 'DECLARATION_TRA' },
+  { name: 'COA', stage: 'DECLARATION_TRA' },
+  { name: 'COO', stage: 'DECLARATION_TRA' },
+  { name: 'PROFORMA INVOICE', stage: 'SHIPPING_LINE' },
+  { name: 'ASSESSMENT NOTICE', stage: 'DECLARATION_TRA' },
+  { name: 'TRA PAYMENT', stage: 'DECLARATION_TRA' },
+  { name: 'PAYMENT NOTE', stage: 'DECLARATION_TRA' },
+  { name: 'WHARFAGE NOTICE', stage: 'PORT' },
+  { name: 'WHARFAGE INVOICE', stage: 'PORT' },
+  { name: 'WHARFAGE TISS', stage: 'PORT' },
+  { name: 'ICD INVOICE', stage: 'PORT' },
+  { name: 'ICD RECEIPT', stage: 'PORT' },
+  { name: 'CORRIDOR LEVY INVOICE', stage: 'PORT' },
+]
+
+export type CustomsDocumentType = {
+  id: number
+  name: string
+  sortOrder: number
+  stage: CustomsDocumentStageCode
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type SaveCustomsDocumentTypePayload = {
+  name: string
+  stage: CustomsDocumentStageCode
+  sort_order?: number | null
+}
+
+function mapCustomsDocumentTypeFromApi(row: Record<string, unknown>): CustomsDocumentType {
+  return {
+    id: Number(row.id) || 0,
+    name: String(row.name ?? ''),
+    sortOrder: Number(row.sortOrder ?? row.sort_order ?? 0) || 0,
+    stage: normalizeDocumentStageFromApi(row.stage),
+    createdAt: typeof row.createdAt === 'string' ? row.createdAt : undefined,
+    updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : undefined,
+  }
+}
+
+export const customsDocumentTypeApi = {
+  list: async (params?: {
+    search?: string
+    stage?: CustomsDocumentStageCode
+    per_page?: number
+    page?: number
+  }): Promise<{ data: CustomsDocumentType[]; pagination: PaginationMeta }> => {
+    const response = await api.get('/customs/document-types', { params })
+    const raw = (response.data?.data || []) as Record<string, unknown>[]
+    return {
+      data: raw.map((row) => mapCustomsDocumentTypeFromApi(row)),
+      pagination: response.data.pagination || {
+        current_page: 1,
+        per_page: 50,
+        total: 0,
+        last_page: 1,
+        from: null,
+        to: null,
+      },
+    }
+  },
+
+  get: async (id: number): Promise<CustomsDocumentType> => {
+    const response = await api.get(`/customs/document-types/${id}`)
+    return mapCustomsDocumentTypeFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  create: async (payload: SaveCustomsDocumentTypePayload): Promise<CustomsDocumentType> => {
+    const response = await api.post('/customs/document-types', payload)
+    return mapCustomsDocumentTypeFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  update: async (
+    id: number,
+    payload: SaveCustomsDocumentTypePayload,
+  ): Promise<CustomsDocumentType> => {
+    const response = await api.put(`/customs/document-types/${id}`, payload)
+    return mapCustomsDocumentTypeFromApi((response.data?.data || {}) as Record<string, unknown>)
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/customs/document-types/${id}`)
+  },
+}
+
 export type CreateVesselPayload = {
   vesselName: string
   imo?: string | null

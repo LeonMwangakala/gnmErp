@@ -26,7 +26,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -48,11 +50,20 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   customerApi,
+  CUSTOMS_DOCUMENT_STAGE_CODES,
+  FALLBACK_JOB_DOCUMENT_TYPES,
+  labelForCustomsDocumentStage,
+  customsCountryApi,
+  customsDocumentTypeApi,
   customsIcdApi,
   customsJobApi,
+  customsPortApi,
   customsShipperApi,
   customsVesselApi,
+  type CustomsCountry,
+  type CustomsDocumentType,
   type CustomsIcd,
+  type CustomsPort,
 } from '@/lib/api'
 import { customsVesselVoyageApi } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
@@ -65,6 +76,53 @@ import {
   saveStoredVesselVoyages,
   type VesselVoyage,
 } from './vessel-voyage-storage'
+
+const CONTAINER_TYPE_OPTIONS = [
+  '20TK',
+  '20GP',
+  '20OT',
+  '20RE',
+  '20DV',
+  '40GP',
+  '40OT',
+  '40RE',
+  '20FR',
+  '40FR',
+  '40HC',
+  '40HQ',
+  '40DV',
+] as const
+
+/** Common engine displacements (CC) for vehicle shipment declarations */
+const ENGINE_CAPACITY_CC_OPTIONS = [
+  '660 CC',
+  '800 CC',
+  '1000 CC',
+  '1100 CC',
+  '1200 CC',
+  '1300 CC',
+  '1400 CC',
+  '1500 CC',
+  '1600 CC',
+  '1700 CC',
+  '1800 CC',
+  '1900 CC',
+  '2000 CC',
+  '2200 CC',
+  '2400 CC',
+  '2500 CC',
+  '2700 CC',
+  '2800 CC',
+  '3000 CC',
+  '3200 CC',
+  '3500 CC',
+  '4000 CC',
+  '4200 CC',
+  '4500 CC',
+  '5000 CC',
+  '5500 CC',
+  '6000 CC',
+] as const
 
 type JobForm = {
   shipmentType: string
@@ -106,6 +164,7 @@ type JobForm = {
   icdTransfer: string
   icdTransferLocation: string
   originCountry: string
+  destinationCountry: string
   portOfLoading: string
   portOfDischarge: string
   nominatedBy: string
@@ -216,8 +275,9 @@ const initialForm: JobForm = {
   icdTransfer: '',
   icdTransferLocation: '',
   originCountry: '',
+  destinationCountry: '',
   portOfLoading: '',
-  portOfDischarge: 'DAR ES SALAAM',
+  portOfDischarge: '',
   nominatedBy: '',
   marks: '',
   shipmentDescription: '',
@@ -305,6 +365,8 @@ export function CustomsCreateJob() {
     }>
   >([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
+  const [jobDocumentTypes, setJobDocumentTypes] = useState<CustomsDocumentType[]>([])
+  const [jobDocumentTypesLoadFailed, setJobDocumentTypesLoadFailed] = useState(false)
   const [isDocumentPreviewOpen, setIsDocumentPreviewOpen] = useState(false)
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState('')
   const [documentPreviewName, setDocumentPreviewName] = useState('')
@@ -335,6 +397,11 @@ export function CustomsCreateJob() {
   const [vesselVoyages, setVesselVoyages] = useState<VesselVoyage[]>([])
   const [shipperOptions, setShipperOptions] = useState<Shipper[]>([])
   const [icdOptions, setIcdOptions] = useState<CustomsIcd[]>([])
+  const [customsCountries, setCustomsCountries] = useState<CustomsCountry[]>([])
+  const [originCountryId, setOriginCountryId] = useState('')
+  const [destinationCountryId, setDestinationCountryId] = useState('')
+  const [portsOrigin, setPortsOrigin] = useState<CustomsPort[]>([])
+  const [portsDestination, setPortsDestination] = useState<CustomsPort[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [loadingJob, setLoadingJob] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null)
@@ -506,10 +573,61 @@ export function CustomsCreateJob() {
     return opts
   }, [icdOptions, form.icdTransferLocation])
 
+  const sortedCustomsCountries = useMemo(
+    () => [...customsCountries].sort((a, b) => a.name.localeCompare(b.name)),
+    [customsCountries]
+  )
+
+  const originCountrySelectOptions = useMemo(() => {
+    const opts = sortedCustomsCountries.map((c) => ({ value: c.name, label: c.name }))
+    const current = form.originCountry.trim()
+    if (
+      current &&
+      !sortedCustomsCountries.some((c) => c.name.trim().toLowerCase() === current.toLowerCase())
+    ) {
+      opts.unshift({ value: current, label: `${current} (saved)` })
+    }
+    return opts
+  }, [sortedCustomsCountries, form.originCountry])
+
+  const destinationCountrySelectOptions = useMemo(() => {
+    const opts = sortedCustomsCountries.map((c) => ({ value: c.name, label: c.name }))
+    const current = form.destinationCountry.trim()
+    if (
+      current &&
+      !sortedCustomsCountries.some((c) => c.name.trim().toLowerCase() === current.toLowerCase())
+    ) {
+      opts.unshift({ value: current, label: `${current} (saved)` })
+    }
+    return opts
+  }, [sortedCustomsCountries, form.destinationCountry])
+
+  const portLoadingSelectOptions = useMemo(() => {
+    const names = portsOrigin.map((p) => String(p.name || '').trim()).filter(Boolean)
+    const uniqueSorted = [...new Set(names)].sort((a, b) => a.localeCompare(b))
+    const opts = uniqueSorted.map((value) => ({ value, label: value }))
+    const current = form.portOfLoading.trim()
+    if (current && !uniqueSorted.includes(current)) {
+      opts.unshift({ value: current, label: `${current} (saved)` })
+    }
+    return opts
+  }, [portsOrigin, form.portOfLoading])
+
+  const portDischargeSelectOptions = useMemo(() => {
+    const names = portsDestination.map((p) => String(p.name || '').trim()).filter(Boolean)
+    const uniqueSorted = [...new Set(names)].sort((a, b) => a.localeCompare(b))
+    const opts = uniqueSorted.map((value) => ({ value, label: value }))
+    const current = form.portOfDischarge.trim()
+    if (current && !uniqueSorted.includes(current)) {
+      opts.unshift({ value: current, label: `${current} (saved)` })
+    }
+    return opts
+  }, [portsDestination, form.portOfDischarge])
+
   useEffect(() => {
     let cancelled = false
     customsIcdApi
-      .list({ per_page: 500, page: 1 })
+      .list({ per_page: 200, page: 1 })
       .then((res) => {
         if (!cancelled) setIcdOptions(res.data)
       })
@@ -520,6 +638,126 @@ export function CustomsCreateJob() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    customsDocumentTypeApi
+      .list({ per_page: 200, page: 1 })
+      .then((res) => {
+        if (!cancelled) {
+          setJobDocumentTypes(res.data)
+          setJobDocumentTypesLoadFailed(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setJobDocumentTypes([])
+          setJobDocumentTypesLoadFailed(true)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    customsCountryApi
+      .list({ per_page: 200, page: 1 })
+      .then((res) => {
+        if (!cancelled) setCustomsCountries(res.data)
+      })
+      .catch(() => {
+        if (!cancelled) setCustomsCountries([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (customsCountries.length === 0) {
+      setOriginCountryId('')
+      setDestinationCountryId('')
+      return
+    }
+    const norm = (s: string) => s.trim().toLowerCase()
+    const o = customsCountries.find((c) => norm(c.name) === norm(form.originCountry))
+    setOriginCountryId(o ? String(o.id) : '')
+    const d = customsCountries.find((c) => norm(c.name) === norm(form.destinationCountry))
+    setDestinationCountryId(d ? String(d.id) : '')
+  }, [customsCountries, form.originCountry, form.destinationCountry])
+
+  useEffect(() => {
+    const id = Number(originCountryId)
+    if (!Number.isFinite(id) || id <= 0) {
+      setPortsOrigin([])
+      return
+    }
+    let cancelled = false
+    customsPortApi
+      .list({ country_id: id, per_page: 200, page: 1 })
+      .then((res) => {
+        if (!cancelled) setPortsOrigin(res.data)
+      })
+      .catch(() => {
+        if (!cancelled) setPortsOrigin([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [originCountryId])
+
+  useEffect(() => {
+    const id = Number(destinationCountryId)
+    if (!Number.isFinite(id) || id <= 0) {
+      setPortsDestination([])
+      return
+    }
+    let cancelled = false
+    customsPortApi
+      .list({ country_id: id, per_page: 200, page: 1 })
+      .then((res) => {
+        if (!cancelled) setPortsDestination(res.data)
+      })
+      .catch(() => {
+        if (!cancelled) setPortsDestination([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [destinationCountryId])
+
+  const documentUploadGroups = useMemo(() => {
+    type DocUploadRow = {
+      name: string
+      stage: (typeof CUSTOMS_DOCUMENT_STAGE_CODES)[number]
+      sortOrder: number
+    }
+    const rows: DocUploadRow[] = jobDocumentTypesLoadFailed
+      ? FALLBACK_JOB_DOCUMENT_TYPES.map((r, i) => ({
+          name: r.name,
+          stage: r.stage,
+          sortOrder: i + 1,
+        }))
+      : jobDocumentTypes.map((d) => ({
+          name: d.name,
+          stage: d.stage,
+          sortOrder: d.sortOrder,
+        }))
+    const sorted = [...rows].sort((a, b) => {
+      const ai = CUSTOMS_DOCUMENT_STAGE_CODES.indexOf(a.stage)
+      const bi = CUSTOMS_DOCUMENT_STAGE_CODES.indexOf(b.stage)
+      if (ai !== bi) return ai - bi
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+      return a.name.localeCompare(b.name)
+    })
+    return CUSTOMS_DOCUMENT_STAGE_CODES.map((stage) => ({
+      stage,
+      label: labelForCustomsDocumentStage(stage),
+      names: sorted.filter((r) => r.stage === stage).map((r) => r.name),
+    })).filter((g) => g.names.length > 0)
+  }, [jobDocumentTypes, jobDocumentTypesLoadFailed])
 
   useEffect(() => {
     if (!currentJobId) return
@@ -601,6 +839,7 @@ export function CustomsCreateJob() {
           icdTransfer: String(lineVesselDetails.icd_transfer || ''),
           icdTransferLocation: String(lineVesselDetails.icd_transfer_location || ''),
           originCountry: String(shipmentDetails.origin_country || ''),
+          destinationCountry: String(shipmentDetails.destination_country || ''),
           portOfLoading: String(shipmentDetails.port_of_loading || ''),
           portOfDischarge: String(shipmentDetails.port_of_discharge || ''),
           nominatedBy: String(shipmentDetails.nominated_by || ''),
@@ -787,28 +1026,6 @@ export function CustomsCreateJob() {
     setIsNotesModalOpen(false)
     resetNoteForm()
   }
-
-  const documentNameOptions = [
-    'TBS PERMIT',
-    'INVOICE OF CARGO',
-    'MASTER BILL OF LADING',
-    'PACKING LIST OF CARGO',
-    'C36 FORM',
-    'CHEMICAL PERMIT',
-    'AUTHORIZATION LETTER',
-    'COA',
-    'COO',
-    'PROFORMA INVOICE',
-    'ASSESSMENT NOTICE',
-    'TRA PAYMENT',
-    'PAYMENT NOTE',
-    'WHARFAGE NOTICE',
-    'WHARFAGE INVOICE',
-    'WHARFAGE TISS',
-    'ICD INVOICE',
-    'ICD RECEIPT',
-    'CORRIDOR LEVY INVOICE',
-  ]
 
   const resetUploadModalForm = () => {
     setDocumentName('')
@@ -1119,6 +1336,7 @@ export function CustomsCreateJob() {
 
     const shipmentDetails = {
       origin_country: form.originCountry || null,
+      destination_country: form.destinationCountry || null,
       port_of_loading: form.portOfLoading || null,
       port_of_discharge: form.portOfDischarge || null,
       nominated_by: form.nominatedBy || null,
@@ -1825,20 +2043,110 @@ export function CustomsCreateJob() {
             </TabsContent>
 
             <TabsContent value='shipment' className='space-y-3 rounded-md border p-4'>
-              <div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
+              <div className='grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4'>
                 <div className='space-y-1'>
                   <Label>Origin Country</Label>
-                  <Input value={form.originCountry} onChange={(e) => updateField('originCountry', e.target.value)} />
+                  <Select
+                    value={form.originCountry.trim() ? form.originCountry : '__none__'}
+                    onValueChange={(v) => {
+                      if (v === '__none__') {
+                        updateField('originCountry', '')
+                        updateField('portOfLoading', '')
+                        return
+                      }
+                      updateField('originCountry', v)
+                      updateField('portOfLoading', '')
+                    }}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='Select origin country' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='__none__'>None</SelectItem>
+                      {originCountrySelectOptions.map((opt) => (
+                        <SelectItem key={`oc-${opt.value}`} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className='space-y-1'>
                   <Label>Port Of Loading</Label>
-                  <Input value={form.portOfLoading} onChange={(e) => updateField('portOfLoading', e.target.value)} />
+                  <Select
+                    value={form.portOfLoading.trim() ? form.portOfLoading : '__none__'}
+                    onValueChange={(v) => updateField('portOfLoading', v === '__none__' ? '' : v)}
+                    disabled={!originCountryId}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue
+                        placeholder={
+                          originCountryId ? 'Select port' : 'Choose origin country first'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='__none__'>None</SelectItem>
+                      {portLoadingSelectOptions.map((opt) => (
+                        <SelectItem key={`pl-${opt.value}`} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className='space-y-1'>
+                  <Label>Destination Country</Label>
+                  <Select
+                    value={form.destinationCountry.trim() ? form.destinationCountry : '__none__'}
+                    onValueChange={(v) => {
+                      if (v === '__none__') {
+                        updateField('destinationCountry', '')
+                        updateField('portOfDischarge', '')
+                        return
+                      }
+                      updateField('destinationCountry', v)
+                      updateField('portOfDischarge', '')
+                    }}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue placeholder='e.g. Tanzania' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='__none__'>None</SelectItem>
+                      {destinationCountrySelectOptions.map((opt) => (
+                        <SelectItem key={`dc-${opt.value}`} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className='space-y-1'>
                   <Label>Port Of Discharge</Label>
-                  <Input value={form.portOfDischarge} onChange={(e) => updateField('portOfDischarge', e.target.value)} />
+                  <Select
+                    value={form.portOfDischarge.trim() ? form.portOfDischarge : '__none__'}
+                    onValueChange={(v) => updateField('portOfDischarge', v === '__none__' ? '' : v)}
+                    disabled={!destinationCountryId}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue
+                        placeholder={
+                          destinationCountryId ? 'Select port' : 'Choose destination country first'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='__none__'>None</SelectItem>
+                      {portDischargeSelectOptions.map((opt) => (
+                        <SelectItem key={`pd-${opt.value}`} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className='space-y-1'>
+                <div className='space-y-1 md:col-span-2 lg:col-span-4'>
                   <Label>Nominated By</Label>
                   <Select value={form.nominatedBy || '__empty__'} onValueChange={(v) => updateField('nominatedBy', v)}>
                     <SelectTrigger className='w-full'>
@@ -1910,7 +2218,45 @@ export function CustomsCreateJob() {
                 </div>
                 {openShipmentSections.container && (
                   <Table><TableHeader><TableRow><TableHead>Container No.</TableHead><TableHead>Type</TableHead><TableHead>Seal No.</TableHead><TableHead>Per Container Weight</TableHead></TableRow></TableHeader>
-                    <TableBody>{form.containerShipment.map((row, i) => <TableRow key={`c-${i}`}><TableCell><Input value={row.containerNo} onChange={(e) => updateContainerRow(i, 'containerNo', e.target.value)} /></TableCell><TableCell><Input value={row.type} onChange={(e) => updateContainerRow(i, 'type', e.target.value)} /></TableCell><TableCell><Input value={row.sealNo} onChange={(e) => updateContainerRow(i, 'sealNo', e.target.value)} /></TableCell><TableCell><Input value={row.perContainerWeight} onChange={(e) => updateContainerRow(i, 'perContainerWeight', e.target.value)} /></TableCell></TableRow>)}</TableBody>
+                    <TableBody>{form.containerShipment.map((row, i) => {
+                      const typeTrimmed = row.type.trim()
+                      const typeSelectValue = typeTrimmed ? typeTrimmed : '__none__'
+                      const legacyType =
+                        typeTrimmed &&
+                        !(CONTAINER_TYPE_OPTIONS as readonly string[]).includes(typeTrimmed)
+                      return (
+                        <TableRow key={`c-${i}`}>
+                          <TableCell><Input value={row.containerNo} onChange={(e) => updateContainerRow(i, 'containerNo', e.target.value)} /></TableCell>
+                          <TableCell className='min-w-[140px]'>
+                            <Select
+                              value={typeSelectValue}
+                              onValueChange={(v) =>
+                                updateContainerRow(i, 'type', v === '__none__' ? '' : v)
+                              }
+                            >
+                              <SelectTrigger className='w-full'>
+                                <SelectValue placeholder='Select type' />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value='__none__'>—</SelectItem>
+                                {CONTAINER_TYPE_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt} value={opt}>
+                                    {opt}
+                                  </SelectItem>
+                                ))}
+                                {legacyType ? (
+                                  <SelectItem value={typeTrimmed}>
+                                    {typeTrimmed} (saved)
+                                  </SelectItem>
+                                ) : null}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell><Input value={row.sealNo} onChange={(e) => updateContainerRow(i, 'sealNo', e.target.value)} /></TableCell>
+                          <TableCell><Input value={row.perContainerWeight} onChange={(e) => updateContainerRow(i, 'perContainerWeight', e.target.value)} /></TableCell>
+                        </TableRow>
+                      )
+                    })}</TableBody>
                   </Table>
                 )}
               </div>
@@ -1924,7 +2270,45 @@ export function CustomsCreateJob() {
                 </div>
                 {openShipmentSections.vehicle && (
                   <Table><TableHeader><TableRow><TableHead>Chasis No.</TableHead><TableHead>Engine Capacity</TableHead><TableHead>CBM</TableHead><TableHead>Driver Cell No.</TableHead></TableRow></TableHeader>
-                    <TableBody>{form.vehicleShipment.map((row, i) => <TableRow key={`v-${i}`}><TableCell><Input value={row.chasisNo} onChange={(e) => updateVehicleRow(i, 'chasisNo', e.target.value)} /></TableCell><TableCell><Input value={row.engineCapacity} onChange={(e) => updateVehicleRow(i, 'engineCapacity', e.target.value)} /></TableCell><TableCell><Input value={row.cbm} onChange={(e) => updateVehicleRow(i, 'cbm', e.target.value)} /></TableCell><TableCell><Input value={row.driverCellNo} onChange={(e) => updateVehicleRow(i, 'driverCellNo', e.target.value)} /></TableCell></TableRow>)}</TableBody>
+                    <TableBody>{form.vehicleShipment.map((row, i) => {
+                      const ccTrimmed = row.engineCapacity.trim()
+                      const ccSelectValue = ccTrimmed ? ccTrimmed : '__none__'
+                      const legacyCc =
+                        ccTrimmed &&
+                        !(ENGINE_CAPACITY_CC_OPTIONS as readonly string[]).includes(ccTrimmed)
+                      return (
+                        <TableRow key={`v-${i}`}>
+                          <TableCell><Input value={row.chasisNo} onChange={(e) => updateVehicleRow(i, 'chasisNo', e.target.value)} /></TableCell>
+                          <TableCell className='min-w-[140px]'>
+                            <Select
+                              value={ccSelectValue}
+                              onValueChange={(v) =>
+                                updateVehicleRow(i, 'engineCapacity', v === '__none__' ? '' : v)
+                              }
+                            >
+                              <SelectTrigger className='w-full'>
+                                <SelectValue placeholder='Select CC' />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value='__none__'>—</SelectItem>
+                                {ENGINE_CAPACITY_CC_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt} value={opt}>
+                                    {opt}
+                                  </SelectItem>
+                                ))}
+                                {legacyCc ? (
+                                  <SelectItem value={ccTrimmed}>
+                                    {ccTrimmed} (saved)
+                                  </SelectItem>
+                                ) : null}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell><Input value={row.cbm} onChange={(e) => updateVehicleRow(i, 'cbm', e.target.value)} /></TableCell>
+                          <TableCell><Input value={row.driverCellNo} onChange={(e) => updateVehicleRow(i, 'driverCellNo', e.target.value)} /></TableCell>
+                        </TableRow>
+                      )
+                    })}</TableBody>
                   </Table>
                 )}
               </div>
@@ -2051,12 +2435,17 @@ export function CustomsCreateJob() {
                             <SelectTrigger>
                               <SelectValue placeholder='SELECT' />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className='max-h-[min(22rem,var(--radix-select-content-available-height,22rem))]'>
                               <SelectItem value='__empty__'>SELECT</SelectItem>
-                              {documentNameOptions.map((option) => (
-                                <SelectItem key={option} value={option}>
-                                  {option}
-                                </SelectItem>
+                              {documentUploadGroups.map((group) => (
+                                <SelectGroup key={group.stage}>
+                                  <SelectLabel>{group.label}</SelectLabel>
+                                  {group.names.map((option) => (
+                                    <SelectItem key={`${group.stage}:${option}`} value={option}>
+                                      {option}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
                               ))}
                             </SelectContent>
                           </Select>

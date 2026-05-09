@@ -26,7 +26,9 @@ import { Route as CustomsVesselVoyageRouteImport } from './routes/customs.vessel
 import { Route as CustomsShipperRouteImport } from './routes/customs.shipper'
 import { Route as CustomsJobsRouteImport } from './routes/customs.jobs'
 import { Route as CustomsIcdRouteImport } from './routes/customs.icd'
+import { Route as CustomsDocumentTypesRouteImport } from './routes/customs.document-types'
 import { Route as CustomsDashboardRouteImport } from './routes/customs.dashboard'
+import { Route as CustomsCountriesPortsRouteImport } from './routes/customs.countries-ports'
 import { Route as CustomersIdRouteImport } from './routes/customers.$id'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
@@ -151,9 +153,19 @@ const CustomsIcdRoute = CustomsIcdRouteImport.update({
   path: '/customs/icd',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CustomsDocumentTypesRoute = CustomsDocumentTypesRouteImport.update({
+  id: '/customs/document-types',
+  path: '/customs/document-types',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CustomsDashboardRoute = CustomsDashboardRouteImport.update({
   id: '/customs/dashboard',
   path: '/customs/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomsCountriesPortsRoute = CustomsCountriesPortsRouteImport.update({
+  id: '/customs/countries-ports',
+  path: '/customs/countries-ports',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CustomersIdRoute = CustomersIdRouteImport.update({
@@ -389,7 +401,9 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
+  '/customs/countries-ports': typeof CustomsCountriesPortsRoute
   '/customs/dashboard': typeof CustomsDashboardRoute
+  '/customs/document-types': typeof CustomsDocumentTypesRoute
   '/customs/icd': typeof CustomsIcdRoute
   '/customs/jobs': typeof CustomsJobsRouteWithChildren
   '/customs/shipper': typeof CustomsShipperRoute
@@ -443,7 +457,9 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
+  '/customs/countries-ports': typeof CustomsCountriesPortsRoute
   '/customs/dashboard': typeof CustomsDashboardRoute
+  '/customs/document-types': typeof CustomsDocumentTypesRoute
   '/customs/icd': typeof CustomsIcdRoute
   '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
@@ -502,7 +518,9 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/customers/$id': typeof CustomersIdRoute
+  '/customs/countries-ports': typeof CustomsCountriesPortsRoute
   '/customs/dashboard': typeof CustomsDashboardRoute
+  '/customs/document-types': typeof CustomsDocumentTypesRoute
   '/customs/icd': typeof CustomsIcdRoute
   '/customs/jobs': typeof CustomsJobsRouteWithChildren
   '/customs/shipper': typeof CustomsShipperRoute
@@ -561,7 +579,9 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/customers/$id'
+    | '/customs/countries-ports'
     | '/customs/dashboard'
+    | '/customs/document-types'
     | '/customs/icd'
     | '/customs/jobs'
     | '/customs/shipper'
@@ -615,7 +635,9 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/customers/$id'
+    | '/customs/countries-ports'
     | '/customs/dashboard'
+    | '/customs/document-types'
     | '/customs/icd'
     | '/customs/shipper'
     | '/customs/vessel-voyage'
@@ -673,7 +695,9 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/customers/$id'
+    | '/customs/countries-ports'
     | '/customs/dashboard'
+    | '/customs/document-types'
     | '/customs/icd'
     | '/customs/jobs'
     | '/customs/shipper'
@@ -729,7 +753,9 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  CustomsCountriesPortsRoute: typeof CustomsCountriesPortsRoute
   CustomsDashboardRoute: typeof CustomsDashboardRoute
+  CustomsDocumentTypesRoute: typeof CustomsDocumentTypesRoute
   CustomsIcdRoute: typeof CustomsIcdRoute
   CustomsJobsRoute: typeof CustomsJobsRouteWithChildren
   CustomsShipperRoute: typeof CustomsShipperRoute
@@ -867,11 +893,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomsIcdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/customs/document-types': {
+      id: '/customs/document-types'
+      path: '/customs/document-types'
+      fullPath: '/customs/document-types'
+      preLoaderRoute: typeof CustomsDocumentTypesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/customs/dashboard': {
       id: '/customs/dashboard'
       path: '/customs/dashboard'
       fullPath: '/customs/dashboard'
       preLoaderRoute: typeof CustomsDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customs/countries-ports': {
+      id: '/customs/countries-ports'
+      path: '/customs/countries-ports'
+      fullPath: '/customs/countries-ports'
+      preLoaderRoute: typeof CustomsCountriesPortsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/customers/$id': {
@@ -1291,7 +1331,9 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  CustomsCountriesPortsRoute: CustomsCountriesPortsRoute,
   CustomsDashboardRoute: CustomsDashboardRoute,
+  CustomsDocumentTypesRoute: CustomsDocumentTypesRoute,
   CustomsIcdRoute: CustomsIcdRoute,
   CustomsJobsRoute: CustomsJobsRouteWithChildren,
   CustomsShipperRoute: CustomsShipperRoute,
