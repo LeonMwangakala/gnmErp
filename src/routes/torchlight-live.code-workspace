@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../../../../PycharmProjects/cmtsBackend"
+		},
+		{
+			"path": "../../../cmts-frontend"
 		}
 	],
 	"settings": {}
