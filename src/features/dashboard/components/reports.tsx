@@ -356,12 +356,22 @@ function downloadGoodsDispatchedReportCsv(data: GoodsDispatchedReportData) {
     [
       'Dispatched at',
       'Dispatch ref',
-      'Customer',
-      'Tracking',
+      'Dispatched by',
+      'Pickup by',
+      'Pickup phone',
+      'Pickup vehicle',
+      'Customer name',
+      'Customer company',
+      'Consignment name',
+      'Tracking #',
+      'Consignment label',
+      'Consignment pkgs',
+      'Consignment CBM',
       'Container',
-      'Good',
-      'Qty',
-      'Pkgs',
+      'Good name',
+      'Supplier receipt',
+      'Good qty',
+      'Good pkgs',
       'Unit',
       'Release',
       'Invoice',
@@ -373,10 +383,20 @@ function downloadGoodsDispatchedReportCsv(data: GoodsDispatchedReportData) {
       [
         escapeCsvCell(formatGoodsDispatchedAt(r.dispatched_at)),
         escapeCsvCell(r.dispatch_reference),
+        escapeCsvCell(r.dispatched_by_name),
+        escapeCsvCell(r.pickup_by),
+        escapeCsvCell(r.pickup_cellphone),
+        escapeCsvCell(r.pickup_vehicle),
         escapeCsvCell(r.customer_name),
+        escapeCsvCell(r.customer_company_name),
+        escapeCsvCell(r.consignment_name),
         escapeCsvCell(r.consignment_tracking),
+        escapeCsvCell(r.consignment_label),
+        r.consignment_pkgs != null ? String(r.consignment_pkgs) : '',
+        r.consignment_cbm != null ? String(r.consignment_cbm) : '',
         escapeCsvCell(r.container_no ?? ''),
         escapeCsvCell(r.good_name || '—'),
+        escapeCsvCell(r.good_supplier_receipt),
         r.quantity != null ? String(r.quantity) : '',
         r.pkgs != null ? String(r.pkgs) : '',
         escapeCsvCell(r.unit ?? ''),
@@ -413,15 +433,15 @@ function printGoodsDispatchedReportAsPdf(data: GoodsDispatchedReportData) {
   const rowHtml = data.rows
     .map(
       (r) =>
-        `<tr><td>${escapeHtml(formatGoodsDispatchedAt(r.dispatched_at))}</td><td>${escapeHtml(r.dispatch_reference)}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.consignment_tracking)}</td><td>${escapeHtml(r.container_no ?? '—')}</td><td>${escapeHtml(r.good_name || '—')}</td><td class="num">${r.quantity != null ? escapeHtml(String(r.quantity)) : '—'}</td><td class="num">${r.pkgs != null ? escapeHtml(String(r.pkgs)) : '—'}</td><td>${escapeHtml(r.unit ?? '—')}</td><td>${escapeHtml(r.release_type)}</td><td>${escapeHtml(r.invoice_no ?? '—')}</td><td>${r.bill_fully_paid ? 'Yes' : 'No'}</td><td class="num">${r.bill_balance != null ? escapeHtml(String(r.bill_balance)) : '—'}</td><td>${escapeHtml(r.bill_status ?? '—')}</td></tr>`
+        `<tr><td>${escapeHtml(formatGoodsDispatchedAt(r.dispatched_at))}</td><td>${escapeHtml(r.dispatch_reference)}</td><td>${escapeHtml(r.dispatched_by_name || '—')}</td><td>${escapeHtml(r.pickup_by || '—')}</td><td>${escapeHtml(r.pickup_cellphone || '—')}</td><td>${escapeHtml(r.pickup_vehicle || '—')}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.customer_company_name || '—')}</td><td>${escapeHtml(r.consignment_name || '—')}</td><td>${escapeHtml(r.consignment_tracking || '—')}</td><td>${escapeHtml(r.consignment_label || '—')}</td><td class="num">${r.consignment_pkgs != null ? escapeHtml(String(r.consignment_pkgs)) : '—'}</td><td class="num">${r.consignment_cbm != null ? escapeHtml(String(r.consignment_cbm)) : '—'}</td><td>${escapeHtml(r.container_no ?? '—')}</td><td>${escapeHtml(r.good_name || '—')}</td><td>${escapeHtml(r.good_supplier_receipt || '—')}</td><td class="num">${r.quantity != null ? escapeHtml(String(r.quantity)) : '—'}</td><td class="num">${r.pkgs != null ? escapeHtml(String(r.pkgs)) : '—'}</td><td>${escapeHtml(r.unit ?? '—')}</td><td>${escapeHtml(r.release_type)}</td><td>${escapeHtml(r.invoice_no ?? '—')}</td><td>${r.bill_fully_paid ? 'Yes' : 'No'}</td><td class="num">${r.bill_balance != null ? escapeHtml(String(r.bill_balance)) : '—'}</td><td>${escapeHtml(r.bill_status ?? '—')}</td></tr>`
     )
     .join('')
   w.document.write(`<!DOCTYPE html><html><head><title>Goods dispatched report</title>
 <style>
 body{font-family:system-ui,sans-serif;padding:16px;font-size:11px;}
 h1{font-size:16px;margin-bottom:8px;}
-table{border-collapse:collapse;width:100%;margin-top:12px;font-size:10px;}
-th,td{border:1px solid #ccc;padding:4px;text-align:left;}
+table{border-collapse:collapse;width:100%;margin-top:12px;font-size:8px;}
+th,td{border:1px solid #ccc;padding:3px;text-align:left;}
 th{background:#f0f0f0;}
 td.num{text-align:right;}
 .meta{color:#444;margin-bottom:16px;}
@@ -429,8 +449,8 @@ td.num{text-align:right;}
 <h1>Goods dispatched</h1>
 <div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}<br/>
 Cash: ${data.summary.cash_rows} · Loan: ${data.summary.loan_rows} · Paid in full: ${data.summary.paid_rows} · Not paid in full: ${data.summary.unpaid_rows}</div>
-<table><thead><tr><th>Dispatched</th><th>Ref</th><th>Customer</th><th>Tracking</th><th>Container</th><th>Good</th><th>Qty</th><th>Pkgs</th><th>Unit</th><th>Release</th><th>Invoice</th><th>Paid</th><th>Balance</th><th>Bill status</th></tr></thead>
-<tbody>${rowHtml || '<tr><td colspan="14">No rows</td></tr>'}</tbody></table>
+<table><thead><tr><th>Dispatched</th><th>Ref</th><th>By</th><th>Pickup</th><th>Phone</th><th>Vehicle</th><th>Customer</th><th>Company</th><th>Cnsg name</th><th>Tracking</th><th>Label</th><th>C.pkgs</th><th>CBM</th><th>Cont.</th><th>Good</th><th>Receipt</th><th>Qty</th><th>Pkgs</th><th>U</th><th>Rel.</th><th>Inv.</th><th>Paid</th><th>Bal.</th><th>Bill</th></tr></thead>
+<tbody>${rowHtml || '<tr><td colspan="24">No rows</td></tr>'}</tbody></table>
 <p class="meta">${data.summary.row_count} row(s)</p>
 <script>window.onload=function(){window.print();}</script>
 </body></html>`)
@@ -1962,7 +1982,7 @@ export function Reports() {
           if (!next) setGoodsDispatchedReportData(null)
         }}
       >
-        <DialogContent className='flex max-h-[min(90vh,800px)] w-[min(1280px,98vw)] max-w-[min(1280px,98vw)] flex-col gap-0 overflow-hidden sm:max-w-[min(1280px,98vw)]'>
+        <DialogContent className='flex max-h-[min(90vh,800px)] w-[min(1400px,98vw)] max-w-[min(1400px,98vw)] flex-col gap-0 overflow-hidden sm:max-w-[min(1400px,98vw)]'>
           <DialogHeader className='shrink-0'>
             <DialogTitle>Goods dispatched</DialogTitle>
           </DialogHeader>
@@ -1987,61 +2007,111 @@ export function Reports() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Dispatched</TableHead>
-                          <TableHead>Ref</TableHead>
-                          <TableHead>Customer</TableHead>
-                          <TableHead>Tracking</TableHead>
-                          <TableHead>Container</TableHead>
-                          <TableHead>Good</TableHead>
-                          <TableHead className='text-end'>Qty</TableHead>
-                          <TableHead className='text-end'>Pkgs</TableHead>
-                          <TableHead>Unit</TableHead>
-                          <TableHead>Release</TableHead>
-                          <TableHead>Invoice</TableHead>
-                          <TableHead>Paid</TableHead>
-                          <TableHead className='text-end'>Balance</TableHead>
-                          <TableHead>Bill status</TableHead>
+                          <TableHead className='min-w-[140px]'>Dispatch</TableHead>
+                          <TableHead className='min-w-[160px]'>Customer</TableHead>
+                          <TableHead className='min-w-[220px]'>Consignment</TableHead>
+                          <TableHead className='min-w-[140px]'>Pickup / vehicle</TableHead>
+                          <TableHead className='min-w-[200px]'>Goods (line)</TableHead>
+                          <TableHead className='min-w-[180px]'>Billing</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {goodsDispatchedReportData.rows.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={14} className='text-center text-muted-foreground'>
+                            <TableCell colSpan={6} className='text-center text-muted-foreground'>
                               No dispatched goods in this range.
                             </TableCell>
                           </TableRow>
                         ) : (
                           goodsDispatchedReportData.rows.map((r) => (
                             <TableRow key={r.id}>
-                              <TableCell className='whitespace-nowrap tabular-nums'>
-                                {formatGoodsDispatchedAt(r.dispatched_at)}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div className='tabular-nums whitespace-nowrap'>
+                                  {formatGoodsDispatchedAt(r.dispatched_at)}
+                                </div>
+                                <div className='mt-1 font-mono text-xs text-muted-foreground'>
+                                  {r.dispatch_reference || '—'}
+                                </div>
+                                {r.dispatched_by_name ? (
+                                  <div className='mt-1 text-xs text-muted-foreground'>
+                                    By {r.dispatched_by_name}
+                                  </div>
+                                ) : null}
+                                <div className='mt-1 text-xs capitalize text-muted-foreground'>
+                                  {r.release_type}
+                                </div>
                               </TableCell>
-                              <TableCell className='whitespace-nowrap font-mono text-xs'>
-                                {r.dispatch_reference || '—'}
+                              <TableCell className='align-top whitespace-normal'>
+                                <div className='font-medium'>{r.customer_name || '—'}</div>
+                                {r.customer_company_name ? (
+                                  <div className='mt-0.5 text-sm text-muted-foreground'>
+                                    {r.customer_company_name}
+                                  </div>
+                                ) : null}
                               </TableCell>
-                              <TableCell className='whitespace-normal'>{r.customer_name || '—'}</TableCell>
-                              <TableCell className='tabular-nums'>{r.consignment_tracking || '—'}</TableCell>
-                              <TableCell className='whitespace-nowrap font-mono text-sm'>
-                                {r.container_no || '—'}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div>{r.consignment_name || '—'}</div>
+                                <div className='mt-0.5 tabular-nums text-muted-foreground'>
+                                  {r.consignment_tracking || '—'}
+                                </div>
+                                {r.consignment_label ? (
+                                  <div className='mt-0.5 text-muted-foreground'>
+                                    Label: {r.consignment_label}
+                                  </div>
+                                ) : null}
+                                <div className='mt-1 text-xs text-muted-foreground'>
+                                  {[
+                                    r.consignment_pkgs != null
+                                      ? `${r.consignment_pkgs} ctn pkg`
+                                      : null,
+                                    r.consignment_cbm != null ? `CBM ${r.consignment_cbm}` : null,
+                                    r.container_no ? `Cont. ${r.container_no}` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ') || '—'}
+                                </div>
                               </TableCell>
-                              <TableCell className='max-w-[200px] whitespace-normal'>
-                                {r.good_name || '—'}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div>{r.pickup_by || '—'}</div>
+                                {r.pickup_cellphone ? (
+                                  <div className='mt-0.5 tabular-nums text-muted-foreground'>
+                                    {r.pickup_cellphone}
+                                  </div>
+                                ) : null}
+                                {r.pickup_vehicle ? (
+                                  <div className='mt-0.5 font-mono text-xs text-muted-foreground'>
+                                    {r.pickup_vehicle}
+                                  </div>
+                                ) : null}
                               </TableCell>
-                              <TableCell className='text-end tabular-nums'>
-                                {r.quantity != null ? r.quantity : '—'}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div className='font-medium'>{r.good_name || '—'}</div>
+                                {r.good_supplier_receipt ? (
+                                  <div className='mt-0.5 text-xs text-muted-foreground'>
+                                    Receipt: {r.good_supplier_receipt}
+                                  </div>
+                                ) : null}
+                                <div className='mt-1 tabular-nums text-muted-foreground'>
+                                  Qty {r.quantity != null ? r.quantity : '—'} · Pkgs{' '}
+                                  {r.pkgs != null ? r.pkgs : '—'} · {r.unit ?? '—'}
+                                </div>
                               </TableCell>
-                              <TableCell className='text-end tabular-nums'>
-                                {r.pkgs != null ? r.pkgs : '—'}
-                              </TableCell>
-                              <TableCell>{r.unit ?? '—'}</TableCell>
-                              <TableCell className='capitalize'>{r.release_type}</TableCell>
-                              <TableCell className='tabular-nums'>{r.invoice_no ?? '—'}</TableCell>
-                              <TableCell>{r.bill_fully_paid ? 'Yes' : 'No'}</TableCell>
-                              <TableCell className='text-end tabular-nums'>
-                                {r.bill_balance != null ? r.bill_balance : '—'}
-                              </TableCell>
-                              <TableCell className='max-w-[160px] whitespace-normal text-muted-foreground'>
-                                {r.bill_status ?? '—'}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div className='tabular-nums'>{r.invoice_no ?? '—'}</div>
+                                <div className='mt-1'>
+                                  Paid in full:{' '}
+                                  <span className='font-medium'>
+                                    {r.bill_fully_paid ? 'Yes' : 'No'}
+                                  </span>
+                                </div>
+                                <div className='mt-0.5 tabular-nums text-muted-foreground'>
+                                  Balance: {r.bill_balance != null ? r.bill_balance : '—'}
+                                </div>
+                                {r.bill_status ? (
+                                  <div className='mt-1 text-xs text-muted-foreground'>
+                                    {r.bill_status}
+                                  </div>
+                                ) : null}
                               </TableCell>
                             </TableRow>
                           ))

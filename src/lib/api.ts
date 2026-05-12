@@ -552,10 +552,20 @@ export interface GoodsDispatchedReportRow {
   id: string
   dispatch_reference: string
   dispatched_at: string | null
+  dispatched_by_name: string
+  pickup_by: string
+  pickup_cellphone: string
+  pickup_vehicle: string
   customer_name: string
+  customer_company_name: string
+  consignment_name: string
   consignment_tracking: string
+  consignment_label: string
+  consignment_pkgs: number | null
+  consignment_cbm: number | null
   container_no: string | null
   good_name: string
+  good_supplier_receipt: string
   quantity: number | null
   pkgs: number | null
   unit: string | null
@@ -640,6 +650,8 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
     const releaseRaw = String(r.release_type ?? r.releaseType ?? 'cash').toLowerCase()
     const release_type: 'cash' | 'loan' = releaseRaw === 'loan' ? 'loan' : 'cash'
     const bal = r.bill_balance
+    const cPkgs = r.consignment_pkgs
+    const cCbm = r.consignment_cbm
     return {
       id: String(r.id ?? `${index}`),
       dispatch_reference: String(r.dispatch_reference ?? r.dispatchReference ?? '').trim(),
@@ -647,13 +659,31 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
         r.dispatched_at == null || r.dispatched_at === ''
           ? null
           : String(r.dispatched_at ?? r.dispatchedAt),
+      dispatched_by_name: String(r.dispatched_by_name ?? r.dispatchedByName ?? '').trim(),
+      pickup_by: String(r.pickup_by ?? r.pickupBy ?? '').trim(),
+      pickup_cellphone: String(r.pickup_cellphone ?? r.cellphone ?? '').trim(),
+      pickup_vehicle: String(r.pickup_vehicle ?? r.vehicle_number ?? '').trim(),
       customer_name: String(r.customer_name ?? r.customer ?? '').trim(),
+      customer_company_name: String(
+        r.customer_company_name ?? r.customerCompanyName ?? ''
+      ).trim(),
+      consignment_name: String(r.consignment_name ?? r.consignmentName ?? '').trim(),
       consignment_tracking: String(r.consignment_tracking ?? r.tracking_number ?? '').trim(),
+      consignment_label: String(r.consignment_label ?? r.consignmentLabel ?? '').trim(),
+      consignment_pkgs:
+        cPkgs == null || cPkgs === '' || !Number.isFinite(Number(cPkgs))
+          ? null
+          : Number(cPkgs),
+      consignment_cbm:
+        cCbm == null || cCbm === '' || !Number.isFinite(Number(cCbm)) ? null : Number(cCbm),
       container_no:
         r.container_no == null && r.containerNo == null
           ? null
           : String(r.container_no ?? r.containerNo ?? '').trim() || null,
       good_name: String(r.good_name ?? r.goodName ?? '').trim(),
+      good_supplier_receipt: String(
+        r.good_supplier_receipt ?? r.supplier_receipt_no ?? r.supplierReceiptNo ?? ''
+      ).trim(),
       quantity: r.quantity == null || r.quantity === '' ? null : Number(r.quantity),
       pkgs: r.pkgs == null || r.pkgs === '' ? null : Number(r.pkgs),
       unit: r.unit == null || r.unit === '' ? null : String(r.unit),
