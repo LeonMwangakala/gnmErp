@@ -320,6 +320,33 @@ export const invoiceApi = {
     return { ok: false, message: body?.message || 'Failed to load report' }
   },
 
+  /** CMTS: dispatches completed in range, goods + loan/cash + bill paid status */
+  getGoodsDispatchedReport: async (params: {
+    date_from: string
+    date_to: string
+  }): Promise<
+    | { ok: true; data: GoodsDispatchedReportData }
+    | { ok: false; message: string }
+  > => {
+    try {
+      const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/goods-dispatched-report`, {
+        params: { date_from: params.date_from, date_to: params.date_to },
+      })
+      const body = response.data as Record<string, unknown>
+      if (body?.status === true && body.rows != null) {
+        return { ok: true, data: normalizeGoodsDispatchedReportData(body) }
+      }
+      return { ok: false, message: String(body?.message || 'Failed to load report') }
+    } catch (err: unknown) {
+      const ax = err as AxiosError<{ message?: string }>
+      const msg =
+        ax.response?.data && typeof ax.response.data === 'object' && 'message' in ax.response.data
+          ? String((ax.response.data as { message?: string }).message)
+          : ax.message
+      return { ok: false, message: msg || 'Failed to load report' }
+    }
+  },
+
   getInvoices: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
     const response = await api.get('/invoices', { params })
     return {
@@ -521,6 +548,37 @@ export interface PostedContainersReportData {
   summary: { row_count: number }
 }
 
+export interface GoodsDispatchedReportRow {
+  id: string
+  dispatch_reference: string
+  dispatched_at: string | null
+  customer_name: string
+  consignment_tracking: string
+  container_no: string | null
+  good_name: string
+  quantity: number | null
+  pkgs: number | null
+  unit: string | null
+  release_type: 'cash' | 'loan'
+  invoice_no: string | null
+  bill_fully_paid: boolean
+  bill_balance: number | null
+  bill_status: string | null
+}
+
+export interface GoodsDispatchedReportData {
+  date_from: string
+  date_to: string
+  rows: GoodsDispatchedReportRow[]
+  summary: {
+    row_count: number
+    cash_rows: number
+    loan_rows: number
+    paid_rows: number
+    unpaid_rows: number
+  }
+}
+
 export interface CompanyCurrencyRow {
   currencyId: number
   currencyNumber: string
@@ -572,6 +630,59 @@ function mapVesselVoyageFromApi(row: Record<string, unknown>): VesselVoyage {
     manifestReadyInvoiceDate: String(row.manifestReadyInvoiceDate ?? ''),
     portOperator: String(row.portOperator ?? ''),
     createdAt: typeof row.createdAt === 'string' ? row.createdAt : new Date().toISOString(),
+  }
+}
+
+function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): GoodsDispatchedReportData {
+  const rawRows = Array.isArray(data.rows) ? data.rows : []
+  const rows: GoodsDispatchedReportRow[] = rawRows.map((item, index) => {
+    const r = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+    const releaseRaw = String(r.release_type ?? r.releaseType ?? 'cash').toLowerCase()
+    const release_type: 'cash' | 'loan' = releaseRaw === 'loan' ? 'loan' : 'cash'
+    const bal = r.bill_balance
+    return {
+      id: String(r.id ?? `${index}`),
+      dispatch_reference: String(r.dispatch_reference ?? r.dispatchReference ?? '').trim(),
+      dispatched_at:
+        r.dispatched_at == null || r.dispatched_at === ''
+          ? null
+          : String(r.dispatched_at ?? r.dispatchedAt),
+      customer_name: String(r.customer_name ?? r.customer ?? '').trim(),
+      consignment_tracking: String(r.consignment_tracking ?? r.tracking_number ?? '').trim(),
+      container_no:
+        r.container_no == null && r.containerNo == null
+          ? null
+          : String(r.container_no ?? r.containerNo ?? '').trim() || null,
+      good_name: String(r.good_name ?? r.goodName ?? '').trim(),
+      quantity: r.quantity == null || r.quantity === '' ? null : Number(r.quantity),
+      pkgs: r.pkgs == null || r.pkgs === '' ? null : Number(r.pkgs),
+      unit: r.unit == null || r.unit === '' ? null : String(r.unit),
+      release_type,
+      invoice_no:
+        r.invoice_no == null && r.bill_no == null
+          ? null
+          : String(r.invoice_no ?? r.bill_no ?? '').trim() || null,
+      bill_fully_paid: Boolean(r.bill_fully_paid ?? r.billFullyPaid),
+      bill_balance:
+        bal == null || bal === '' || !Number.isFinite(Number(bal)) ? null : Number(bal),
+      bill_status:
+        r.bill_status == null && r.billStatus == null
+          ? null
+          : String(r.bill_status ?? r.billStatus ?? '').trim() || null,
+    }
+  })
+  const sum = data.summary && typeof data.summary === 'object' ? (data.summary as Record<string, unknown>) : {}
+  return {
+    date_from: String(data.date_from ?? ''),
+    date_to: String(data.date_to ?? ''),
+    rows,
+    summary: {
+      row_count: Number.isFinite(Number(sum.row_count)) ? Number(sum.row_count) : rows.length,
+      cash_rows: Number.isFinite(Number(sum.cash_rows)) ? Number(sum.cash_rows) : 0,
+      loan_rows: Number.isFinite(Number(sum.loan_rows)) ? Number(sum.loan_rows) : 0,
+      paid_rows: Number.isFinite(Number(sum.paid_rows)) ? Number(sum.paid_rows) : 0,
+      unpaid_rows: Number.isFinite(Number(sum.unpaid_rows)) ? Number(sum.unpaid_rows) : 0,
+    },
   }
 }
 

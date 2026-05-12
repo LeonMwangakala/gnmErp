@@ -3,6 +3,7 @@ import AsyncSelect from 'react-select/async'
 import {
   format,
   parse,
+  parseISO,
   subDays,
   startOfMonth,
   endOfMonth,
@@ -45,6 +46,7 @@ import {
   type InvoicePaymentReportData,
   type InvoiceReportData,
   type PostedContainersReportData,
+  type GoodsDispatchedReportData,
 } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import {
@@ -338,6 +340,103 @@ function downloadPostedContainersReportCsv(data: PostedContainersReportData) {
   URL.revokeObjectURL(url)
 }
 
+function formatGoodsDispatchedAt(iso: string | null): string {
+  if (!iso) return '—'
+  try {
+    const d = parseISO(iso)
+    if (Number.isNaN(d.getTime())) return iso
+    return format(d, 'yyyy-MM-dd HH:mm')
+  } catch {
+    return iso
+  }
+}
+
+function downloadGoodsDispatchedReportCsv(data: GoodsDispatchedReportData) {
+  const lines: string[] = [
+    [
+      'Dispatched at',
+      'Dispatch ref',
+      'Customer',
+      'Tracking',
+      'Container',
+      'Good',
+      'Qty',
+      'Pkgs',
+      'Unit',
+      'Release',
+      'Invoice',
+      'Paid in full',
+      'Balance',
+      'Bill status',
+    ].join(','),
+    ...data.rows.map((r) =>
+      [
+        escapeCsvCell(formatGoodsDispatchedAt(r.dispatched_at)),
+        escapeCsvCell(r.dispatch_reference),
+        escapeCsvCell(r.customer_name),
+        escapeCsvCell(r.consignment_tracking),
+        escapeCsvCell(r.container_no ?? ''),
+        escapeCsvCell(r.good_name || '—'),
+        r.quantity != null ? String(r.quantity) : '',
+        r.pkgs != null ? String(r.pkgs) : '',
+        escapeCsvCell(r.unit ?? ''),
+        escapeCsvCell(r.release_type),
+        escapeCsvCell(r.invoice_no ?? ''),
+        r.bill_fully_paid ? 'Yes' : 'No',
+        r.bill_balance != null ? String(r.bill_balance) : '',
+        escapeCsvCell(r.bill_status ?? ''),
+      ].join(',')
+    ),
+    '',
+    'Summary',
+    `Rows,${data.summary.row_count}`,
+    `Cash lines,${data.summary.cash_rows}`,
+    `Loan lines,${data.summary.loan_rows}`,
+    `Paid in full,${data.summary.paid_rows}`,
+    `Not paid in full,${data.summary.unpaid_rows}`,
+  ]
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `goods-dispatched-${data.date_from}-to-${data.date_to}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function printGoodsDispatchedReportAsPdf(data: GoodsDispatchedReportData) {
+  const w = window.open('', '_blank')
+  if (!w) {
+    toast.error('Pop-up blocked. Allow pop-ups to print or save as PDF.')
+    return
+  }
+  const rowHtml = data.rows
+    .map(
+      (r) =>
+        `<tr><td>${escapeHtml(formatGoodsDispatchedAt(r.dispatched_at))}</td><td>${escapeHtml(r.dispatch_reference)}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.consignment_tracking)}</td><td>${escapeHtml(r.container_no ?? '—')}</td><td>${escapeHtml(r.good_name || '—')}</td><td class="num">${r.quantity != null ? escapeHtml(String(r.quantity)) : '—'}</td><td class="num">${r.pkgs != null ? escapeHtml(String(r.pkgs)) : '—'}</td><td>${escapeHtml(r.unit ?? '—')}</td><td>${escapeHtml(r.release_type)}</td><td>${escapeHtml(r.invoice_no ?? '—')}</td><td>${r.bill_fully_paid ? 'Yes' : 'No'}</td><td class="num">${r.bill_balance != null ? escapeHtml(String(r.bill_balance)) : '—'}</td><td>${escapeHtml(r.bill_status ?? '—')}</td></tr>`
+    )
+    .join('')
+  w.document.write(`<!DOCTYPE html><html><head><title>Goods dispatched report</title>
+<style>
+body{font-family:system-ui,sans-serif;padding:16px;font-size:11px;}
+h1{font-size:16px;margin-bottom:8px;}
+table{border-collapse:collapse;width:100%;margin-top:12px;font-size:10px;}
+th,td{border:1px solid #ccc;padding:4px;text-align:left;}
+th{background:#f0f0f0;}
+td.num{text-align:right;}
+.meta{color:#444;margin-bottom:16px;}
+</style></head><body>
+<h1>Goods dispatched</h1>
+<div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}<br/>
+Cash: ${data.summary.cash_rows} · Loan: ${data.summary.loan_rows} · Paid in full: ${data.summary.paid_rows} · Not paid in full: ${data.summary.unpaid_rows}</div>
+<table><thead><tr><th>Dispatched</th><th>Ref</th><th>Customer</th><th>Tracking</th><th>Container</th><th>Good</th><th>Qty</th><th>Pkgs</th><th>Unit</th><th>Release</th><th>Invoice</th><th>Paid</th><th>Balance</th><th>Bill status</th></tr></thead>
+<tbody>${rowHtml || '<tr><td colspan="14">No rows</td></tr>'}</tbody></table>
+<p class="meta">${data.summary.row_count} row(s)</p>
+<script>window.onload=function(){window.print();}</script>
+</body></html>`)
+  w.document.close()
+}
+
 function printPostedContainersReportAsPdf(data: PostedContainersReportData) {
   const w = window.open('', '_blank')
   if (!w) {
@@ -384,6 +483,7 @@ type ReportType =
   | 'invoice'
   | 'invoice-payments'
   | 'posted-containers'
+  | 'goods-dispatched'
   | 'petty-cash'
   | 'expense-payments'
   | 'container-payments'
@@ -411,6 +511,12 @@ const REPORTS: ReportDefinition[] = [
     title: 'Posted containers',
     description:
       'Container numbers recorded when invoices were posted, by post date. Optional container filter.',
+  },
+  {
+    key: 'goods-dispatched',
+    title: 'Goods dispatched',
+    description:
+      'Goods released by dispatch date from CMTS: cash vs on loan, and whether the bill is paid in full.',
   },
   {
     key: 'petty-cash',
@@ -506,6 +612,12 @@ type PostedContainersFilters = {
   containerNo: string
 }
 
+type GoodsDispatchedFilters = {
+  dateFrom: string
+  dateTo: string
+  datePreset: InvoicePaymentDatePreset
+}
+
 type PettyCashFilters = CommonFilters & {
   categoryId: string
   receiverFor: 'all' | 'employee' | 'vendor' | 'other'
@@ -521,6 +633,7 @@ type ReportFilters =
   | InvoiceFilters
   | InvoicePaymentFilters
   | PostedContainersFilters
+  | GoodsDispatchedFilters
   | PettyCashFilters
   | ExpensePaymentFilters
   | CommonFilters
@@ -531,10 +644,14 @@ function isInvoicePaymentFilters(
   return f != null && 'invoiceId' in f && 'dateFrom' in f && 'datePreset' in f
 }
 
-/** Invoice / payments / posted-containers share preset + custom range dates */
+/** Invoice / payments / posted-containers / goods-dispatched share preset + custom range dates */
 function isDateRangedReportFilters(
   f: ReportFilters | null | undefined
-): f is InvoicePaymentFilters | InvoiceFilters | PostedContainersFilters {
+): f is
+  | InvoicePaymentFilters
+  | InvoiceFilters
+  | PostedContainersFilters
+  | GoodsDispatchedFilters {
   return f != null && 'dateFrom' in f && 'dateTo' in f && 'datePreset' in f
 }
 
@@ -546,6 +663,20 @@ function isPostedContainersFilters(
   f: ReportFilters | null | undefined
 ): f is PostedContainersFilters {
   return f != null && 'containerNo' in f && 'dateFrom' in f && 'datePreset' in f
+}
+
+function isGoodsDispatchedFilters(
+  f: ReportFilters | null | undefined
+): f is GoodsDispatchedFilters {
+  return (
+    f != null &&
+    'dateFrom' in f &&
+    'dateTo' in f &&
+    'datePreset' in f &&
+    !('containerNo' in f) &&
+    !('status' in f) &&
+    !('userId' in f)
+  )
 }
 
 export function Reports() {
@@ -569,6 +700,10 @@ export function Reports() {
   const [postedContainersReportData, setPostedContainersReportData] =
     useState<PostedContainersReportData | null>(null)
   const [postedContainersReportSubmitting, setPostedContainersReportSubmitting] = useState(false)
+  const [goodsDispatchedReportOpen, setGoodsDispatchedReportOpen] = useState(false)
+  const [goodsDispatchedReportData, setGoodsDispatchedReportData] =
+    useState<GoodsDispatchedReportData | null>(null)
+  const [goodsDispatchedReportSubmitting, setGoodsDispatchedReportSubmitting] = useState(false)
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -635,6 +770,8 @@ export function Reports() {
     setInvoiceReportData(null)
     setPostedContainersReportOpen(false)
     setPostedContainersReportData(null)
+    setGoodsDispatchedReportOpen(false)
+    setGoodsDispatchedReportData(null)
     setOpen(true)
   }
 
@@ -714,6 +851,30 @@ export function Reports() {
     }
   }
 
+  const submitGoodsDispatchedReport = async () => {
+    if (!filters || !isGoodsDispatchedFilters(filters)) return
+    if (!filters.dateFrom || !filters.dateTo) {
+      toast.error('Choose a dispatch date range.')
+      return
+    }
+    setGoodsDispatchedReportSubmitting(true)
+    try {
+      const result = await invoiceApi.getGoodsDispatchedReport({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      setGoodsDispatchedReportData(result.data)
+      setOpen(false)
+      setGoodsDispatchedReportOpen(true)
+    } finally {
+      setGoodsDispatchedReportSubmitting(false)
+    }
+  }
+
   const handleFilterChange = (field: string, value: string) => {
     setFilters((prev) => (prev ? ({ ...prev, [field]: value } as ReportFilters) : prev))
   }
@@ -778,7 +939,15 @@ export function Reports() {
           dateTo,
           containerNo: '',
         }
+      }
+      case 'goods-dispatched': {
+        const { dateFrom, dateTo } = getInvoicePaymentRangeForPreset('month')
+        return {
+          datePreset: 'month' as const,
+          dateFrom,
+          dateTo,
         }
+      }
       case 'petty-cash':
         return {
           ...base,
@@ -804,7 +973,8 @@ export function Reports() {
       selectedReport.key === 'container-payments' ||
       selectedReport.key === 'invoice-payments' ||
       selectedReport.key === 'invoice' ||
-      selectedReport.key === 'posted-containers'
+      selectedReport.key === 'posted-containers' ||
+      selectedReport.key === 'goods-dispatched'
     )
       return
     try {
@@ -884,6 +1054,7 @@ export function Reports() {
               {selectedReport?.key !== 'invoice-payments' &&
                 selectedReport?.key !== 'invoice' &&
                 selectedReport?.key !== 'posted-containers' &&
+                selectedReport?.key !== 'goods-dispatched' &&
                 'dateRange' in filters && (
               <div className='space-y-2'>
                 <Label htmlFor='dateRange'>Date range</Label>
@@ -898,7 +1069,8 @@ export function Reports() {
 
               {(selectedReport?.key === 'invoice-payments' ||
                 selectedReport?.key === 'invoice' ||
-                selectedReport?.key === 'posted-containers') &&
+                selectedReport?.key === 'posted-containers' ||
+                selectedReport?.key === 'goods-dispatched') &&
                 isDateRangedReportFilters(filters) && (
                   <div className='space-y-3'>
                     <Label>
@@ -906,7 +1078,9 @@ export function Reports() {
                         ? 'Payment date range'
                         : selectedReport.key === 'posted-containers'
                           ? 'Posted date range'
-                          : 'Invoice date range'}
+                          : selectedReport.key === 'goods-dispatched'
+                            ? 'Dispatch date range'
+                            : 'Invoice date range'}
                     </Label>
                     <div className='flex flex-wrap gap-2'>
                       {(
@@ -1317,6 +1491,8 @@ export function Reports() {
                     setInvoiceReportOpen(false)
                     setPostedContainersReportData(null)
                     setPostedContainersReportOpen(false)
+                    setGoodsDispatchedReportData(null)
+                    setGoodsDispatchedReportOpen(false)
                 }
               }}
             >
@@ -1366,6 +1542,21 @@ export function Reports() {
                   onClick={() => void submitPostedContainersReport()}
                 >
                   {postedContainersReportSubmitting ? 'Loading…' : 'Submit'}
+                </Button>
+              ) : selectedReport?.key === 'goods-dispatched' ? (
+                <Button
+                  type='button'
+                  size='sm'
+                  disabled={
+                    goodsDispatchedReportSubmitting ||
+                    !filters ||
+                    !isGoodsDispatchedFilters(filters) ||
+                    !filters.dateFrom ||
+                    !filters.dateTo
+                  }
+                  onClick={() => void submitGoodsDispatchedReport()}
+                >
+                  {goodsDispatchedReportSubmitting ? 'Loading…' : 'Submit'}
                 </Button>
               ) : (
             <div className='flex items-center gap-2'>
@@ -1752,6 +1943,134 @@ export function Reports() {
                   onClick={() => {
                     if (postedContainersReportData) {
                       printPostedContainersReportAsPdf(postedContainersReportData)
+                    }
+                  }}
+                >
+                  <Download className='mr-2 h-4 w-4' />
+                  PDF
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={goodsDispatchedReportOpen}
+        onOpenChange={(next) => {
+          setGoodsDispatchedReportOpen(next)
+          if (!next) setGoodsDispatchedReportData(null)
+        }}
+      >
+        <DialogContent className='flex max-h-[min(90vh,800px)] w-[min(1280px,98vw)] max-w-[min(1280px,98vw)] flex-col gap-0 overflow-hidden sm:max-w-[min(1280px,98vw)]'>
+          <DialogHeader className='shrink-0'>
+            <DialogTitle>Goods dispatched</DialogTitle>
+          </DialogHeader>
+          {goodsDispatchedReportData ? (
+            <>
+              <p className='text-sm text-muted-foreground shrink-0 pb-2'>
+                {goodsDispatchedReportData.date_from} – {goodsDispatchedReportData.date_to}
+                <span className='ms-2'>
+                  ({goodsDispatchedReportData.summary.row_count}{' '}
+                  {goodsDispatchedReportData.summary.row_count === 1 ? 'line' : 'lines'})
+                </span>
+              </p>
+              <p className='text-xs text-muted-foreground shrink-0 pb-2'>
+                Cash {goodsDispatchedReportData.summary.cash_rows} · Loan{' '}
+                {goodsDispatchedReportData.summary.loan_rows} · Paid in full{' '}
+                {goodsDispatchedReportData.summary.paid_rows} · Not paid in full{' '}
+                {goodsDispatchedReportData.summary.unpaid_rows}
+              </p>
+              <div className='min-h-0 flex-1 overflow-auto pr-1'>
+                <div className='space-y-4 pb-4'>
+                  <div className='overflow-x-auto'>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Dispatched</TableHead>
+                          <TableHead>Ref</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Tracking</TableHead>
+                          <TableHead>Container</TableHead>
+                          <TableHead>Good</TableHead>
+                          <TableHead className='text-end'>Qty</TableHead>
+                          <TableHead className='text-end'>Pkgs</TableHead>
+                          <TableHead>Unit</TableHead>
+                          <TableHead>Release</TableHead>
+                          <TableHead>Invoice</TableHead>
+                          <TableHead>Paid</TableHead>
+                          <TableHead className='text-end'>Balance</TableHead>
+                          <TableHead>Bill status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {goodsDispatchedReportData.rows.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={14} className='text-center text-muted-foreground'>
+                              No dispatched goods in this range.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          goodsDispatchedReportData.rows.map((r) => (
+                            <TableRow key={r.id}>
+                              <TableCell className='whitespace-nowrap tabular-nums'>
+                                {formatGoodsDispatchedAt(r.dispatched_at)}
+                              </TableCell>
+                              <TableCell className='whitespace-nowrap font-mono text-xs'>
+                                {r.dispatch_reference || '—'}
+                              </TableCell>
+                              <TableCell className='whitespace-normal'>{r.customer_name || '—'}</TableCell>
+                              <TableCell className='tabular-nums'>{r.consignment_tracking || '—'}</TableCell>
+                              <TableCell className='whitespace-nowrap font-mono text-sm'>
+                                {r.container_no || '—'}
+                              </TableCell>
+                              <TableCell className='max-w-[200px] whitespace-normal'>
+                                {r.good_name || '—'}
+                              </TableCell>
+                              <TableCell className='text-end tabular-nums'>
+                                {r.quantity != null ? r.quantity : '—'}
+                              </TableCell>
+                              <TableCell className='text-end tabular-nums'>
+                                {r.pkgs != null ? r.pkgs : '—'}
+                              </TableCell>
+                              <TableCell>{r.unit ?? '—'}</TableCell>
+                              <TableCell className='capitalize'>{r.release_type}</TableCell>
+                              <TableCell className='tabular-nums'>{r.invoice_no ?? '—'}</TableCell>
+                              <TableCell>{r.bill_fully_paid ? 'Yes' : 'No'}</TableCell>
+                              <TableCell className='text-end tabular-nums'>
+                                {r.bill_balance != null ? r.bill_balance : '—'}
+                              </TableCell>
+                              <TableCell className='max-w-[160px] whitespace-normal text-muted-foreground'>
+                                {r.bill_status ?? '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter className='mt-4 shrink-0 flex-row justify-end gap-2 border-t pt-4'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={() => {
+                    if (goodsDispatchedReportData) {
+                      downloadGoodsDispatchedReportCsv(goodsDispatchedReportData)
+                    }
+                  }}
+                >
+                  <Download className='mr-2 h-4 w-4' />
+                  Excel
+                </Button>
+                <Button
+                  type='button'
+                  size='sm'
+                  onClick={() => {
+                    if (goodsDispatchedReportData) {
+                      printGoodsDispatchedReportAsPdf(goodsDispatchedReportData)
                     }
                   }}
                 >
