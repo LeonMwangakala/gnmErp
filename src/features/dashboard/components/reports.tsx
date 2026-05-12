@@ -352,7 +352,15 @@ function formatGoodsDispatchedAt(iso: string | null): string {
 }
 
 function downloadGoodsDispatchedReportCsv(data: GoodsDispatchedReportData) {
+  const releaseLabel =
+    data.release === 'cash'
+      ? 'Cash only'
+      : data.release === 'loan'
+        ? 'Loan only'
+        : 'Both (loan and cash)'
   const lines: string[] = [
+    ['Dispatch release', escapeCsvCell(releaseLabel)].join(','),
+    '',
     [
       'Dispatched at',
       'Dispatch ref',
@@ -448,6 +456,7 @@ td.num{text-align:right;}
 </style></head><body>
 <h1>Goods dispatched</h1>
 <div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}<br/>
+Release: ${data.release === 'cash' ? 'Cash only' : data.release === 'loan' ? 'Loan only' : 'Both (loan and cash)'}<br/>
 Cash: ${data.summary.cash_rows} · Loan: ${data.summary.loan_rows} · Paid in full: ${data.summary.paid_rows} · Not paid in full: ${data.summary.unpaid_rows}</div>
 <table><thead><tr><th>Dispatched</th><th>Ref</th><th>By</th><th>Pickup</th><th>Phone</th><th>Vehicle</th><th>Customer</th><th>Company</th><th>Cnsg name</th><th>Tracking</th><th>Label</th><th>C.pkgs</th><th>CBM</th><th>Cont.</th><th>Good</th><th>Receipt</th><th>Qty</th><th>Pkgs</th><th>U</th><th>Rel.</th><th>Inv.</th><th>Paid</th><th>Bal.</th><th>Bill</th></tr></thead>
 <tbody>${rowHtml || '<tr><td colspan="24">No rows</td></tr>'}</tbody></table>
@@ -632,10 +641,13 @@ type PostedContainersFilters = {
   containerNo: string
 }
 
+type GoodsDispatchedReleaseFilter = 'all' | 'cash' | 'loan'
+
 type GoodsDispatchedFilters = {
   dateFrom: string
   dateTo: string
   datePreset: InvoicePaymentDatePreset
+  releaseFilter: GoodsDispatchedReleaseFilter
 }
 
 type PettyCashFilters = CommonFilters & {
@@ -882,6 +894,7 @@ export function Reports() {
       const result = await invoiceApi.getGoodsDispatchedReport({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
+        release: filters.releaseFilter,
       })
       if (!result.ok) {
         toast.error(result.message)
@@ -966,6 +979,7 @@ export function Reports() {
           datePreset: 'month' as const,
           dateFrom,
           dateTo,
+          releaseFilter: 'all',
         }
       }
       case 'petty-cash':
@@ -1196,6 +1210,28 @@ export function Reports() {
                   />
                   <p className='text-xs text-muted-foreground'>
                     Optional partial match on the stored container number.
+                  </p>
+                </div>
+              )}
+
+              {selectedReport?.key === 'goods-dispatched' && isGoodsDispatchedFilters(filters) && (
+                <div className='space-y-2'>
+                  <Label htmlFor='goodsDispatchedRelease'>Dispatched by</Label>
+                  <Select
+                    value={filters.releaseFilter}
+                    onValueChange={(value) => handleFilterChange('releaseFilter', value)}
+                  >
+                    <SelectTrigger id='goodsDispatchedRelease'>
+                      <SelectValue placeholder='Release type' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='all'>Both (loan and cash)</SelectItem>
+                      <SelectItem value='cash'>Cash only</SelectItem>
+                      <SelectItem value='loan'>Loan only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className='text-xs text-muted-foreground'>
+                    Default includes all releases; narrow to cash-paid dispatch or on-loan dispatch only.
                   </p>
                 </div>
               )}
@@ -1990,6 +2026,14 @@ export function Reports() {
             <>
               <p className='text-sm text-muted-foreground shrink-0 pb-2'>
                 {goodsDispatchedReportData.date_from} – {goodsDispatchedReportData.date_to}
+                <span className='ms-2'>
+                  ·{' '}
+                  {goodsDispatchedReportData.release === 'cash'
+                    ? 'Cash only'
+                    : goodsDispatchedReportData.release === 'loan'
+                      ? 'Loan only'
+                      : 'Loan and cash'}
+                </span>
                 <span className='ms-2'>
                   ({goodsDispatchedReportData.summary.row_count}{' '}
                   {goodsDispatchedReportData.summary.row_count === 1 ? 'line' : 'lines'})

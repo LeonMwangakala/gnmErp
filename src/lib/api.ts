@@ -324,13 +324,19 @@ export const invoiceApi = {
   getGoodsDispatchedReport: async (params: {
     date_from: string
     date_to: string
+    /** Omit or 'all' = loan and cash; 'cash' | 'loan' to restrict */
+    release?: 'all' | 'cash' | 'loan'
   }): Promise<
     | { ok: true; data: GoodsDispatchedReportData }
     | { ok: false; message: string }
   > => {
     try {
       const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/goods-dispatched-report`, {
-        params: { date_from: params.date_from, date_to: params.date_to },
+        params: {
+          date_from: params.date_from,
+          date_to: params.date_to,
+          ...(params.release && params.release !== 'all' ? { release: params.release } : {}),
+        },
       })
       const body = response.data as Record<string, unknown>
       if (body?.status === true && body.rows != null) {
@@ -579,6 +585,8 @@ export interface GoodsDispatchedReportRow {
 export interface GoodsDispatchedReportData {
   date_from: string
   date_to: string
+  /** Echo from API: which release types were included */
+  release: 'all' | 'cash' | 'loan'
   rows: GoodsDispatchedReportRow[]
   summary: {
     row_count: number
@@ -702,9 +710,13 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
     }
   })
   const sum = data.summary && typeof data.summary === 'object' ? (data.summary as Record<string, unknown>) : {}
+  const rel = String(data.release ?? 'all').toLowerCase()
+  const release: 'all' | 'cash' | 'loan' =
+    rel === 'cash' ? 'cash' : rel === 'loan' ? 'loan' : 'all'
   return {
     date_from: String(data.date_from ?? ''),
     date_to: String(data.date_to ?? ''),
+    release,
     rows,
     summary: {
       row_count: Number.isFinite(Number(sum.row_count)) ? Number(sum.row_count) : rows.length,
