@@ -554,6 +554,12 @@ export interface PostedContainersReportData {
   summary: { row_count: number }
 }
 
+export type GoodsDispatchedCreditInvoiceStatus =
+  | 'n_a'
+  | 'no_invoice'
+  | 'outstanding'
+  | 'paid_in_full'
+
 export interface GoodsDispatchedReportRow {
   id: string
   dispatch_reference: string
@@ -576,6 +582,11 @@ export interface GoodsDispatchedReportRow {
   pkgs: number | null
   unit: string | null
   release_type: 'cash' | 'loan'
+  /** True when dispatch was on credit (loan); unchanged after invoice is paid */
+  dispatched_on_credit: boolean
+  credit_invoice_status: GoodsDispatchedCreditInvoiceStatus
+  /** Human-readable credit vs cash and paid vs outstanding */
+  credit_dispatch_note: string
   invoice_no: string | null
   bill_fully_paid: boolean
   bill_balance: number | null
@@ -594,6 +605,10 @@ export interface GoodsDispatchedReportData {
     loan_rows: number
     paid_rows: number
     unpaid_rows: number
+    /** Credit (loan) dispatch lines whose invoice is now paid in full */
+    credit_dispatch_paid_rows: number
+    /** Credit dispatch lines still not fully paid (includes no invoice) */
+    credit_dispatch_unpaid_rows: number
   }
 }
 
@@ -651,6 +666,30 @@ function mapVesselVoyageFromApi(row: Record<string, unknown>): VesselVoyage {
   }
 }
 
+function parseCreditInvoiceStatus(
+  raw: unknown,
+  release_type: 'cash' | 'loan'
+): GoodsDispatchedCreditInvoiceStatus {
+  const s = String(raw ?? '').toLowerCase()
+  if (s === 'paid_in_full' || s === 'paidinfull') return 'paid_in_full'
+  if (s === 'outstanding') return 'outstanding'
+  if (s === 'no_invoice' || s === 'noinvoice') return 'no_invoice'
+  if (s === 'n_a' || s === 'na') return 'n_a'
+  return release_type === 'loan' ? 'outstanding' : 'n_a'
+}
+
+function fallbackCreditDispatchNote(
+  release_type: 'cash' | 'loan',
+  invoice_no: string | null,
+  bill_fully_paid: boolean
+): string {
+  if (release_type !== 'loan') return 'Cash dispatch'
+  if (!invoice_no) return 'Dispatched on credit — no invoice linked'
+  return bill_fully_paid
+    ? 'Dispatched on credit — invoice paid in full'
+    : 'Dispatched on credit — invoice outstanding'
+}
+
 function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): GoodsDispatchedReportData {
   const rawRows = Array.isArray(data.rows) ? data.rows : []
   const rows: GoodsDispatchedReportRow[] = rawRows.map((item, index) => {
@@ -660,6 +699,32 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
     const bal = r.bill_balance
     const cPkgs = r.consignment_pkgs
     const cCbm = r.consignment_cbm
+    const invoice_no =
+      r.invoice_no == null && r.bill_no == null
+        ? null
+        : String(r.invoice_no ?? r.bill_no ?? '').trim() || null
+    const bill_fully_paid = Boolean(r.bill_fully_paid ?? r.billFullyPaid)
+
+    const dispatched_on_credit =
+      Boolean(r.dispatched_on_credit ?? r.dispatchedOnCredit) || release_type === 'loan'
+
+    let credit_invoice_status: GoodsDispatchedCreditInvoiceStatus
+    if (release_type === 'cash') {
+      credit_invoice_status = 'n_a'
+    } else if (r.credit_invoice_status != null && String(r.credit_invoice_status).trim() !== '') {
+      credit_invoice_status = parseCreditInvoiceStatus(r.credit_invoice_status, release_type)
+    } else if (!invoice_no) {
+      credit_invoice_status = 'no_invoice'
+    } else if (bill_fully_paid) {
+      credit_invoice_status = 'paid_in_full'
+    } else {
+      credit_invoice_status = 'outstanding'
+    }
+
+    const noteRaw = String(r.credit_dispatch_note ?? r.creditDispatchNote ?? '').trim()
+    const credit_dispatch_note =
+      noteRaw || fallbackCreditDispatchNote(release_type, invoice_no, bill_fully_paid)
+
     return {
       id: String(r.id ?? `${index}`),
       dispatch_reference: String(r.dispatch_reference ?? r.dispatchReference ?? '').trim(),
@@ -696,11 +761,11 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
       pkgs: r.pkgs == null || r.pkgs === '' ? null : Number(r.pkgs),
       unit: r.unit == null || r.unit === '' ? null : String(r.unit),
       release_type,
-      invoice_no:
-        r.invoice_no == null && r.bill_no == null
-          ? null
-          : String(r.invoice_no ?? r.bill_no ?? '').trim() || null,
-      bill_fully_paid: Boolean(r.bill_fully_paid ?? r.billFullyPaid),
+      dispatched_on_credit,
+      credit_invoice_status,
+      credit_dispatch_note,
+      invoice_no,
+      bill_fully_paid,
       bill_balance:
         bal == null || bal === '' || !Number.isFinite(Number(bal)) ? null : Number(bal),
       bill_status:
@@ -713,6 +778,8 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
   const rel = String(data.release ?? 'all').toLowerCase()
   const release: 'all' | 'cash' | 'loan' =
     rel === 'cash' ? 'cash' : rel === 'loan' ? 'loan' : 'all'
+  const creditPaidFromRows = rows.filter((x) => x.dispatched_on_credit && x.bill_fully_paid).length
+  const creditUnpaidFromRows = rows.filter((x) => x.dispatched_on_credit && !x.bill_fully_paid).length
   return {
     date_from: String(data.date_from ?? ''),
     date_to: String(data.date_to ?? ''),
@@ -724,6 +791,12 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
       loan_rows: Number.isFinite(Number(sum.loan_rows)) ? Number(sum.loan_rows) : 0,
       paid_rows: Number.isFinite(Number(sum.paid_rows)) ? Number(sum.paid_rows) : 0,
       unpaid_rows: Number.isFinite(Number(sum.unpaid_rows)) ? Number(sum.unpaid_rows) : 0,
+      credit_dispatch_paid_rows: Number.isFinite(Number(sum.credit_dispatch_paid_rows))
+        ? Number(sum.credit_dispatch_paid_rows)
+        : creditPaidFromRows,
+      credit_dispatch_unpaid_rows: Number.isFinite(Number(sum.credit_dispatch_unpaid_rows))
+        ? Number(sum.credit_dispatch_unpaid_rows)
+        : creditUnpaidFromRows,
     },
   }
 }

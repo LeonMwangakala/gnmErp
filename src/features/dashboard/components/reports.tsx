@@ -382,6 +382,8 @@ function downloadGoodsDispatchedReportCsv(data: GoodsDispatchedReportData) {
       'Good pkgs',
       'Unit',
       'Release',
+      'Dispatched on credit',
+      'Credit / invoice record',
       'Invoice',
       'Paid in full',
       'Balance',
@@ -409,6 +411,8 @@ function downloadGoodsDispatchedReportCsv(data: GoodsDispatchedReportData) {
         r.pkgs != null ? String(r.pkgs) : '',
         escapeCsvCell(r.unit ?? ''),
         escapeCsvCell(r.release_type),
+        r.dispatched_on_credit ? 'Yes' : 'No',
+        escapeCsvCell(r.credit_dispatch_note),
         escapeCsvCell(r.invoice_no ?? ''),
         r.bill_fully_paid ? 'Yes' : 'No',
         r.bill_balance != null ? String(r.bill_balance) : '',
@@ -422,6 +426,8 @@ function downloadGoodsDispatchedReportCsv(data: GoodsDispatchedReportData) {
     `Loan lines,${data.summary.loan_rows}`,
     `Paid in full,${data.summary.paid_rows}`,
     `Not paid in full,${data.summary.unpaid_rows}`,
+    `Credit dispatch lines paid,${data.summary.credit_dispatch_paid_rows}`,
+    `Credit dispatch lines unpaid,${data.summary.credit_dispatch_unpaid_rows}`,
   ]
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
@@ -441,10 +447,10 @@ function printGoodsDispatchedReportAsPdf(data: GoodsDispatchedReportData) {
   const rowHtml = data.rows
     .map(
       (r) =>
-        `<tr><td>${escapeHtml(formatGoodsDispatchedAt(r.dispatched_at))}</td><td>${escapeHtml(r.dispatch_reference)}</td><td>${escapeHtml(r.dispatched_by_name || '—')}</td><td>${escapeHtml(r.pickup_by || '—')}</td><td>${escapeHtml(r.pickup_cellphone || '—')}</td><td>${escapeHtml(r.pickup_vehicle || '—')}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.customer_company_name || '—')}</td><td>${escapeHtml(r.consignment_name || '—')}</td><td>${escapeHtml(r.consignment_tracking || '—')}</td><td>${escapeHtml(r.consignment_label || '—')}</td><td class="num">${r.consignment_pkgs != null ? escapeHtml(String(r.consignment_pkgs)) : '—'}</td><td class="num">${r.consignment_cbm != null ? escapeHtml(String(r.consignment_cbm)) : '—'}</td><td>${escapeHtml(r.container_no ?? '—')}</td><td>${escapeHtml(r.good_name || '—')}</td><td>${escapeHtml(r.good_supplier_receipt || '—')}</td><td class="num">${r.quantity != null ? escapeHtml(String(r.quantity)) : '—'}</td><td class="num">${r.pkgs != null ? escapeHtml(String(r.pkgs)) : '—'}</td><td>${escapeHtml(r.unit ?? '—')}</td><td>${escapeHtml(r.release_type)}</td><td>${escapeHtml(r.invoice_no ?? '—')}</td><td>${r.bill_fully_paid ? 'Yes' : 'No'}</td><td class="num">${r.bill_balance != null ? escapeHtml(String(r.bill_balance)) : '—'}</td><td>${escapeHtml(r.bill_status ?? '—')}</td></tr>`
+        `<tr><td>${escapeHtml(formatGoodsDispatchedAt(r.dispatched_at))}</td><td>${escapeHtml(r.dispatch_reference)}</td><td>${escapeHtml(r.dispatched_by_name || '—')}</td><td>${escapeHtml(r.pickup_by || '—')}</td><td>${escapeHtml(r.pickup_cellphone || '—')}</td><td>${escapeHtml(r.pickup_vehicle || '—')}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.customer_company_name || '—')}</td><td>${escapeHtml(r.consignment_name || '—')}</td><td>${escapeHtml(r.consignment_tracking || '—')}</td><td>${escapeHtml(r.consignment_label || '—')}</td><td class="num">${r.consignment_pkgs != null ? escapeHtml(String(r.consignment_pkgs)) : '—'}</td><td class="num">${r.consignment_cbm != null ? escapeHtml(String(r.consignment_cbm)) : '—'}</td><td>${escapeHtml(r.container_no ?? '—')}</td><td>${escapeHtml(r.good_name || '—')}</td><td>${escapeHtml(r.good_supplier_receipt || '—')}</td><td class="num">${r.quantity != null ? escapeHtml(String(r.quantity)) : '—'}</td><td class="num">${r.pkgs != null ? escapeHtml(String(r.pkgs)) : '—'}</td><td>${escapeHtml(r.unit ?? '—')}</td><td>${escapeHtml(r.release_type === 'loan' ? 'credit' : r.release_type)}</td><td>${r.dispatched_on_credit ? 'Y' : 'N'}</td><td>${escapeHtml(r.credit_dispatch_note)}</td><td>${escapeHtml(r.invoice_no ?? '—')}</td><td>${r.bill_fully_paid ? 'Yes' : 'No'}</td><td class="num">${r.bill_balance != null ? escapeHtml(String(r.bill_balance)) : '—'}</td><td>${escapeHtml(r.bill_status ?? '—')}</td></tr>`
     )
     .join('')
-  w.document.write(`<!DOCTYPE html><html><head><title>Goods dispatched report</title>
+  w.document.write(`<!DOCTYPE html><html><head><title>Good dispatched report</title>
 <style>
 body{font-family:system-ui,sans-serif;padding:16px;font-size:11px;}
 h1{font-size:16px;margin-bottom:8px;}
@@ -454,12 +460,13 @@ th{background:#f0f0f0;}
 td.num{text-align:right;}
 .meta{color:#444;margin-bottom:16px;}
 </style></head><body>
-<h1>Goods dispatched</h1>
+<h1>Good dispatched report</h1>
 <div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}<br/>
 Release: ${data.release === 'cash' ? 'Cash only' : data.release === 'loan' ? 'Loan only' : 'Both (loan and cash)'}<br/>
-Cash: ${data.summary.cash_rows} · Loan: ${data.summary.loan_rows} · Paid in full: ${data.summary.paid_rows} · Not paid in full: ${data.summary.unpaid_rows}</div>
-<table><thead><tr><th>Dispatched</th><th>Ref</th><th>By</th><th>Pickup</th><th>Phone</th><th>Vehicle</th><th>Customer</th><th>Company</th><th>Cnsg name</th><th>Tracking</th><th>Label</th><th>C.pkgs</th><th>CBM</th><th>Cont.</th><th>Good</th><th>Receipt</th><th>Qty</th><th>Pkgs</th><th>U</th><th>Rel.</th><th>Inv.</th><th>Paid</th><th>Bal.</th><th>Bill</th></tr></thead>
-<tbody>${rowHtml || '<tr><td colspan="24">No rows</td></tr>'}</tbody></table>
+Cash: ${data.summary.cash_rows} · Credit (loan): ${data.summary.loan_rows} · Paid in full: ${data.summary.paid_rows} · Not paid in full: ${data.summary.unpaid_rows}<br/>
+Credit lines · invoice paid: ${data.summary.credit_dispatch_paid_rows} · outstanding: ${data.summary.credit_dispatch_unpaid_rows}</div>
+<table><thead><tr><th>Dispatched</th><th>Ref</th><th>By</th><th>Pickup</th><th>Phone</th><th>Vehicle</th><th>Customer</th><th>Company</th><th>Cnsg name</th><th>Tracking</th><th>Label</th><th>C.pkgs</th><th>CBM</th><th>Cont.</th><th>Good</th><th>Receipt</th><th>Qty</th><th>Pkgs</th><th>U</th><th>Rel.</th><th>Cr</th><th>Credit note</th><th>Inv.</th><th>Paid</th><th>Bal.</th><th>Bill</th></tr></thead>
+<tbody>${rowHtml || '<tr><td colspan="26">No rows</td></tr>'}</tbody></table>
 <p class="meta">${data.summary.row_count} row(s)</p>
 <script>window.onload=function(){window.print();}</script>
 </body></html>`)
@@ -543,9 +550,9 @@ const REPORTS: ReportDefinition[] = [
   },
   {
     key: 'goods-dispatched',
-    title: 'Goods dispatched',
+    title: 'Good dispatched report',
     description:
-      'Goods released by dispatch date from CMTS: cash vs on loan, and whether the bill is paid in full.',
+      'Goods released by dispatch date from CMTS. Credit (loan) dispatches stay on the report after the invoice is paid, with a clear paid vs outstanding record.',
   },
   {
     key: 'petty-cash',
@@ -1216,13 +1223,13 @@ export function Reports() {
 
               {selectedReport?.key === 'goods-dispatched' && isGoodsDispatchedFilters(filters) && (
                 <div className='space-y-2'>
-                  <Label htmlFor='goodsDispatchedRelease'>Dispatched by</Label>
+                  <Label htmlFor='goodsDispatchedRelease'>Dispatched on</Label>
                   <Select
                     value={filters.releaseFilter}
                     onValueChange={(value) => handleFilterChange('releaseFilter', value)}
                   >
                     <SelectTrigger id='goodsDispatchedRelease'>
-                      <SelectValue placeholder='Release type' />
+                      <SelectValue placeholder='Loan or cash' />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value='all'>Both (loan and cash)</SelectItem>
@@ -1231,7 +1238,7 @@ export function Reports() {
                     </SelectContent>
                   </Select>
                   <p className='text-xs text-muted-foreground'>
-                    Default includes all releases; narrow to cash-paid dispatch or on-loan dispatch only.
+                    Default includes both; limit to goods dispatched on cash or on loan only.
                   </p>
                 </div>
               )}
@@ -2020,7 +2027,7 @@ export function Reports() {
       >
         <DialogContent className='flex max-h-[min(90vh,800px)] w-[min(1400px,98vw)] max-w-[min(1400px,98vw)] flex-col gap-0 overflow-hidden sm:max-w-[min(1400px,98vw)]'>
           <DialogHeader className='shrink-0'>
-            <DialogTitle>Goods dispatched</DialogTitle>
+            <DialogTitle>Good dispatched report</DialogTitle>
           </DialogHeader>
           {goodsDispatchedReportData ? (
             <>
@@ -2040,10 +2047,14 @@ export function Reports() {
                 </span>
               </p>
               <p className='text-xs text-muted-foreground shrink-0 pb-2'>
-                Cash {goodsDispatchedReportData.summary.cash_rows} · Loan{' '}
+                Cash {goodsDispatchedReportData.summary.cash_rows} · Credit (loan){' '}
                 {goodsDispatchedReportData.summary.loan_rows} · Paid in full{' '}
                 {goodsDispatchedReportData.summary.paid_rows} · Not paid in full{' '}
                 {goodsDispatchedReportData.summary.unpaid_rows}
+                <br />
+                Credit dispatch · invoice now paid in full{' '}
+                {goodsDispatchedReportData.summary.credit_dispatch_paid_rows} · still outstanding{' '}
+                {goodsDispatchedReportData.summary.credit_dispatch_unpaid_rows}
               </p>
               <div className='min-h-0 flex-1 overflow-auto pr-1'>
                 <div className='space-y-4 pb-4'>
@@ -2082,7 +2093,7 @@ export function Reports() {
                                   </div>
                                 ) : null}
                                 <div className='mt-1 text-xs capitalize text-muted-foreground'>
-                                  {r.release_type}
+                                  {r.release_type === 'loan' ? 'Credit' : 'Cash'}
                                 </div>
                               </TableCell>
                               <TableCell className='align-top whitespace-normal'>
@@ -2141,7 +2152,8 @@ export function Reports() {
                                 </div>
                               </TableCell>
                               <TableCell className='align-top whitespace-normal text-sm'>
-                                <div className='tabular-nums'>{r.invoice_no ?? '—'}</div>
+                                <div className='font-medium leading-snug'>{r.credit_dispatch_note}</div>
+                                <div className='mt-2 tabular-nums'>Invoice: {r.invoice_no ?? '—'}</div>
                                 <div className='mt-1'>
                                   Paid in full:{' '}
                                   <span className='font-medium'>
