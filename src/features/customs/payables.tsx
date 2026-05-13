@@ -185,16 +185,33 @@ export function CustomsPayables() {
   }, [loadList])
 
   useEffect(() => {
-    customsJobApi
-      .listJobs({ per_page: 300, page: 1 })
-      .then((r) => {
-        const opts = (r.data || []).map((j: Record<string, unknown>) => ({
-          id: Number(j.id),
-          job_no: String(j.job_no || j.jobNo || ''),
-        }))
-        setJobs(opts.filter((o) => o.id && o.job_no))
-      })
-      .catch(() => setJobs([]))
+    let cancelled = false
+    const mapRow = (j: Record<string, unknown>): JobOption => ({
+      id: Number(j.id),
+      job_no: String(j.job_no || j.jobNo || ''),
+    })
+
+    ;(async () => {
+      const perPage = 200 // API max: CustomsController validates per_page <= 200
+      try {
+        const first = await customsJobApi.listJobs({ per_page: perPage, page: 1 })
+        if (cancelled) return
+        let combined = (first.data || []).map(mapRow)
+        const lastPage = first.pagination?.last_page ?? 1
+        for (let p = 2; p <= lastPage; p++) {
+          const r = await customsJobApi.listJobs({ per_page: perPage, page: p })
+          if (cancelled) return
+          combined = combined.concat((r.data || []).map(mapRow))
+        }
+        setJobs(combined.filter((o) => o.id && o.job_no))
+      } catch {
+        if (!cancelled) setJobs([])
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const filteredRows = useMemo(() => {
