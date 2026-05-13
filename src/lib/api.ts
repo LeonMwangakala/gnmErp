@@ -2098,15 +2098,12 @@ export interface CustomsPayableRecord {
   created_at: string | null
 }
 
-export interface CustomsPayableFormOptions {
+export interface CustomsPayableFormMeta {
   payable_categories: { value: CustomsPayableCategory; label: string }[]
   statuses: CustomsPayableStatus[]
-  documents: { id: number; name: string }[]
-  vendors: { id: number; name: string }[]
-  categories: { id: number; name: string }[]
-  products: { id: number; name: string }[]
-  bank_accounts: { id: number; name: string }[]
 }
+
+export type CustomsPayableLookupRow = { id: number; name: string }
 
 export const customsPayableApi = {
   list: async (params?: {
@@ -2134,35 +2131,53 @@ export const customsPayableApi = {
       },
     }
   },
-  getFormOptions: async (
-    customs_job_id?: number,
-    signal?: AbortSignal
-  ): Promise<CustomsPayableFormOptions> => {
-    const params: Record<string, string | number> = {
-      _t: Date.now(),
-    }
-    if (customs_job_id != null && customs_job_id > 0) {
-      params.customs_job_id = customs_job_id
-    }
-    const response = await api.get('/customs/payables/form-options', {
-      params,
+  getFormMeta: async (signal?: AbortSignal): Promise<CustomsPayableFormMeta> => {
+    const response = await api.get('/customs/payables/options/meta', {
+      params: { _t: Date.now() },
       signal,
     })
-    const body = response.data as { status?: number; message?: string; data?: CustomsPayableFormOptions }
+    const body = response.data as { status?: number; message?: string; data?: CustomsPayableFormMeta }
     if (body?.status !== 200 || !body?.data) {
-      const msg = body?.message || 'Could not load payables form options'
-      toast.error(msg)
-      return {
-        payable_categories: [],
-        statuses: [],
-        documents: [],
-        vendors: [],
-        categories: [],
-        products: [],
-        bank_accounts: [],
-      }
+      toast.error(body?.message || 'Could not load payables form metadata')
+      return { payable_categories: [], statuses: [] }
     }
     return body.data
+  },
+  getVendors: async (signal?: AbortSignal): Promise<CustomsPayableLookupRow[]> => {
+    const response = await api.get('/customs/payables/options/vendors', {
+      params: { _t: Date.now() },
+      signal,
+    })
+    const body = response.data as { status?: number; data?: CustomsPayableLookupRow[] }
+    if (body?.status !== 200 || !Array.isArray(body.data)) return []
+    return body.data.map((v) => ({ id: Number(v.id), name: String(v.name ?? '') })).filter((v) => v.id > 0)
+  },
+  getExpenseCategories: async (signal?: AbortSignal): Promise<CustomsPayableLookupRow[]> => {
+    const response = await api.get('/customs/payables/options/expense-categories', {
+      params: { _t: Date.now() },
+      signal,
+    })
+    const body = response.data as { status?: number; data?: CustomsPayableLookupRow[] }
+    if (body?.status !== 200 || !Array.isArray(body.data)) return []
+    return body.data.map((c) => ({ id: Number(c.id), name: String(c.name ?? '') })).filter((c) => c.id > 0)
+  },
+  getProductServices: async (signal?: AbortSignal): Promise<CustomsPayableLookupRow[]> => {
+    const response = await api.get('/customs/payables/options/product-services', {
+      params: { _t: Date.now() },
+      signal,
+    })
+    const body = response.data as { status?: number; data?: CustomsPayableLookupRow[] }
+    if (body?.status !== 200 || !Array.isArray(body.data)) return []
+    return body.data.map((p) => ({ id: Number(p.id), name: String(p.name ?? '') })).filter((p) => p.id > 0)
+  },
+  getBankAccounts: async (signal?: AbortSignal): Promise<CustomsPayableLookupRow[]> => {
+    const response = await api.get('/customs/payables/options/bank-accounts', {
+      params: { _t: Date.now() },
+      signal,
+    })
+    const body = response.data as { status?: number; data?: CustomsPayableLookupRow[] }
+    if (body?.status !== 200 || !Array.isArray(body.data)) return []
+    return body.data.map((a) => ({ id: Number(a.id), name: String(a.name ?? '') })).filter((a) => a.id > 0)
   },
   create: async (payload: {
     customs_job_id: number
