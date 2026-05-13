@@ -404,6 +404,8 @@ export function CustomsCreateJob() {
   const [portsDestination, setPortsDestination] = useState<CustomsPort[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [loadingJob, setLoadingJob] = useState(false)
+  /** Lock form fields in view mode; keep tab triggers & non-field actions (e.g. collapse, preview) usable */
+  const formDisabled = isViewMode || isSaving || loadingJob
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null)
   const [selectedFileManager, setSelectedFileManager] = useState<FileManagerOption | null>(null)
   const [fileManagerSeedOptions, setFileManagerSeedOptions] = useState<FileManagerOption[]>([])
@@ -1617,7 +1619,11 @@ export function CustomsCreateJob() {
           <CardDescription>Use tabs to complete the shipment information.</CardDescription>
         </CardHeader>
         <CardContent className='space-y-4'>
-          <fieldset disabled={isSaving || isViewMode || loadingJob} className='space-y-4'>
+          {/* Header fields: disabled in view mode; separate from tabs so tab triggers stay clickable */}
+          <fieldset
+            disabled={isSaving || isViewMode || loadingJob}
+            className='space-y-4 border-0 p-0 m-0 min-w-0'
+          >
           <div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
             <div className='space-y-1'><Label>MBL No.</Label><Input value={form.mblNo} onChange={(e) => updateField('mblNo', e.target.value)} /></div>
             <div className='space-y-1'>
@@ -1837,8 +1843,9 @@ export function CustomsCreateJob() {
             <div className='space-y-1'><Label>Created By</Label><Input value={form.createdBy} disabled /></div>
             <div className='space-y-1'><Label>Shipment Type</Label><Select value={form.shipmentType} onValueChange={(v) => updateField('shipmentType', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{shipmentTypeItems.map((v) => <SelectItem key={v} value={v}>{labelForShipmentType(v)}</SelectItem>)}</SelectContent></Select></div>
           </div>
+          </fieldset>
 
-          <Tabs defaultValue='shipper' className='w-full'>
+          <Tabs defaultValue='shipper' className='w-full pt-[10px]'>
             <TabsList className='grid w-full grid-cols-3 md:grid-cols-7'>
               <TabsTrigger value='shipper'>Shipper Details</TabsTrigger>
               <TabsTrigger value='line-vessel'>Line/Vessel</TabsTrigger>
@@ -1850,6 +1857,7 @@ export function CustomsCreateJob() {
             </TabsList>
 
             <TabsContent value='shipper' className='space-y-3 rounded-md border p-4'>
+              <fieldset disabled={formDisabled} className='min-w-0 border-0 p-0 m-0'>
               <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
                 <div className='space-y-1 md:col-span-2'>
                   <Label>Master shipper (optional)</Label>
@@ -1878,9 +1886,11 @@ export function CustomsCreateJob() {
                 <div className='space-y-1'><Label>Notify Party Name</Label><Input value={form.notifyPartyName} onChange={(e) => updateField('notifyPartyName', e.target.value)} /></div>
                 <div className='space-y-1'><Label>Notify Address</Label><Textarea value={form.notifyAddress} onChange={(e) => updateField('notifyAddress', e.target.value)} /></div>
               </div>
+              </fieldset>
             </TabsContent>
 
             <TabsContent value='line-vessel' className='space-y-3 rounded-md border p-4'>
+              <fieldset disabled={formDisabled} className='min-w-0 border-0 p-0 m-0'>
               <div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
                 <div className='space-y-1'>
                   <Label>Shipping Line</Label>
@@ -2040,9 +2050,11 @@ export function CustomsCreateJob() {
                   </Select>
                 </div>
               </div>
+              </fieldset>
             </TabsContent>
 
             <TabsContent value='shipment' className='space-y-3 rounded-md border p-4'>
+              <fieldset disabled={formDisabled} className='min-w-0 border-0 p-0 m-0'>
               <div className='grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4'>
                 <div className='space-y-1'>
                   <Label>Origin Country</Label>
@@ -2208,15 +2220,17 @@ export function CustomsCreateJob() {
                   <Input type='date' value={form.finalAssessmentDate} onChange={(e) => updateField('finalAssessmentDate', e.target.value)} />
                 </div>
               </div>
+              </fieldset>
 
               <div className='rounded-md border p-3'>
                 <div className='mb-2 flex items-center justify-between'>
                   <button type='button' className='flex items-center gap-1 font-semibold text-amber-700' onClick={() => toggleShipmentSection('container')}>
                     {openShipmentSections.container ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />} Container Shipment
                   </button>
-                  <Button size='icon' className='h-7 w-7' onClick={addContainerRow}><Plus className='h-4 w-4' /></Button>
+                  <Button type='button' size='icon' className='h-7 w-7' disabled={formDisabled} onClick={addContainerRow}><Plus className='h-4 w-4' /></Button>
                 </div>
                 {openShipmentSections.container && (
+                  <fieldset disabled={formDisabled} className='min-w-0 border-0 p-0 m-0'>
                   <Table><TableHeader><TableRow><TableHead>Container No.</TableHead><TableHead>Type</TableHead><TableHead>Seal No.</TableHead><TableHead>Per Container Weight</TableHead></TableRow></TableHeader>
                     <TableBody>{form.containerShipment.map((row, i) => {
                       const typeTrimmed = row.type.trim()
@@ -2258,6 +2272,7 @@ export function CustomsCreateJob() {
                       )
                     })}</TableBody>
                   </Table>
+                  </fieldset>
                 )}
               </div>
 
@@ -2266,9 +2281,10 @@ export function CustomsCreateJob() {
                   <button type='button' className='flex items-center gap-1 font-semibold text-amber-700' onClick={() => toggleShipmentSection('vehicle')}>
                     {openShipmentSections.vehicle ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />} Vehicle Shipment
                   </button>
-                  <Button size='icon' className='h-7 w-7' onClick={addVehicleRow}><Plus className='h-4 w-4' /></Button>
+                  <Button type='button' size='icon' className='h-7 w-7' disabled={formDisabled} onClick={addVehicleRow}><Plus className='h-4 w-4' /></Button>
                 </div>
                 {openShipmentSections.vehicle && (
+                  <fieldset disabled={formDisabled} className='min-w-0 border-0 p-0 m-0'>
                   <Table><TableHeader><TableRow><TableHead>Chasis No.</TableHead><TableHead>Engine Capacity</TableHead><TableHead>CBM</TableHead><TableHead>Driver Cell No.</TableHead></TableRow></TableHeader>
                     <TableBody>{form.vehicleShipment.map((row, i) => {
                       const ccTrimmed = row.engineCapacity.trim()
@@ -2310,6 +2326,7 @@ export function CustomsCreateJob() {
                       )
                     })}</TableBody>
                   </Table>
+                  </fieldset>
                 )}
               </div>
 
@@ -2318,12 +2335,14 @@ export function CustomsCreateJob() {
                   <button type='button' className='flex items-center gap-1 font-semibold text-amber-700' onClick={() => toggleShipmentSection('looseCargo')}>
                     {openShipmentSections.looseCargo ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />} Loose Cargo Shipment
                   </button>
-                  <Button size='icon' className='h-7 w-7' onClick={addLooseCargoRow}><Plus className='h-4 w-4' /></Button>
+                  <Button type='button' size='icon' className='h-7 w-7' disabled={formDisabled} onClick={addLooseCargoRow}><Plus className='h-4 w-4' /></Button>
                 </div>
                 {openShipmentSections.looseCargo && (
+                  <fieldset disabled={formDisabled} className='min-w-0 border-0 p-0 m-0'>
                   <Table><TableHeader><TableRow><TableHead>Truck NO.</TableHead><TableHead>Trailer NO.</TableHead><TableHead>Transporter</TableHead><TableHead>LicenceNo.</TableHead></TableRow></TableHeader>
                     <TableBody>{form.looseCargoShipment.map((row, i) => <TableRow key={`l-${i}`}><TableCell><Input value={row.truckNo} onChange={(e) => updateLooseCargoRow(i, 'truckNo', e.target.value)} /></TableCell><TableCell><Input value={row.trailerNo} onChange={(e) => updateLooseCargoRow(i, 'trailerNo', e.target.value)} /></TableCell><TableCell><Input value={row.transporter} onChange={(e) => updateLooseCargoRow(i, 'transporter', e.target.value)} /></TableCell><TableCell><Input value={row.licenceNo} onChange={(e) => updateLooseCargoRow(i, 'licenceNo', e.target.value)} /></TableCell></TableRow>)}</TableBody>
                   </Table>
+                  </fieldset>
                 )}
               </div>
             </TabsContent>
@@ -2332,8 +2351,10 @@ export function CustomsCreateJob() {
               <div className='rounded-md border'>
                 <div className='flex justify-end border-b bg-muted/40 px-3 py-2'>
                   <Button
+                    type='button'
                     variant='link'
                     className='h-auto p-0 text-xs'
+                    disabled={formDisabled}
                     onClick={() => setIsUploadModalOpen(true)}
                   >
                     Upload Document
@@ -2389,7 +2410,13 @@ export function CustomsCreateJob() {
                                 <Download className='mr-1 h-4 w-4' />
                                 Download
                               </Button>
-                              <Button variant='ghost' size='sm' onClick={() => handleDeleteDocument(row)}>
+                              <Button
+                                type='button'
+                                variant='ghost'
+                                size='sm'
+                                disabled={formDisabled}
+                                onClick={() => handleDeleteDocument(row)}
+                              >
                                 Delete
                               </Button>
                             </div>
@@ -2606,6 +2633,7 @@ export function CustomsCreateJob() {
               </Dialog>
             </TabsContent>
             <TabsContent value='upload' className='space-y-3 rounded-md border p-4'>
+              <fieldset disabled={formDisabled} className='min-w-0 border-0 p-0 m-0'>
               <div className='rounded-md border'>
                 <div className='flex items-center justify-between border-b bg-muted/40 px-3 py-2 text-xs'>
                   <Button
@@ -2704,8 +2732,10 @@ export function CustomsCreateJob() {
                   </TableBody>
                 </Table>
               </div>
+              </fieldset>
             </TabsContent>
             <TabsContent value='letters' className='space-y-3 rounded-md border p-4'>
+              <fieldset disabled={formDisabled} className='min-w-0 border-0 p-0 m-0'>
               <div className='rounded-md border'>
                 <div className='border-b bg-orange-100 px-3 py-2 text-center text-sm font-medium'>
                   {authorizationLetters.length > 0
@@ -2739,6 +2769,7 @@ export function CustomsCreateJob() {
                   </Button>
                 </div>
               </div>
+              </fieldset>
             </TabsContent>
             <TabsContent value='notes' className='space-y-3 rounded-md border p-4'>
               <div className='rounded-md border'>
@@ -2785,7 +2816,9 @@ export function CustomsCreateJob() {
               </div>
 
               <Button
+                type='button'
                 variant='secondary'
+                disabled={formDisabled}
                 onClick={() => {
                   resetNoteForm()
                   setIsNotesModalOpen(true)
@@ -2814,6 +2847,7 @@ export function CustomsCreateJob() {
                       <Label>Subject:</Label>
                       <Select
                         value={noteSubject || '__empty__'}
+                        disabled={isViewMode}
                         onValueChange={(v) =>
                           setNoteSubject(v === '__empty__' ? '' : v)
                         }
@@ -2837,6 +2871,7 @@ export function CustomsCreateJob() {
                       <Textarea
                         className='min-h-[120px]'
                         value={noteBody}
+                        readOnly={isViewMode}
                         onChange={(e) => setNoteBody(e.target.value)}
                       />
                     </div>
@@ -2844,6 +2879,7 @@ export function CustomsCreateJob() {
 
                   <DialogFooter>
                     <Button
+                      type='button'
                       variant='outline'
                       onClick={() => {
                         setIsNotesModalOpen(false)
@@ -2852,13 +2888,16 @@ export function CustomsCreateJob() {
                     >
                       Close
                     </Button>
-                    <Button onClick={handleAddNote}>Add</Button>
+                    {!isViewMode ? (
+                      <Button type='button' onClick={handleAddNote}>
+                        Add
+                      </Button>
+                    ) : null}
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
             </TabsContent>
           </Tabs>
-          </fieldset>
 
           <div className='flex items-center justify-end gap-2'>
             <Button
