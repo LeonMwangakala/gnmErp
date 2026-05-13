@@ -80,6 +80,8 @@ interface Invoice {
   total_tax_formatted: string
   amount: number
   amount_formatted: string
+  paid_amount?: number
+  paid_amount_formatted?: string
   due_amount: number
   due_amount_formatted: string
   status: number
@@ -396,6 +398,7 @@ export function CustomerDetail() {
                           <TableHead>Due Date</TableHead>
                           <TableHead className='text-right'>Total Tax</TableHead>
                           <TableHead className='text-right'>Amount</TableHead>
+                          <TableHead className='text-right'>Paid Amount</TableHead>
                           <TableHead className='text-right'>Due Amount</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className='text-right w-[52px]'>
@@ -428,6 +431,15 @@ export function CustomerDetail() {
                               {invoice.total_tax_formatted}
                             </TableCell>
                             <TableCell className='text-right'>{invoice.amount_formatted}</TableCell>
+                            <TableCell className='text-right'>
+                              {invoice.paid_amount_formatted ??
+                                (Number.isFinite(invoice.amount) && Number.isFinite(invoice.due_amount)
+                                  ? new Intl.NumberFormat(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    }).format(Math.max(0, invoice.amount - invoice.due_amount))
+                                  : '—')}
+                            </TableCell>
                             <TableCell className='text-right'>
                               {invoice.due_amount_formatted}
                             </TableCell>
