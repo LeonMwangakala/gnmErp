@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner'
 import { CustomsPage } from './customs-page'
 import {
+  billApi,
   customsJobApi,
   customsPayableApi,
   vendorApi,
@@ -105,6 +106,8 @@ type VendorSelectOption = {
 const vendorAsyncSelectStyles = {
   control: (base: Record<string, unknown>, state: { isFocused: boolean }) => ({
     ...base,
+    width: '100%',
+    minWidth: 0,
     minHeight: '36px',
     height: '36px',
     borderColor: state.isFocused ? 'hsl(var(--ring))' : '#E2E8F1',
@@ -333,10 +336,42 @@ export function CustomsPayables() {
     try {
       const o = await customsPayableApi.getFormOptions(jobId, ac.signal)
       if (ac.signal.aborted) return
+
+      let expenseCategories: { id: number; name: string }[] = (o.categories || []).map((c) => ({
+        id: Number(c.id),
+        name: String(c.name ?? ''),
+      }))
+      let productLines: { id: number; name: string }[] = (o.products || []).map((p) => ({
+        id: Number(p.id),
+        name: String(p.name ?? ''),
+      }))
+
+      // Match New Bill modal lists when user can load bill form data (same as /bills UI).
+      try {
+        const billForm = await billApi.getFormData()
+        if (ac.signal.aborted) return
+        const bc = billForm?.categories
+        const bp = billForm?.products
+        if (Array.isArray(bc) && bc.length > 0) {
+          expenseCategories = bc.map((c: { id?: unknown; name?: unknown }) => ({
+            id: Number(c.id),
+            name: String(c.name ?? ''),
+          }))
+        }
+        if (Array.isArray(bp) && bp.length > 0) {
+          productLines = bp.map((p: { id?: unknown; name?: unknown }) => ({
+            id: Number(p.id),
+            name: String(p.name ?? ''),
+          }))
+        }
+      } catch {
+        /* keep payables API lists */
+      }
+
       setCategoryChoices(o.payable_categories || [])
       setDocOptions(o.documents || [])
-      setExpenseCatOptions(o.categories || [])
-      setProductOptions(o.products || [])
+      setExpenseCatOptions(expenseCategories.filter((c) => c.id > 0 && c.name))
+      setProductOptions(productLines.filter((p) => p.id > 0 && p.name))
       setBankOptions(o.bank_accounts || [])
       setAccountingOptionsNonce((n) => n + 1)
     } catch (e: unknown) {
@@ -849,6 +884,7 @@ export function CustomsPayables() {
       </Card>
 
       <Dialog
+        modal={false}
         open={formOpen}
         onOpenChange={(open) => {
           setFormOpen(open)
@@ -869,12 +905,18 @@ export function CustomsPayables() {
               <Select
                 value={form.customs_job_id}
                 disabled={formMode === 'edit'}
-                onValueChange={(v) => setForm((f) => ({ ...f, customs_job_id: v }))}
+                onValueChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    customs_job_id: v,
+                    customs_job_document_id: '',
+                  }))
+                }
               >
                 <SelectTrigger className='w-full min-w-0'>
                   <SelectValue placeholder='Select job' />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className='z-[300]'>
                   {jobs.map((j) => (
                     <SelectItem key={j.id} value={String(j.id)}>
                       {j.job_no}
@@ -894,7 +936,7 @@ export function CustomsPayables() {
                 <SelectTrigger className='w-full min-w-0'>
                   <SelectValue placeholder='Category' />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className='z-[300]'>
                   {(categoryChoices.length
                     ? categoryChoices
                     : (Object.keys(CATEGORY_LABEL) as CustomsPayableCategory[]).map((value) => ({
@@ -949,7 +991,7 @@ export function CustomsPayables() {
                 <SelectTrigger className='w-full min-w-0'>
                   <SelectValue placeholder='Currency' />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className='z-[300]'>
                   <SelectItem value='USD'>USD</SelectItem>
                   <SelectItem value='TZS'>TZS</SelectItem>
                 </SelectContent>
@@ -958,15 +1000,25 @@ export function CustomsPayables() {
             <div className='space-y-2'>
               <Label>Job document (required to submit)</Label>
               <Select
+                key={`job-doc-${form.customs_job_id}-${docOptions.length}`}
                 value={form.customs_job_document_id || 'none'}
+                disabled={!form.customs_job_id || optionsLoading}
                 onValueChange={(v) =>
                   setForm((f) => ({ ...f, customs_job_document_id: v === 'none' ? '' : v }))
                 }
               >
                 <SelectTrigger className='w-full min-w-0'>
-                  <SelectValue placeholder='Select document' />
+                  <SelectValue
+                    placeholder={
+                      !form.customs_job_id
+                        ? 'Select a job first'
+                        : optionsLoading
+                          ? 'Loading documents…'
+                          : 'Select document'
+                    }
+                  />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className='z-[300]'>
                   <SelectItem value='none'>None</SelectItem>
                   {docOptions.map((d) => (
                     <SelectItem key={d.id} value={String(d.id)}>
