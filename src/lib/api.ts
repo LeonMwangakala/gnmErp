@@ -2134,13 +2134,25 @@ export const customsPayableApi = {
       },
     }
   },
-  getFormOptions: async (customs_job_id: number): Promise<CustomsPayableFormOptions> => {
+  getFormOptions: async (
+    customs_job_id?: number,
+    signal?: AbortSignal
+  ): Promise<CustomsPayableFormOptions> => {
+    const params: Record<string, string | number> = {
+      _t: Date.now(),
+    }
+    if (customs_job_id != null && customs_job_id > 0) {
+      params.customs_job_id = customs_job_id
+    }
     const response = await api.get('/customs/payables/form-options', {
-      params: { customs_job_id },
+      params,
+      signal,
     })
-    const d = response.data?.data
-    return (
-      d || {
+    const body = response.data as { status?: number; message?: string; data?: CustomsPayableFormOptions }
+    if (body?.status !== 200 || !body?.data) {
+      const msg = body?.message || 'Could not load payables form options'
+      toast.error(msg)
+      return {
         payable_categories: [],
         statuses: [],
         documents: [],
@@ -2149,7 +2161,8 @@ export const customsPayableApi = {
         products: [],
         bank_accounts: [],
       }
-    )
+    }
+    return body.data
   },
   create: async (payload: {
     customs_job_id: number

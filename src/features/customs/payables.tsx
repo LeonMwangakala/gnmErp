@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import AsyncSelect from 'react-select/async'
+import axios from 'axios'
 import {
   Check,
   ChevronDown,
@@ -15,6 +17,7 @@ import { CustomsPage } from './customs-page'
 import {
   customsJobApi,
   customsPayableApi,
+  vendorApi,
   type CustomsPayableCategory,
   type CustomsPayableRecord,
   type CustomsPayableStatus,
@@ -91,6 +94,99 @@ function statusBadgeVariant(
 
 type JobOption = { id: number; job_no: string }
 
+type VendorSelectOption = {
+  value: string
+  label: string
+  id: number
+  name: string
+}
+
+/** Match jobs-create / file manager async select styling */
+const vendorAsyncSelectStyles = {
+  control: (base: Record<string, unknown>, state: { isFocused: boolean }) => ({
+    ...base,
+    minHeight: '36px',
+    height: '36px',
+    borderColor: state.isFocused ? 'hsl(var(--ring))' : '#E2E8F1',
+    backgroundColor: 'transparent',
+    borderRadius: 'calc(var(--radius) - 2px)',
+    borderWidth: '1px',
+    boxShadow: state.isFocused
+      ? '0 0 0 3px hsl(var(--ring) / 0.5)'
+      : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+    '&:hover': {
+      borderColor: state.isFocused ? 'hsl(var(--ring))' : '#E2E8F1',
+    },
+  }),
+  placeholder: (base: Record<string, unknown>) => ({
+    ...base,
+    color: 'hsl(var(--muted-foreground))',
+    fontSize: '0.875rem',
+  }),
+  input: (base: Record<string, unknown>) => ({
+    ...base,
+    color: 'hsl(var(--foreground))',
+    fontSize: '0.875rem',
+    margin: 0,
+    padding: 0,
+  }),
+  singleValue: (base: Record<string, unknown>) => ({
+    ...base,
+    color: 'hsl(var(--foreground))',
+    fontSize: '0.875rem',
+  }),
+  menu: (base: Record<string, unknown>) => ({
+    ...base,
+    backgroundColor: '#ffffff',
+    border: '1px solid #e5e7eb',
+    borderRadius: 'calc(var(--radius) - 2px)',
+    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+    zIndex: 50,
+  }),
+  menuPortal: (base: Record<string, unknown>) => ({ ...base, zIndex: 100 }),
+  menuList: (base: Record<string, unknown>) => ({
+    ...base,
+    padding: '0.25rem',
+  }),
+  option: (
+    base: Record<string, unknown>,
+    state: { isFocused: boolean; isSelected: boolean }
+  ) => ({
+    ...base,
+    backgroundColor: state.isFocused || state.isSelected ? '#f3f4f6' : '#ffffff',
+    color: '#111827',
+    fontSize: '0.875rem',
+    padding: '0.375rem 0.5rem',
+    borderRadius: 'calc(var(--radius) - 4px)',
+    cursor: 'pointer',
+    '&:active': {
+      backgroundColor: '#e5e7eb',
+    },
+    '&:hover': {
+      backgroundColor: '#f3f4f6',
+    },
+  }),
+  indicatorSeparator: () => ({
+    display: 'none',
+  }),
+  dropdownIndicator: (base: Record<string, unknown>) => ({
+    ...base,
+    color: 'hsl(var(--muted-foreground))',
+    padding: '0 8px',
+    '&:hover': {
+      color: 'hsl(var(--foreground))',
+    },
+  }),
+  clearIndicator: (base: Record<string, unknown>) => ({
+    ...base,
+    color: 'hsl(var(--muted-foreground))',
+    padding: '0 8px',
+    '&:hover': {
+      color: 'hsl(var(--foreground))',
+    },
+  }),
+}
+
 type PayableForm = {
   customs_job_id: string
   payable_category: CustomsPayableCategory | ''
@@ -137,12 +233,16 @@ export function CustomsPayables() {
   const [optionsLoading, setOptionsLoading] = useState(false)
   const [formSubmitting, setFormSubmitting] = useState(false)
   const [docOptions, setDocOptions] = useState<{ id: number; name: string }[]>([])
-  const [vendorOptions, setVendorOptions] = useState<{ id: number; name: string }[]>([])
+  const [selectedVendor, setSelectedVendor] = useState<VendorSelectOption | null>(null)
   const [expenseCatOptions, setExpenseCatOptions] = useState<{ id: number; name: string }[]>([])
   const [productOptions, setProductOptions] = useState<{ id: number; name: string }[]>([])
   const [categoryChoices, setCategoryChoices] = useState<
     { value: CustomsPayableCategory; label: string }[]
   >([])
+
+  /** Bumps when category/product lists refresh so Radix Select remounts with new options */
+  const [accountingOptionsNonce, setAccountingOptionsNonce] = useState(0)
+  const formOptionsAbortRef = useRef<AbortController | null>(null)
 
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectRole, setRejectRole] = useState<'manager' | 'chief'>('manager')
@@ -225,24 +325,54 @@ export function CustomsPayables() {
     )
   }, [rows, search])
 
-  const loadOptionsForJob = async (jobId: number) => {
+  const loadPayableFormOptions = useCallback(async (jobId?: number) => {
+    formOptionsAbortRef.current?.abort()
+    const ac = new AbortController()
+    formOptionsAbortRef.current = ac
     setOptionsLoading(true)
     try {
-      const o = await customsPayableApi.getFormOptions(jobId)
+      const o = await customsPayableApi.getFormOptions(jobId, ac.signal)
+      if (ac.signal.aborted) return
       setCategoryChoices(o.payable_categories || [])
       setDocOptions(o.documents || [])
-      setVendorOptions(o.vendors || [])
       setExpenseCatOptions(o.categories || [])
       setProductOptions(o.products || [])
       setBankOptions(o.bank_accounts || [])
-    } catch {
+      setAccountingOptionsNonce((n) => n + 1)
+    } catch (e: unknown) {
+      if (ac.signal.aborted) return
+      if (axios.isCancel(e)) return
       setDocOptions([])
-      setVendorOptions([])
       setExpenseCatOptions([])
       setProductOptions([])
       setBankOptions([])
     } finally {
-      setOptionsLoading(false)
+      if (!ac.signal.aborted) {
+        setOptionsLoading(false)
+      }
+    }
+  }, [])
+
+  const loadVendorOptions = async (inputValue: string): Promise<VendorSelectOption[]> => {
+    try {
+      const res = await vendorApi.getVendors({
+        search: inputValue.trim(),
+        per_page: 50,
+        page: 1,
+      })
+      const rows = res.data || []
+      return rows
+        .map((v: Record<string, unknown>) => {
+          const id = Number(v.id)
+          if (!Number.isFinite(id) || id <= 0) return null
+          const name = String(v.name ?? '')
+          const num = v.vendor_number != null ? String(v.vendor_number) : ''
+          const label = [name, num].filter(Boolean).join(' — ') || `Vendor #${id}`
+          return { value: String(id), label, id, name } as VendorSelectOption
+        })
+        .filter(Boolean) as VendorSelectOption[]
+    } catch {
+      return []
     }
   }
 
@@ -250,6 +380,7 @@ export function CustomsPayables() {
     setFormMode('create')
     setEditingId(null)
     setForm(emptyForm)
+    setSelectedVendor(null)
     setFormOpen(true)
   }
 
@@ -266,7 +397,7 @@ export function CustomsPayables() {
       invoice_number: row.invoice_number || '',
       description: row.description || '',
       amount: String(row.amount),
-      currency: row.currency || 'USD',
+      currency: row.currency === 'TZS' ? 'TZS' : 'USD',
       bill_due_date: row.bill_due_date || '',
       customs_job_document_id: row.customs_job_document_id
         ? String(row.customs_job_document_id)
@@ -276,22 +407,67 @@ export function CustomsPayables() {
       product_service_id: row.product_service_id ? String(row.product_service_id) : '',
     })
     setFormOpen(true)
-    await loadOptionsForJob(row.customs_job_id)
+    await loadPayableFormOptions(row.customs_job_id)
+    if (row.vender_id) {
+      try {
+        const v = await vendorApi.getVendor(row.vender_id)
+        if (v && Number(v.id) > 0) {
+          const id = Number(v.id)
+          const name = String(v.name ?? '')
+          setSelectedVendor({
+            value: String(id),
+            label: name || `Vendor #${id}`,
+            id,
+            name,
+          })
+        } else {
+          setSelectedVendor(null)
+        }
+      } catch {
+        setSelectedVendor({
+          value: String(row.vender_id),
+          label: `Vendor #${row.vender_id}`,
+          id: row.vender_id,
+          name: '',
+        })
+      }
+    } else {
+      setSelectedVendor(null)
+    }
   }
 
   useEffect(() => {
     if (!formOpen || formMode !== 'create') return
     const jid = Number(form.customs_job_id)
-    if (!jid) {
-      setDocOptions([])
-      setVendorOptions([])
-      setExpenseCatOptions([])
-      setProductOptions([])
-      setCategoryChoices([])
-      return
+    const jobId = Number.isFinite(jid) && jid > 0 ? jid : undefined
+    void loadPayableFormOptions(jobId)
+  }, [form.customs_job_id, formOpen, formMode, loadPayableFormOptions])
+
+  /** After adding categories/products in another tab, refetch when user returns to this tab */
+  useEffect(() => {
+    if (!formOpen) return
+    let t: ReturnType<typeof setTimeout> | undefined
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return
+      clearTimeout(t)
+      t = setTimeout(() => {
+        const jid = Number(form.customs_job_id)
+        const jobId = Number.isFinite(jid) && jid > 0 ? jid : undefined
+        void loadPayableFormOptions(jobId)
+      }, 400)
     }
-    void loadOptionsForJob(jid)
-  }, [form.customs_job_id, formOpen, formMode])
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      clearTimeout(t)
+    }
+  }, [formOpen, form.customs_job_id, loadPayableFormOptions])
+
+  useEffect(() => {
+    return () => {
+      formOptionsAbortRef.current?.abort()
+    }
+  }, [])
 
   const saveDraft = async () => {
     const jobId = Number(form.customs_job_id)
@@ -439,7 +615,7 @@ export function CustomsPayables() {
       description: row.description || '',
     })
     setPaymentOpen(true)
-    await loadOptionsForJob(row.customs_job_id)
+    await loadPayableFormOptions(row.customs_job_id)
   }
 
   const confirmPayment = async () => {
@@ -672,8 +848,14 @@ export function CustomsPayables() {
         </CardContent>
       </Card>
 
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-lg'>
+      <Dialog
+        open={formOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open)
+          if (!open) setSelectedVendor(null)
+        }}
+      >
+        <DialogContent className='max-h-[90vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-4xl'>
           <DialogHeader>
             <DialogTitle>{formMode === 'create' ? 'New payable' : 'Edit payable'}</DialogTitle>
             <DialogDescription>
@@ -681,7 +863,7 @@ export function CustomsPayables() {
               edited freely.
             </DialogDescription>
           </DialogHeader>
-          <div className='space-y-4 py-2'>
+          <div className='grid grid-cols-1 gap-4 py-2 sm:grid-cols-2'>
             <div className='space-y-2'>
               <Label>Job *</Label>
               <Select
@@ -689,7 +871,7 @@ export function CustomsPayables() {
                 disabled={formMode === 'edit'}
                 onValueChange={(v) => setForm((f) => ({ ...f, customs_job_id: v }))}
               >
-                <SelectTrigger>
+                <SelectTrigger className='w-full min-w-0'>
                   <SelectValue placeholder='Select job' />
                 </SelectTrigger>
                 <SelectContent>
@@ -701,12 +883,6 @@ export function CustomsPayables() {
                 </SelectContent>
               </Select>
             </div>
-            {optionsLoading ? (
-              <div className='text-muted-foreground flex items-center gap-2 text-sm'>
-                <Loader2 className='h-4 w-4 animate-spin' />
-                Loading job options…
-              </div>
-            ) : null}
             <div className='space-y-2'>
               <Label>Payable category *</Label>
               <Select
@@ -715,7 +891,7 @@ export function CustomsPayables() {
                   setForm((f) => ({ ...f, payable_category: v as CustomsPayableCategory }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className='w-full min-w-0'>
                   <SelectValue placeholder='Category' />
                 </SelectTrigger>
                 <SelectContent>
@@ -733,25 +909,12 @@ export function CustomsPayables() {
                 </SelectContent>
               </Select>
             </div>
-            <div className='grid grid-cols-2 gap-3'>
-              <div className='space-y-2'>
-                <Label>Amount *</Label>
-                <Input
-                  type='number'
-                  step='0.01'
-                  min='0'
-                  value={form.amount}
-                  onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-                />
+            {optionsLoading ? (
+              <div className='text-muted-foreground col-span-full flex items-center gap-2 text-sm'>
+                <Loader2 className='h-4 w-4 animate-spin' />
+                Loading job options…
               </div>
-              <div className='space-y-2'>
-                <Label>Currency</Label>
-                <Input
-                  value={form.currency}
-                  onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
-                />
-              </div>
-            </div>
+            ) : null}
             <div className='space-y-2'>
               <Label>Invoice number</Label>
               <Input
@@ -768,6 +931,31 @@ export function CustomsPayables() {
               />
             </div>
             <div className='space-y-2'>
+              <Label>Amount *</Label>
+              <Input
+                type='number'
+                step='0.01'
+                min='0'
+                value={form.amount}
+                onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+              />
+            </div>
+            <div className='space-y-2'>
+              <Label>Currency</Label>
+              <Select
+                value={form.currency === 'TZS' ? 'TZS' : 'USD'}
+                onValueChange={(v) => setForm((f) => ({ ...f, currency: v }))}
+              >
+                <SelectTrigger className='w-full min-w-0'>
+                  <SelectValue placeholder='Currency' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='USD'>USD</SelectItem>
+                  <SelectItem value='TZS'>TZS</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className='space-y-2'>
               <Label>Job document (required to submit)</Label>
               <Select
                 value={form.customs_job_document_id || 'none'}
@@ -775,7 +963,7 @@ export function CustomsPayables() {
                   setForm((f) => ({ ...f, customs_job_document_id: v === 'none' ? '' : v }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className='w-full min-w-0'>
                   <SelectValue placeholder='Select document' />
                 </SelectTrigger>
                 <SelectContent>
@@ -790,30 +978,35 @@ export function CustomsPayables() {
             </div>
             <div className='space-y-2'>
               <Label>Vendor (required to submit)</Label>
-              <Select
-                value={form.vender_id || 'none'}
-                onValueChange={(v) => setForm((f) => ({ ...f, vender_id: v === 'none' ? '' : v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder='Vendor' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='none'>None</SelectItem>
-                  {vendorOptions.map((v) => (
-                    <SelectItem key={v.id} value={String(v.id)}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AsyncSelect<VendorSelectOption, false>
+                instanceId='payables-vendor-async'
+                value={selectedVendor}
+                loadOptions={loadVendorOptions}
+                defaultOptions
+                cacheOptions
+                onChange={(option) => {
+                  const selected = option ?? null
+                  setSelectedVendor(selected)
+                  setForm((f) => ({ ...f, vender_id: selected ? String(selected.id) : '' }))
+                }}
+                placeholder='Search vendor name or number…'
+                isClearable
+                noOptionsMessage={() => 'No vendors found'}
+                loadingMessage={() => 'Searching vendors…'}
+                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                menuPosition='fixed'
+                className='react-select-container'
+                classNamePrefix='react-select'
+                styles={vendorAsyncSelectStyles}
+              />
             </div>
-            <div className='space-y-2'>
+            <div key={`payable-expense-cat-${accountingOptionsNonce}`} className='space-y-2'>
               <Label>Expense category (required to submit)</Label>
               <Select
                 value={form.category_id || 'none'}
                 onValueChange={(v) => setForm((f) => ({ ...f, category_id: v === 'none' ? '' : v }))}
               >
-                <SelectTrigger>
+                <SelectTrigger className='w-full min-w-0'>
                   <SelectValue placeholder='Category' />
                 </SelectTrigger>
                 <SelectContent>
@@ -826,7 +1019,7 @@ export function CustomsPayables() {
                 </SelectContent>
               </Select>
             </div>
-            <div className='space-y-2'>
+            <div key={`payable-product-${accountingOptionsNonce}`} className='space-y-2'>
               <Label>Product / service (required to submit)</Label>
               <Select
                 value={form.product_service_id || 'none'}
@@ -834,7 +1027,7 @@ export function CustomsPayables() {
                   setForm((f) => ({ ...f, product_service_id: v === 'none' ? '' : v }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className='w-full min-w-0'>
                   <SelectValue placeholder='Product' />
                 </SelectTrigger>
                 <SelectContent>
@@ -847,9 +1040,10 @@ export function CustomsPayables() {
                 </SelectContent>
               </Select>
             </div>
-            <div className='space-y-2'>
+            <div className='space-y-2 sm:col-span-2'>
               <Label>Description</Label>
               <Textarea
+                className='min-h-[80px] w-full resize-y'
                 rows={3}
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
