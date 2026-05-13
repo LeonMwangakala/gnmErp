@@ -24,6 +24,7 @@ import { Route as CustomsWorkFlowRouteImport } from './routes/customs.work-flow'
 import { Route as CustomsVesselsRouteImport } from './routes/customs.vessels'
 import { Route as CustomsVesselVoyageRouteImport } from './routes/customs.vessel-voyage'
 import { Route as CustomsShipperRouteImport } from './routes/customs.shipper'
+import { Route as CustomsPayablesRouteImport } from './routes/customs.payables'
 import { Route as CustomsJobsRouteImport } from './routes/customs.jobs'
 import { Route as CustomsIcdRouteImport } from './routes/customs.icd'
 import { Route as CustomsDocumentTypesRouteImport } from './routes/customs.document-types'
@@ -141,6 +142,11 @@ const CustomsVesselVoyageRoute = CustomsVesselVoyageRouteImport.update({
 const CustomsShipperRoute = CustomsShipperRouteImport.update({
   id: '/customs/shipper',
   path: '/customs/shipper',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomsPayablesRoute = CustomsPayablesRouteImport.update({
+  id: '/customs/payables',
+  path: '/customs/payables',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CustomsJobsRoute = CustomsJobsRouteImport.update({
@@ -406,6 +412,7 @@ export interface FileRoutesByFullPath {
   '/customs/document-types': typeof CustomsDocumentTypesRoute
   '/customs/icd': typeof CustomsIcdRoute
   '/customs/jobs': typeof CustomsJobsRouteWithChildren
+  '/customs/payables': typeof CustomsPayablesRoute
   '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
   '/customs/vessels': typeof CustomsVesselsRoute
@@ -461,6 +468,7 @@ export interface FileRoutesByTo {
   '/customs/dashboard': typeof CustomsDashboardRoute
   '/customs/document-types': typeof CustomsDocumentTypesRoute
   '/customs/icd': typeof CustomsIcdRoute
+  '/customs/payables': typeof CustomsPayablesRoute
   '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
   '/customs/vessels': typeof CustomsVesselsRoute
@@ -523,6 +531,7 @@ export interface FileRoutesById {
   '/customs/document-types': typeof CustomsDocumentTypesRoute
   '/customs/icd': typeof CustomsIcdRoute
   '/customs/jobs': typeof CustomsJobsRouteWithChildren
+  '/customs/payables': typeof CustomsPayablesRoute
   '/customs/shipper': typeof CustomsShipperRoute
   '/customs/vessel-voyage': typeof CustomsVesselVoyageRoute
   '/customs/vessels': typeof CustomsVesselsRoute
@@ -584,6 +593,7 @@ export interface FileRouteTypes {
     | '/customs/document-types'
     | '/customs/icd'
     | '/customs/jobs'
+    | '/customs/payables'
     | '/customs/shipper'
     | '/customs/vessel-voyage'
     | '/customs/vessels'
@@ -639,6 +649,7 @@ export interface FileRouteTypes {
     | '/customs/dashboard'
     | '/customs/document-types'
     | '/customs/icd'
+    | '/customs/payables'
     | '/customs/shipper'
     | '/customs/vessel-voyage'
     | '/customs/vessels'
@@ -700,6 +711,7 @@ export interface FileRouteTypes {
     | '/customs/document-types'
     | '/customs/icd'
     | '/customs/jobs'
+    | '/customs/payables'
     | '/customs/shipper'
     | '/customs/vessel-voyage'
     | '/customs/vessels'
@@ -758,6 +770,7 @@ export interface RootRouteChildren {
   CustomsDocumentTypesRoute: typeof CustomsDocumentTypesRoute
   CustomsIcdRoute: typeof CustomsIcdRoute
   CustomsJobsRoute: typeof CustomsJobsRouteWithChildren
+  CustomsPayablesRoute: typeof CustomsPayablesRoute
   CustomsShipperRoute: typeof CustomsShipperRoute
   CustomsVesselVoyageRoute: typeof CustomsVesselVoyageRoute
   CustomsVesselsRoute: typeof CustomsVesselsRoute
@@ -877,6 +890,13 @@ declare module '@tanstack/react-router' {
       path: '/customs/shipper'
       fullPath: '/customs/shipper'
       preLoaderRoute: typeof CustomsShipperRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customs/payables': {
+      id: '/customs/payables'
+      path: '/customs/payables'
+      fullPath: '/customs/payables'
+      preLoaderRoute: typeof CustomsPayablesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/customs/jobs': {
@@ -1336,6 +1356,7 @@ const rootRouteChildren: RootRouteChildren = {
   CustomsDocumentTypesRoute: CustomsDocumentTypesRoute,
   CustomsIcdRoute: CustomsIcdRoute,
   CustomsJobsRoute: CustomsJobsRouteWithChildren,
+  CustomsPayablesRoute: CustomsPayablesRoute,
   CustomsShipperRoute: CustomsShipperRoute,
   CustomsVesselVoyageRoute: CustomsVesselVoyageRoute,
   CustomsVesselsRoute: CustomsVesselsRoute,

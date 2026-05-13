@@ -25,6 +25,7 @@ import {
   Clipboard,
   Store,
   Anchor,
+  Banknote,
   BriefcaseBusiness,
   Users,
   Ship,
@@ -111,6 +112,11 @@ export function getSidebarData(user?: AuthUserLike): SidebarData {
       url: '/customs/vessel-voyage',
       icon: Route,
     },
+    {
+      title: 'Payables',
+      url: '/customs/payables',
+      icon: Banknote,
+    },
   ]
 
   const admin = isAdminUser(user || null)
@@ -138,6 +144,7 @@ export function getSidebarData(user?: AuthUserLike): SidebarData {
         customsItems[6],
         customsItems[7],
         customsItems[8],
+        customsItems[9],
       ]
     : [
         {

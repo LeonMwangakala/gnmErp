@@ -2058,6 +2058,178 @@ export const customsJobApi = {
   },
 }
 
+export type CustomsPayableCategory = 'shipping_line' | 'declaration' | 'port' | 'tbs'
+
+export type CustomsPayableStatus =
+  | 'draft'
+  | 'pending_manager'
+  | 'manager_rejected'
+  | 'pending_chief'
+  | 'chief_rejected'
+  | 'ready_for_payment'
+  | 'paid'
+
+export interface CustomsPayableRecord {
+  id: number
+  customs_job_id: number
+  job_no: string | null
+  customs_job_document_id: number | null
+  document_label?: string | null
+  payable_category: CustomsPayableCategory
+  invoice_number: string | null
+  description: string | null
+  amount: number
+  currency: string
+  bill_due_date: string | null
+  vender_id: number | null
+  category_id: number | null
+  product_service_id: number | null
+  bill_id: number | null
+  payment_id: number | null
+  status: CustomsPayableStatus
+  payee_name: string | null
+  payee_notes: string | null
+  payment_account_id: number | null
+  submitted_at: string | null
+  manager_approved_at: string | null
+  chief_approved_at: string | null
+  paid_at: string | null
+  rejection_reason: string | null
+  created_at: string | null
+}
+
+export interface CustomsPayableFormOptions {
+  payable_categories: { value: CustomsPayableCategory; label: string }[]
+  statuses: CustomsPayableStatus[]
+  documents: { id: number; name: string }[]
+  vendors: { id: number; name: string }[]
+  categories: { id: number; name: string }[]
+  products: { id: number; name: string }[]
+  bank_accounts: { id: number; name: string }[]
+}
+
+export const customsPayableApi = {
+  list: async (params?: {
+    status?: string
+    customs_job_id?: number
+    per_page?: number
+    page?: number
+  }): Promise<{
+    data: CustomsPayableRecord[]
+    pagination: {
+      current_page: number
+      last_page: number
+      per_page: number
+      total: number
+    }
+  }> => {
+    const response = await api.get('/customs/payables', { params })
+    return {
+      data: (response.data?.data || []) as CustomsPayableRecord[],
+      pagination: response.data?.pagination || {
+        current_page: 1,
+        last_page: 1,
+        per_page: params?.per_page || 25,
+        total: 0,
+      },
+    }
+  },
+  getFormOptions: async (customs_job_id: number): Promise<CustomsPayableFormOptions> => {
+    const response = await api.get('/customs/payables/form-options', {
+      params: { customs_job_id },
+    })
+    const d = response.data?.data
+    return (
+      d || {
+        payable_categories: [],
+        statuses: [],
+        documents: [],
+        vendors: [],
+        categories: [],
+        products: [],
+        bank_accounts: [],
+      }
+    )
+  },
+  create: async (payload: {
+    customs_job_id: number
+    payable_category: CustomsPayableCategory
+    invoice_number?: string | null
+    description?: string | null
+    amount: number
+    currency?: string | null
+    bill_due_date?: string | null
+    customs_job_document_id?: number | null
+    vender_id?: number | null
+    category_id?: number | null
+    product_service_id?: number | null
+  }): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const response = await api.post('/customs/payables', payload)
+    return response.data
+  },
+  update: async (
+    id: number,
+    payload: {
+      payable_category?: CustomsPayableCategory
+      invoice_number?: string | null
+      description?: string | null
+      amount?: number
+      currency?: string | null
+      bill_due_date?: string | null
+      customs_job_document_id?: number | null
+      vender_id?: number | null
+      category_id?: number | null
+      product_service_id?: number | null
+    }
+  ): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const response = await api.put(`/customs/payables/${id}`, payload)
+    return response.data
+  },
+  submit: async (id: number): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const response = await api.post(`/customs/payables/${id}/submit`)
+    return response.data
+  },
+  approveManager: async (
+    id: number
+  ): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const response = await api.post(`/customs/payables/${id}/approve-manager`)
+    return response.data
+  },
+  rejectManager: async (
+    id: number,
+    reason: string
+  ): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const response = await api.post(`/customs/payables/${id}/reject-manager`, { reason })
+    return response.data
+  },
+  approveChief: async (
+    id: number
+  ): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const response = await api.post(`/customs/payables/${id}/approve-chief`)
+    return response.data
+  },
+  rejectChief: async (
+    id: number,
+    reason: string
+  ): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const response = await api.post(`/customs/payables/${id}/reject-chief`, { reason })
+    return response.data
+  },
+  recordPayment: async (
+    id: number,
+    payload: {
+      date: string
+      account_id: number
+      payee_name: string
+      reference?: string | null
+      description?: string | null
+    }
+  ): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const response = await api.post(`/customs/payables/${id}/record-payment`, payload)
+    return response.data
+  },
+}
+
 export const customsVesselVoyageApi = {
   list: async (params?: { search?: string }): Promise<VesselVoyage[]> => {
     const response = await api.get('/customs/vessel-voyages', { params })
