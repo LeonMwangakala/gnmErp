@@ -1038,7 +1038,6 @@ export function CustomsPayables() {
                 cacheOptions={false}
                 getOptionValue={(opt) => String(opt.id)}
                 getOptionLabel={(opt) => opt.label}
-                isOptionEqualToValue={(a, b) => a != null && b != null && a.id === b.id}
                 blurInputOnSelect
                 onChange={(option) => {
                   const selected = option ?? null
