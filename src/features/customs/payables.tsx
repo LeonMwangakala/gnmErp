@@ -1035,7 +1035,11 @@ export function CustomsPayables() {
                 value={selectedVendor}
                 loadOptions={loadVendorOptions}
                 defaultOptions
-                cacheOptions
+                cacheOptions={false}
+                getOptionValue={(opt) => String(opt.id)}
+                getOptionLabel={(opt) => opt.label}
+                isOptionEqualToValue={(a, b) => a != null && b != null && a.id === b.id}
+                blurInputOnSelect
                 onChange={(option) => {
                   const selected = option ?? null
                   setSelectedVendor(selected)
@@ -1061,7 +1065,7 @@ export function CustomsPayables() {
                 <SelectTrigger className='w-full min-w-0'>
                   <SelectValue placeholder='Category' />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className='z-[300]'>
                   <SelectItem value='none'>None</SelectItem>
                   {expenseCatOptions.map((c) => (
                     <SelectItem key={c.id} value={String(c.id)}>
@@ -1082,7 +1086,7 @@ export function CustomsPayables() {
                 <SelectTrigger className='w-full min-w-0'>
                   <SelectValue placeholder='Product' />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className='z-[300]'>
                   <SelectItem value='none'>None</SelectItem>
                   {productOptions.map((p) => (
                     <SelectItem key={p.id} value={String(p.id)}>
