@@ -25,12 +25,27 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { format, parseISO } from 'date-fns'
 import { customerApi, invoiceApi, PaginationMeta, type GoodsDispatchedReportData, type GoodsDispatchedReportRow } from '@/lib/api'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { EMPTY_INVOICE_REFS, useInvoiceContainers } from './use-invoice-containers'
 import { InvoiceConsignmentsGoodsModal } from '@/features/invoices/invoice-consignments-goods-modal'
+
+const DISPATCH_REPORT_PAGE_SIZE = 25
+
+function dispatchReleaseLabel(r: 'all' | 'cash' | 'loan') {
+  if (r === 'cash') return 'Cash only'
+  if (r === 'loan') return 'Credit only'
+  return 'Cash and credit'
+}
 
 function defaultDispatchDateRange() {
   const to = new Date()
@@ -145,6 +160,9 @@ export function CustomerDetailModal({
 
   const [dispatchDateFrom, setDispatchDateFrom] = useState(() => defaultDispatchDateRange().from)
   const [dispatchDateTo, setDispatchDateTo] = useState(() => defaultDispatchDateRange().to)
+  const [dispatchRelease, setDispatchRelease] = useState<'all' | 'cash' | 'loan'>('all')
+  const [dispatchPage, setDispatchPage] = useState(1)
+  const [dispatchPagination, setDispatchPagination] = useState<PaginationMeta | null>(null)
   const [dispatchRows, setDispatchRows] = useState<GoodsDispatchedReportRow[]>([])
   const [dispatchSummary, setDispatchSummary] = useState<GoodsDispatchedReportData['summary'] | null>(null)
   const [dispatchLoading, setDispatchLoading] = useState(false)
@@ -172,6 +190,9 @@ export function CustomerDetailModal({
       const r = defaultDispatchDateRange()
       setDispatchDateFrom(r.from)
       setDispatchDateTo(r.to)
+      setDispatchRelease('all')
+      setDispatchPage(1)
+      setDispatchPagination(null)
       setDispatchRows([])
       setDispatchSummary(null)
     }
@@ -187,7 +208,9 @@ export function CustomerDetailModal({
       const res = await invoiceApi.getGoodsDispatchedReport({
         date_from: dispatchDateFrom,
         date_to: dispatchDateTo,
-        release: 'all',
+        release: dispatchRelease,
+        page: dispatchPage,
+        per_page: DISPATCH_REPORT_PAGE_SIZE,
         customer_email: customer.email?.trim() || undefined,
         customer_phone: phoneDigits.length >= 9 ? phoneDigits : undefined,
         customer_tax_id: customer.tax_number?.trim() || undefined,
@@ -196,18 +219,30 @@ export function CustomerDetailModal({
       if (res.ok) {
         setDispatchRows(res.data.rows)
         setDispatchSummary(res.data.summary)
+        setDispatchPagination(res.data.pagination)
+        if (res.data.pagination) {
+          setDispatchPage(res.data.pagination.current_page)
+        }
       } else {
         setDispatchRows([])
         setDispatchSummary(null)
+        setDispatchPagination(null)
         toast.error(res.message)
       }
     } catch {
       setDispatchRows([])
       setDispatchSummary(null)
+      setDispatchPagination(null)
     } finally {
       setDispatchLoading(false)
     }
-  }, [customer, dispatchDateFrom, dispatchDateTo])
+  }, [
+    customer,
+    dispatchDateFrom,
+    dispatchDateTo,
+    dispatchRelease,
+    dispatchPage,
+  ])
 
   useEffect(() => {
     if (open && customerId && activeTab === 'dispatches' && customer) {
@@ -640,7 +675,10 @@ export function CustomerDetailModal({
                         type='date'
                         className='h-9 w-[150px]'
                         value={dispatchDateFrom}
-                        onChange={(e) => setDispatchDateFrom(e.target.value)}
+                        onChange={(e) => {
+                          setDispatchDateFrom(e.target.value)
+                          setDispatchPage(1)
+                        }}
                       />
                     </div>
                     <div className='space-y-1'>
@@ -649,16 +687,77 @@ export function CustomerDetailModal({
                         type='date'
                         className='h-9 w-[150px]'
                         value={dispatchDateTo}
-                        onChange={(e) => setDispatchDateTo(e.target.value)}
+                        onChange={(e) => {
+                          setDispatchDateTo(e.target.value)
+                          setDispatchPage(1)
+                        }}
                       />
+                    </div>
+                    <div className='space-y-1'>
+                      <label className='text-muted-foreground text-xs'>Dispatch on</label>
+                      <Select
+                        value={dispatchRelease}
+                        onValueChange={(v) => {
+                          setDispatchRelease(v as 'all' | 'cash' | 'loan')
+                          setDispatchPage(1)
+                        }}
+                      >
+                        <SelectTrigger className='h-9 w-[200px]' id='dispatch-release-filter'>
+                          <SelectValue placeholder='Cash or credit' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='all'>Both (cash and credit)</SelectItem>
+                          <SelectItem value='cash'>Cash only</SelectItem>
+                          <SelectItem value='loan'>Credit only</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <Button type='button' size='sm' variant='secondary' onClick={() => void loadDispatches()}>
                       Refresh
                     </Button>
                   </div>
+                  {dispatchPagination && dispatchPagination.last_page > 1 ? (
+                    <div className='text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-xs'>
+                      <span>
+                        Page {dispatchPagination.current_page} of {dispatchPagination.last_page} (
+                        {dispatchPagination.from ?? 0}–{dispatchPagination.to ?? 0} of{' '}
+                        {dispatchPagination.total})
+                      </span>
+                      <div className='flex gap-1'>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          disabled={dispatchLoading || dispatchPagination.current_page <= 1}
+                          onClick={() => setDispatchPage((p) => Math.max(1, p - 1))}
+                        >
+                          <ChevronLeft className='h-4 w-4' />
+                          Previous
+                        </Button>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          disabled={
+                            dispatchLoading ||
+                            dispatchPagination.current_page >= dispatchPagination.last_page
+                          }
+                          onClick={() =>
+                            setDispatchPage((p) =>
+                              Math.min(dispatchPagination.last_page, p + 1)
+                            )
+                          }
+                        >
+                          Next
+                          <ChevronRight className='h-4 w-4' />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                   {!dispatchLoading && dispatchSummary ? (
                     <p className='text-muted-foreground text-xs'>
-                      {dispatchDateFrom} – {dispatchDateTo} · Loan and cash · {dispatchSummary.row_count}{' '}
+                      {dispatchDateFrom} – {dispatchDateTo} · {dispatchReleaseLabel(dispatchRelease)} ·{' '}
+                      {dispatchSummary.row_count}{' '}
                       {dispatchSummary.row_count === 1 ? 'line' : 'lines'}
                       <br />
                       Cash {dispatchSummary.cash_rows} · Credit (loan) {dispatchSummary.loan_rows} · Paid in full{' '}

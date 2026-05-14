@@ -12,7 +12,7 @@ import {
   endOfDay,
 } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
-import { Download, FileText, CalendarIcon } from 'lucide-react'
+import { Download, FileText, CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -356,8 +356,8 @@ function downloadGoodsDispatchedReportCsv(data: GoodsDispatchedReportData) {
     data.release === 'cash'
       ? 'Cash only'
       : data.release === 'loan'
-        ? 'Loan only'
-        : 'Both (loan and cash)'
+        ? 'Credit only'
+        : 'Both (cash and credit)'
   const lines: string[] = [
     ['Dispatch release', escapeCsvCell(releaseLabel)].join(','),
     '',
@@ -462,7 +462,7 @@ td.num{text-align:right;}
 </style></head><body>
 <h1>Good dispatched report</h1>
 <div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}<br/>
-Release: ${data.release === 'cash' ? 'Cash only' : data.release === 'loan' ? 'Loan only' : 'Both (loan and cash)'}<br/>
+Release: ${data.release === 'cash' ? 'Cash only' : data.release === 'loan' ? 'Credit only' : 'Both (cash and credit)'}<br/>
 Cash: ${data.summary.cash_rows} · Credit (loan): ${data.summary.loan_rows} · Paid in full: ${data.summary.paid_rows} · Not paid in full: ${data.summary.unpaid_rows}<br/>
 Credit lines · invoice paid: ${data.summary.credit_dispatch_paid_rows} · outstanding: ${data.summary.credit_dispatch_unpaid_rows}</div>
 <table><thead><tr><th>Dispatched</th><th>Ref</th><th>By</th><th>Pickup</th><th>Phone</th><th>Vehicle</th><th>Customer</th><th>Company</th><th>Cnsg name</th><th>Tracking</th><th>Label</th><th>C.pkgs</th><th>CBM</th><th>Cont.</th><th>Good</th><th>Receipt</th><th>Qty</th><th>Pkgs</th><th>U</th><th>Rel.</th><th>Cr</th><th>Credit note</th><th>Inv.</th><th>Paid</th><th>Bal.</th><th>Bill</th></tr></thead>
@@ -718,6 +718,8 @@ function isGoodsDispatchedFilters(
   )
 }
 
+const GOODS_DISPATCHED_PER_PAGE = 50
+
 export function Reports() {
   const loggedInUser = useAuthStore((s) => s.auth.user)
   const [open, setOpen] = useState(false)
@@ -743,6 +745,8 @@ export function Reports() {
   const [goodsDispatchedReportData, setGoodsDispatchedReportData] =
     useState<GoodsDispatchedReportData | null>(null)
   const [goodsDispatchedReportSubmitting, setGoodsDispatchedReportSubmitting] = useState(false)
+  const [goodsDispatchedReportPaging, setGoodsDispatchedReportPaging] = useState(false)
+  const [goodsDispatchedReportExporting, setGoodsDispatchedReportExporting] = useState(false)
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -902,6 +906,8 @@ export function Reports() {
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
         release: filters.releaseFilter,
+        page: 1,
+        per_page: GOODS_DISPATCHED_PER_PAGE,
       })
       if (!result.ok) {
         toast.error(result.message)
@@ -912,6 +918,50 @@ export function Reports() {
       setGoodsDispatchedReportOpen(true)
     } finally {
       setGoodsDispatchedReportSubmitting(false)
+    }
+  }
+
+  const fetchGoodsDispatchedReportPage = async (page: number) => {
+    if (!goodsDispatchedReportData) return
+    setGoodsDispatchedReportPaging(true)
+    try {
+      const result = await invoiceApi.getGoodsDispatchedReport({
+        date_from: goodsDispatchedReportData.date_from,
+        date_to: goodsDispatchedReportData.date_to,
+        release: goodsDispatchedReportData.release,
+        page,
+        per_page: GOODS_DISPATCHED_PER_PAGE,
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      setGoodsDispatchedReportData(result.data)
+    } finally {
+      setGoodsDispatchedReportPaging(false)
+    }
+  }
+
+  const exportGoodsDispatchedFull = async (kind: 'csv' | 'pdf') => {
+    if (!goodsDispatchedReportData) return
+    setGoodsDispatchedReportExporting(true)
+    try {
+      const result = await invoiceApi.getGoodsDispatchedReport({
+        date_from: goodsDispatchedReportData.date_from,
+        date_to: goodsDispatchedReportData.date_to,
+        release: goodsDispatchedReportData.release,
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      if (kind === 'csv') {
+        downloadGoodsDispatchedReportCsv(result.data)
+      } else {
+        printGoodsDispatchedReportAsPdf(result.data)
+      }
+    } finally {
+      setGoodsDispatchedReportExporting(false)
     }
   }
 
@@ -1223,22 +1273,22 @@ export function Reports() {
 
               {selectedReport?.key === 'goods-dispatched' && isGoodsDispatchedFilters(filters) && (
                 <div className='space-y-2'>
-                  <Label htmlFor='goodsDispatchedRelease'>Dispatched on</Label>
+                  <Label htmlFor='goodsDispatchedRelease'>Dispatch on</Label>
                   <Select
                     value={filters.releaseFilter}
                     onValueChange={(value) => handleFilterChange('releaseFilter', value)}
                   >
                     <SelectTrigger id='goodsDispatchedRelease'>
-                      <SelectValue placeholder='Loan or cash' />
+                      <SelectValue placeholder='Cash or credit' />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value='all'>Both (loan and cash)</SelectItem>
+                      <SelectItem value='all'>Both (cash and credit)</SelectItem>
                       <SelectItem value='cash'>Cash only</SelectItem>
-                      <SelectItem value='loan'>Loan only</SelectItem>
+                      <SelectItem value='loan'>Credit only</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className='text-xs text-muted-foreground'>
-                    Default includes both; limit to goods dispatched on cash or on loan only.
+                    Restrict to lines dispatched on cash, on credit (loan), or both.
                   </p>
                 </div>
               )}
@@ -2038,14 +2088,65 @@ export function Reports() {
                   {goodsDispatchedReportData.release === 'cash'
                     ? 'Cash only'
                     : goodsDispatchedReportData.release === 'loan'
-                      ? 'Loan only'
-                      : 'Loan and cash'}
+                      ? 'Credit only'
+                      : 'Cash and credit'}
                 </span>
                 <span className='ms-2'>
                   ({goodsDispatchedReportData.summary.row_count}{' '}
-                  {goodsDispatchedReportData.summary.row_count === 1 ? 'line' : 'lines'})
+                  {goodsDispatchedReportData.summary.row_count === 1 ? 'line' : 'lines'}
+                  {goodsDispatchedReportData.pagination
+                    ? ` · showing ${goodsDispatchedReportData.pagination.from ?? 0}–${
+                        goodsDispatchedReportData.pagination.to ?? 0
+                      }`
+                    : ''}
+                  )
                 </span>
               </p>
+              {goodsDispatchedReportData.pagination ? (
+                <div className='flex shrink-0 flex-wrap items-center justify-between gap-2 border-b pb-2'>
+                  <p className='text-muted-foreground text-xs'>
+                    Page {goodsDispatchedReportData.pagination.current_page} of{' '}
+                    {goodsDispatchedReportData.pagination.last_page}
+                  </p>
+                  <div className='flex items-center gap-1'>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      disabled={
+                        goodsDispatchedReportPaging ||
+                        goodsDispatchedReportData.pagination.current_page <= 1
+                      }
+                      onClick={() =>
+                        void fetchGoodsDispatchedReportPage(
+                          goodsDispatchedReportData.pagination!.current_page - 1
+                        )
+                      }
+                    >
+                      <ChevronLeft className='h-4 w-4' />
+                      Previous
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      disabled={
+                        goodsDispatchedReportPaging ||
+                        goodsDispatchedReportData.pagination.current_page >=
+                          goodsDispatchedReportData.pagination.last_page
+                      }
+                      onClick={() =>
+                        void fetchGoodsDispatchedReportPage(
+                          goodsDispatchedReportData.pagination!.current_page + 1
+                        )
+                      }
+                    >
+                      Next
+                      <ChevronRight className='h-4 w-4' />
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
               <p className='text-xs text-muted-foreground shrink-0 pb-2'>
                 Cash {goodsDispatchedReportData.summary.cash_rows} · Credit (loan){' '}
                 {goodsDispatchedReportData.summary.loan_rows} · Paid in full{' '}
@@ -2059,6 +2160,9 @@ export function Reports() {
               <div className='min-h-0 flex-1 overflow-auto pr-1'>
                 <div className='space-y-4 pb-4'>
                   <div className='overflow-x-auto'>
+                    {goodsDispatchedReportPaging ? (
+                      <p className='text-muted-foreground py-2 text-center text-xs'>Loading page…</p>
+                    ) : null}
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -2182,26 +2286,20 @@ export function Reports() {
                   type='button'
                   variant='outline'
                   size='sm'
-                  onClick={() => {
-                    if (goodsDispatchedReportData) {
-                      downloadGoodsDispatchedReportCsv(goodsDispatchedReportData)
-                    }
-                  }}
+                  disabled={goodsDispatchedReportExporting}
+                  onClick={() => void exportGoodsDispatchedFull('csv')}
                 >
                   <Download className='mr-2 h-4 w-4' />
-                  Excel
+                  {goodsDispatchedReportExporting ? 'Preparing…' : 'Excel'}
                 </Button>
                 <Button
                   type='button'
                   size='sm'
-                  onClick={() => {
-                    if (goodsDispatchedReportData) {
-                      printGoodsDispatchedReportAsPdf(goodsDispatchedReportData)
-                    }
-                  }}
+                  disabled={goodsDispatchedReportExporting}
+                  onClick={() => void exportGoodsDispatchedFull('pdf')}
                 >
                   <Download className='mr-2 h-4 w-4' />
-                  PDF
+                  {goodsDispatchedReportExporting ? 'Preparing…' : 'PDF'}
                 </Button>
               </DialogFooter>
             </>

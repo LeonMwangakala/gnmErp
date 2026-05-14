@@ -326,6 +326,9 @@ export const invoiceApi = {
     date_to: string
     /** Omit or 'all' = loan and cash; 'cash' | 'loan' to restrict */
     release?: 'all' | 'cash' | 'loan'
+    /** When set with the CMTS API, response rows are paginated; summary stays full-dataset */
+    page?: number
+    per_page?: number
     /** Optional: narrow rows to CMTS consignments whose customer matches (OR across set fields) */
     customer_email?: string
     customer_phone?: string
@@ -355,6 +358,12 @@ export const invoiceApi = {
       if (ct) qp.customer_tax_id = ct
       if (cn) qp.customer_name = cn
       if (cc) qp.customer_company = cc
+      if (params.page != null && Number.isFinite(params.page) && params.page >= 1) {
+        qp.page = String(Math.floor(params.page))
+      }
+      if (params.per_page != null && Number.isFinite(params.per_page) && params.per_page >= 1) {
+        qp.per_page = String(Math.floor(params.per_page))
+      }
 
       const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/goods-dispatched-report`, {
         params: qp,
@@ -620,6 +629,8 @@ export interface GoodsDispatchedReportData {
   /** Echo from API: which release types were included */
   release: 'all' | 'cash' | 'loan'
   rows: GoodsDispatchedReportRow[]
+  /** Set when the CMTS request included page and/or per_page */
+  pagination: PaginationMeta | null
   summary: {
     row_count: number
     cash_rows: number
@@ -801,11 +812,39 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
     rel === 'cash' ? 'cash' : rel === 'loan' ? 'loan' : 'all'
   const creditPaidFromRows = rows.filter((x) => x.dispatched_on_credit && x.bill_fully_paid).length
   const creditUnpaidFromRows = rows.filter((x) => x.dispatched_on_credit && !x.bill_fully_paid).length
+
+  let pagination: PaginationMeta | null = null
+  const pag = data.pagination
+  if (pag && typeof pag === 'object') {
+    const p = pag as Record<string, unknown>
+    const fromRaw = p.from
+    const toRaw = p.to
+    pagination = {
+      current_page: Number.isFinite(Number(p.current_page)) ? Number(p.current_page) : 1,
+      per_page: Number.isFinite(Number(p.per_page)) ? Number(p.per_page) : 15,
+      total: Number.isFinite(Number(p.total)) ? Number(p.total) : rows.length,
+      last_page: Number.isFinite(Number(p.last_page)) ? Number(p.last_page) : 1,
+      from:
+        fromRaw === null || fromRaw === undefined || fromRaw === ''
+          ? null
+          : Number.isFinite(Number(fromRaw))
+            ? Number(fromRaw)
+            : null,
+      to:
+        toRaw === null || toRaw === undefined || toRaw === ''
+          ? null
+          : Number.isFinite(Number(toRaw))
+            ? Number(toRaw)
+            : null,
+    }
+  }
+
   return {
     date_from: String(data.date_from ?? ''),
     date_to: String(data.date_to ?? ''),
     release,
     rows,
+    pagination,
     summary: {
       row_count: Number.isFinite(Number(sum.row_count)) ? Number(sum.row_count) : rows.length,
       cash_rows: Number.isFinite(Number(sum.cash_rows)) ? Number(sum.cash_rows) : 0,
