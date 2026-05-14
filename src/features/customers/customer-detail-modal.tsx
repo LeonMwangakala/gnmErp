@@ -25,7 +25,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
-import { customerApi, invoiceApi, PaginationMeta, type GoodsDispatchedReportRow } from '@/lib/api'
+import { format, parseISO } from 'date-fns'
+import { customerApi, invoiceApi, PaginationMeta, type GoodsDispatchedReportData, type GoodsDispatchedReportRow } from '@/lib/api'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { EMPTY_INVOICE_REFS, useInvoiceContainers } from './use-invoice-containers'
@@ -38,11 +39,19 @@ function defaultDispatchDateRange() {
   return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }
 }
 
-function formatDispatchedShort(iso: string | null) {
+function formatGoodsDispatchedAt(iso: string | null) {
   if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+  try {
+    const d = parseISO(iso)
+    if (Number.isNaN(d.getTime())) return iso
+    return format(d, 'yyyy-MM-dd HH:mm')
+  } catch {
+    return iso
+  }
+}
+
+function digitsOnly(s: string) {
+  return s.replace(/\D/g, '')
 }
 
 interface CustomerDetail {
@@ -137,6 +146,7 @@ export function CustomerDetailModal({
   const [dispatchDateFrom, setDispatchDateFrom] = useState(() => defaultDispatchDateRange().from)
   const [dispatchDateTo, setDispatchDateTo] = useState(() => defaultDispatchDateRange().to)
   const [dispatchRows, setDispatchRows] = useState<GoodsDispatchedReportRow[]>([])
+  const [dispatchSummary, setDispatchSummary] = useState<GoodsDispatchedReportData['summary'] | null>(null)
   const [dispatchLoading, setDispatchLoading] = useState(false)
 
   const { containerByInvoiceId, containersLoading } = useInvoiceContainers(
@@ -163,31 +173,37 @@ export function CustomerDetailModal({
       setDispatchDateFrom(r.from)
       setDispatchDateTo(r.to)
       setDispatchRows([])
+      setDispatchSummary(null)
     }
   }, [open, customerId])
 
   const loadDispatches = useCallback(async () => {
     if (!customer) return
     setDispatchLoading(true)
+    setDispatchSummary(null)
     try {
+      const phoneDigits = digitsOnly(customer.contact || '')
+      const nm = (customer.name || '').trim()
       const res = await invoiceApi.getGoodsDispatchedReport({
         date_from: dispatchDateFrom,
         date_to: dispatchDateTo,
         release: 'all',
         customer_email: customer.email?.trim() || undefined,
-        customer_phone: customer.contact?.trim() || undefined,
+        customer_phone: phoneDigits.length >= 9 ? phoneDigits : undefined,
         customer_tax_id: customer.tax_number?.trim() || undefined,
-        customer_name: customer.name?.trim() || undefined,
-        customer_company: customer.billing?.name?.trim() || undefined,
+        customer_name: nm.length >= 2 ? nm : undefined,
       })
       if (res.ok) {
         setDispatchRows(res.data.rows)
+        setDispatchSummary(res.data.summary)
       } else {
         setDispatchRows([])
+        setDispatchSummary(null)
         toast.error(res.message)
       }
     } catch {
       setDispatchRows([])
+      setDispatchSummary(null)
     } finally {
       setDispatchLoading(false)
     }
@@ -611,8 +627,9 @@ export function CustomerDetailModal({
                 <CardHeader className='pb-3'>
                   <CardTitle className='text-base'>Goods dispatched (CMTS)</CardTitle>
                   <CardDescription className='text-xs'>
-                    Cash and credit dispatches in range. Rows match this customer in GNM using email,
-                    phone, tax number, name, or billing contact — same company profile as Torchlight.
+                    Same layout as the dashboard dispatch report. Rows are filtered with your Torchlight
+                    email, tax ID, and — when both exist — name and phone together against GNM so unrelated
+                    consignments are not included.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className='space-y-3'>
@@ -639,6 +656,18 @@ export function CustomerDetailModal({
                       Refresh
                     </Button>
                   </div>
+                  {!dispatchLoading && dispatchSummary ? (
+                    <p className='text-muted-foreground text-xs'>
+                      {dispatchDateFrom} – {dispatchDateTo} · Loan and cash · {dispatchSummary.row_count}{' '}
+                      {dispatchSummary.row_count === 1 ? 'line' : 'lines'}
+                      <br />
+                      Cash {dispatchSummary.cash_rows} · Credit (loan) {dispatchSummary.loan_rows} · Paid in full{' '}
+                      {dispatchSummary.paid_rows} · Not paid in full {dispatchSummary.unpaid_rows}
+                      <br />
+                      Credit dispatch · invoice paid in full {dispatchSummary.credit_dispatch_paid_rows} ·
+                      still outstanding {dispatchSummary.credit_dispatch_unpaid_rows}
+                    </p>
+                  ) : null}
                   {dispatchLoading ? (
                     <div className='text-muted-foreground flex items-center gap-2 py-8 text-sm'>
                       <Loader2 className='h-5 w-5 animate-spin' />
@@ -646,57 +675,101 @@ export function CustomerDetailModal({
                     </div>
                   ) : dispatchRows.length === 0 ? (
                     <p className='text-muted-foreground py-6 text-center text-sm'>
-                      No dispatched lines in this period for a matching CMTS customer profile.
+                      No dispatched lines in this period for this customer profile in GNM.
                     </p>
                   ) : (
-                    <div className='max-h-[min(52vh,480px)] overflow-auto rounded-md border'>
+                    <div className='max-h-[min(52vh,520px)] overflow-auto rounded-md border'>
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className='whitespace-nowrap'>When</TableHead>
-                            <TableHead className='whitespace-nowrap'>Type</TableHead>
-                            <TableHead>Dispatch</TableHead>
-                            <TableHead>Good</TableHead>
-                            <TableHead className='text-right'>Qty</TableHead>
-                            <TableHead className='text-right'>Pkgs</TableHead>
-                            <TableHead>Container</TableHead>
-                            <TableHead>Invoice</TableHead>
+                            <TableHead className='min-w-[140px]'>Dispatch</TableHead>
+                            <TableHead className='min-w-[160px]'>Customer</TableHead>
+                            <TableHead className='min-w-[220px]'>Consignment</TableHead>
+                            <TableHead className='min-w-[140px]'>Pickup / vehicle</TableHead>
+                            <TableHead className='min-w-[200px]'>Goods (line)</TableHead>
+                            <TableHead className='min-w-[180px]'>Billing</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {dispatchRows.map((r) => (
                             <TableRow key={r.id}>
-                              <TableCell className='text-muted-foreground whitespace-nowrap text-xs'>
-                                {formatDispatchedShort(r.dispatched_at)}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div className='text-muted-foreground tabular-nums whitespace-nowrap'>
+                                  {formatGoodsDispatchedAt(r.dispatched_at)}
+                                </div>
+                                <div className='mt-1 font-mono text-xs text-muted-foreground'>
+                                  {r.dispatch_reference || '—'}
+                                </div>
+                                {r.dispatched_by_name ? (
+                                  <div className='mt-1 text-xs text-muted-foreground'>By {r.dispatched_by_name}</div>
+                                ) : null}
+                                <div className='mt-1 text-xs capitalize text-muted-foreground'>
+                                  {r.release_type === 'loan' ? 'Credit' : 'Cash'}
+                                </div>
                               </TableCell>
-                              <TableCell>
-                                {r.release_type === 'loan' ? (
-                                  <Badge variant='outline' className='font-normal'>
-                                    Credit
-                                  </Badge>
-                                ) : (
-                                  <Badge variant='secondary' className='font-normal'>
-                                    Cash
-                                  </Badge>
-                                )}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div className='font-medium'>{r.customer_name || '—'}</div>
+                                {r.customer_company_name ? (
+                                  <div className='text-muted-foreground mt-0.5 text-sm'>
+                                    {r.customer_company_name}
+                                  </div>
+                                ) : null}
                               </TableCell>
-                              <TableCell className='max-w-[120px] truncate text-xs font-medium'>
-                                {r.dispatch_reference || '—'}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div>{r.consignment_name || '—'}</div>
+                                <div className='text-muted-foreground mt-0.5 tabular-nums text-xs'>
+                                  {r.consignment_tracking || '—'}
+                                </div>
+                                {r.consignment_label ? (
+                                  <div className='text-muted-foreground mt-0.5 text-xs'>Label: {r.consignment_label}</div>
+                                ) : null}
+                                <div className='text-muted-foreground mt-1 text-xs'>
+                                  {[
+                                    r.consignment_pkgs != null ? `${r.consignment_pkgs} ctn pkg` : null,
+                                    r.consignment_cbm != null ? `CBM ${r.consignment_cbm}` : null,
+                                    r.container_no ? `Cont. ${r.container_no}` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ') || '—'}
+                                </div>
                               </TableCell>
-                              <TableCell className='max-w-[180px] truncate text-xs'>
-                                {r.good_name || '—'}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div>{r.pickup_by || '—'}</div>
+                                {r.pickup_cellphone ? (
+                                  <div className='text-muted-foreground mt-0.5 tabular-nums text-xs'>
+                                    {r.pickup_cellphone}
+                                  </div>
+                                ) : null}
+                                {r.pickup_vehicle ? (
+                                  <div className='text-muted-foreground mt-0.5 font-mono text-xs'>
+                                    {r.pickup_vehicle}
+                                  </div>
+                                ) : null}
                               </TableCell>
-                              <TableCell className='text-right text-xs'>
-                                {r.quantity != null ? r.quantity : '—'}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div className='font-medium'>{r.good_name || '—'}</div>
+                                {r.good_supplier_receipt ? (
+                                  <div className='text-muted-foreground mt-0.5 text-xs'>
+                                    Receipt: {r.good_supplier_receipt}
+                                  </div>
+                                ) : null}
+                                <div className='text-muted-foreground mt-1 tabular-nums text-xs'>
+                                  Qty {r.quantity != null ? r.quantity : '—'} · Pkgs{' '}
+                                  {r.pkgs != null ? r.pkgs : '—'} · {r.unit ?? '—'}
+                                </div>
                               </TableCell>
-                              <TableCell className='text-right text-xs'>
-                                {r.pkgs != null ? r.pkgs : '—'}
-                              </TableCell>
-                              <TableCell className='max-w-[100px] truncate font-mono text-xs'>
-                                {r.container_no ?? '—'}
-                              </TableCell>
-                              <TableCell className='max-w-[100px] truncate text-xs'>
-                                {r.invoice_no ?? '—'}
+                              <TableCell className='align-top whitespace-normal text-sm'>
+                                <div className='leading-snug font-medium'>{r.credit_dispatch_note}</div>
+                                <div className='mt-2 tabular-nums text-xs'>Invoice: {r.invoice_no ?? '—'}</div>
+                                <div className='mt-1 text-xs'>
+                                  Paid in full:{' '}
+                                  <span className='font-medium'>
+                                    {r.bill_fully_paid ? 'Yes' : 'No'}
+                                  </span>
+                                </div>
+                                <div className='text-muted-foreground mt-1 text-xs'>
+                                  Balance: {r.bill_balance != null ? r.bill_balance : '—'}
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}
