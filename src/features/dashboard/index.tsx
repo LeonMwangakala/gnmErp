@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,7 +19,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
-import { cn } from '@/lib/utils'
 import { customerApi, invoiceApi, paymentApi, expensePaymentApi, type PaginationMeta } from '@/lib/api'
 import { Analytics } from './components/analytics'
 import { RecentSales } from './components/recent-sales'
@@ -45,12 +43,7 @@ const PERIOD_OPTIONS: { id: Exclude<DashboardPeriodPreset, 'custom'>; label: str
 ]
 
 type LoanDispatchMetrics = {
-  loanRows: number
   outstandingBalance: number
-  creditPaidRows: number
-  creditUnpaidRows: number
-  outstandingBillCount: number
-  rowsWithoutBill: number
 }
 
 type DashboardMetrics = {
@@ -98,7 +91,6 @@ export function Dashboard() {
   const [customModalOpen, setCustomModalOpen] = useState(false)
   const [draftFrom, setDraftFrom] = useState('')
   const [draftTo, setDraftTo] = useState('')
-  const [loanDispatchDetailsOpen, setLoanDispatchDetailsOpen] = useState(false)
 
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [recentInvoices, setRecentInvoices] = useState<DashboardInvoice[]>([])
@@ -190,12 +182,7 @@ export function Dashboard() {
       if (gdRes.ok) {
         const s = gdRes.data.summary
         loanDispatch = {
-          loanRows: s.loan_rows,
           outstandingBalance: s.loan_outstanding_balance_total,
-          creditPaidRows: s.credit_dispatch_paid_rows,
-          creditUnpaidRows: s.credit_dispatch_unpaid_rows,
-          outstandingBillCount: s.loan_outstanding_bill_count ?? 0,
-          rowsWithoutBill: s.loan_rows_without_bill ?? 0,
         }
       }
 
@@ -221,10 +208,6 @@ export function Dashboard() {
   useEffect(() => {
     void loadDashboardData()
   }, [loadDashboardData])
-
-  useEffect(() => {
-    setLoanDispatchDetailsOpen(false)
-  }, [periodPreset, customFrom, customTo])
 
   const openCustomRangeModal = () => {
     setDraftFrom(activeRange.fromStr)
@@ -299,6 +282,28 @@ export function Dashboard() {
             <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'>
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+                  <CardTitle className='text-sm font-medium'>Customers</CardTitle>
+                  <svg
+                    xmlns='http://www.w3.org/2000/svg'
+                    viewBox='0 0 24 24'
+                    fill='none'
+                    stroke='currentColor'
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth='2'
+                    className='h-4 w-4 text-muted-foreground'
+                  >
+                    <path d='M22 12h-4l-3 9L9 3l-3 9H2' />
+                  </svg>
+                </CardHeader>
+                <CardContent>
+                  <div className='text-lg font-bold tabular-nums leading-none sm:text-xl'>
+                    {metrics ? metrics.customerCount : isLoading ? '...' : '0'}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>Total invoices</CardTitle>
                   <svg
                     xmlns='http://www.w3.org/2000/svg'
@@ -314,16 +319,20 @@ export function Dashboard() {
                   </svg>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold tabular-nums'>
-                    {metrics
-                      ? metrics.totalInvoiceAmount.toLocaleString(undefined, {
-                          maximumFractionDigits: 2,
-                        })
-                      : isLoading
-                        ? '...'
-                        : '0'}
+                  <div className='flex flex-nowrap items-baseline gap-x-1.5'>
+                    <div className='min-w-0 text-lg font-bold tabular-nums leading-none sm:text-xl'>
+                      {metrics
+                        ? metrics.totalInvoiceAmount.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })
+                        : isLoading
+                          ? '...'
+                          : '0'}
+                    </div>
+                    <span className='shrink-0 text-xs font-semibold tracking-wide text-muted-foreground'>
+                      USD
+                    </span>
                   </div>
-                  <CardDescription className='text-xs'>Non-draft · {activeRange.subtitle}</CardDescription>
                 </CardContent>
               </Card>
               <Card>
@@ -343,16 +352,20 @@ export function Dashboard() {
                   </svg>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold tabular-nums'>
-                    {metrics
-                      ? metrics.totalPayments.toLocaleString(undefined, {
-                          maximumFractionDigits: 2,
-                        })
-                      : isLoading
-                        ? '...'
-                        : '0'}
+                  <div className='flex flex-nowrap items-baseline gap-x-1.5'>
+                    <div className='min-w-0 text-lg font-bold tabular-nums leading-none sm:text-xl'>
+                      {metrics
+                        ? metrics.totalPayments.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })
+                        : isLoading
+                          ? '...'
+                          : '0'}
+                    </div>
+                    <span className='shrink-0 text-xs font-semibold tracking-wide text-muted-foreground'>
+                      USD
+                    </span>
                   </div>
-                  <CardDescription className='text-xs'>USD basis · {activeRange.subtitle}</CardDescription>
                 </CardContent>
               </Card>
               <Card>
@@ -374,21 +387,25 @@ export function Dashboard() {
                   </svg>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold tabular-nums'>
-                    {metrics
-                      ? metrics.totalExpenses.toLocaleString(undefined, {
-                          maximumFractionDigits: 2,
-                        })
-                      : isLoading
-                        ? '...'
-                        : '0'}
+                  <div className='flex flex-nowrap items-baseline gap-x-1.5'>
+                    <div className='min-w-0 text-lg font-bold tabular-nums leading-none sm:text-xl'>
+                      {metrics
+                        ? metrics.totalExpenses.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })
+                        : isLoading
+                          ? '...'
+                          : '0'}
+                    </div>
+                    <span className='shrink-0 text-xs font-semibold tracking-wide text-muted-foreground'>
+                      USD
+                    </span>
                   </div>
-                  <CardDescription className='text-xs'>Expense payments · {activeRange.subtitle}</CardDescription>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Customers</CardTitle>
+                  <CardTitle className='text-sm font-medium'>Loan dispatch</CardTitle>
                   <svg
                     xmlns='http://www.w3.org/2000/svg'
                     viewBox='0 0 24 24'
@@ -398,99 +415,33 @@ export function Dashboard() {
                     strokeLinejoin='round'
                     strokeWidth='2'
                     className='h-4 w-4 text-muted-foreground'
+                    aria-hidden
                   >
-                    <path d='M22 12h-4l-3 9L9 3l-3 9H2' />
+                    <line x1='3' x2='21' y1='22' y2='22' />
+                    <line x1='6' x2='6' y1='18' y2='11' />
+                    <line x1='10' x2='10' y1='18' y2='11' />
+                    <line x1='14' x2='14' y1='18' y2='11' />
+                    <line x1='18' x2='18' y1='18' y2='11' />
+                    <polygon points='12 2 20 7 4 7' />
                   </svg>
                 </CardHeader>
                 <CardContent>
-                  <div className='text-2xl font-bold tabular-nums'>
-                    {metrics ? metrics.customerCount : isLoading ? '...' : '0'}
+                  <div className='flex flex-nowrap items-baseline gap-x-1.5'>
+                    <div className='min-w-0 text-lg font-bold tabular-nums leading-none sm:text-xl'>
+                      {metrics?.loanDispatch
+                        ? metrics.loanDispatch.outstandingBalance.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })
+                        : isLoading
+                          ? '...'
+                          : '—'}
+                    </div>
+                    {metrics?.loanDispatch ? (
+                      <span className='shrink-0 text-xs font-semibold tracking-wide text-muted-foreground'>
+                        USD
+                      </span>
+                    ) : null}
                   </div>
-                  <CardDescription className='text-xs'>All active customers (not filtered by period)</CardDescription>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-start justify-between gap-2 space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium leading-tight'>Loan dispatch (CMTS)</CardTitle>
-                  {metrics?.loanDispatch ? (
-                    <Button
-                      type='button'
-                      variant='ghost'
-                      size='icon'
-                      className={cn(
-                        'h-8 w-8 shrink-0 text-muted-foreground',
-                        loanDispatchDetailsOpen && 'text-foreground',
-                      )}
-                      aria-expanded={loanDispatchDetailsOpen}
-                      aria-label={
-                        loanDispatchDetailsOpen
-                          ? 'Hide loan dispatch details'
-                          : 'Show loan dispatch details'
-                      }
-                      onClick={() => setLoanDispatchDetailsOpen((open) => !open)}
-                    >
-                      <Info className='h-4 w-4' aria-hidden />
-                    </Button>
-                  ) : null}
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold tabular-nums'>
-                    {metrics?.loanDispatch
-                      ? metrics.loanDispatch.outstandingBalance.toLocaleString(undefined, {
-                          maximumFractionDigits: 2,
-                        })
-                      : isLoading
-                        ? '...'
-                        : '—'}
-                  </div>
-                  {metrics?.loanDispatch ? (
-                    loanDispatchDetailsOpen ? (
-                      <div className='mt-3 space-y-2 border-t pt-3 text-xs text-muted-foreground'>
-                        <p>
-                          Total is the sum of each distinct CMTS bill&apos;s outstanding balance
-                          (bill line items minus discount minus payments). Multiple goods lines that
-                          share one bill are counted once in the total.
-                        </p>
-                        <p>
-                          <span className='font-medium text-foreground'>
-                            {metrics.loanDispatch.loanRows.toLocaleString()}
-                          </span>{' '}
-                          goods line{metrics.loanDispatch.loanRows === 1 ? '' : 's'} on loan in this
-                          period ·{' '}
-                          <span className='font-medium text-foreground'>
-                            {metrics.loanDispatch.outstandingBillCount.toLocaleString()}
-                          </span>{' '}
-                          bill{metrics.loanDispatch.outstandingBillCount === 1 ? '' : 's'} tied to
-                          those lines (each counted once toward the total)
-                          <span className='font-medium text-foreground'>
-                            {metrics.loanDispatch.creditPaidRows.toLocaleString()}
-                          </span>{' '}
-                          credit line{metrics.loanDispatch.creditPaidRows === 1 ? '' : 's'} settled ·{' '}
-                          <span className='font-medium text-foreground'>
-                            {metrics.loanDispatch.creditUnpaidRows.toLocaleString()}
-                          </span>{' '}
-                          credit line{metrics.loanDispatch.creditUnpaidRows === 1 ? '' : 's'} not
-                          fully settled
-                        </p>
-                        {metrics.loanDispatch.rowsWithoutBill > 0 ? (
-                          <p>
-                            <span className='font-medium text-foreground'>
-                              {metrics.loanDispatch.rowsWithoutBill.toLocaleString()}
-                            </span>{' '}
-                            open loan line{metrics.loanDispatch.rowsWithoutBill === 1 ? '' : 's'}{' '}
-                            have no CMTS bill linked, so they do not add to the balance total.
-                          </p>
-                        ) : null}
-                        <p className='text-[11px]'>Period: {activeRange.subtitle}</p>
-                      </div>
-                    ) : null
-                  ) : (
-                    <CardDescription className='pt-1 text-xs'>
-                      {isLoading
-                        ? 'Loading CMTS…'
-                        : 'CMTS goods-dispatched report unavailable for this range.'}
-                    </CardDescription>
-                  )}
                 </CardContent>
               </Card>
             </div>
