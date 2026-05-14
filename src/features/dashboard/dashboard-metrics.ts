@@ -3,51 +3,48 @@ import { invoiceApi, paymentApi } from '@/lib/api'
 /** Posted / unpaid / partial / paid — excludes draft (0). */
 const INVOICE_NON_DRAFT_STATUSES = [1, 2, 3, 4]
 
+const PAGE_SIZE = 100
+/** Parallel page fetches per round (bounded to avoid hammering the API). */
+const PAGE_FETCH_CONCURRENCY = 8
+
+function sumInvoiceAmountRows(rows: { amount?: number }[]): number {
+  let s = 0
+  for (const inv of rows) {
+    s += typeof inv.amount === 'number' ? inv.amount : Number(inv.amount ?? 0)
+  }
+  return s
+}
+
+
 /**
  * Sum invoice totals for the creator's invoices in `issue_date` range (Torchlight
- * `issue_date` param: `YYYY-MM-DD to YYYY-MM-DD`). Paginates until all pages are read.
+ * `issue_date` param: `YYYY-MM-DD to YYYY-MM-DD`). Fetches pages in parallel batches.
  */
 export async function sumInvoiceTotalsNonDraftForIssueDateRange(issueDateRange: string): Promise<number> {
-  let sum = 0
-  let page = 1
-  let lastPage = 1
-  do {
-    const res = await invoiceApi.getInvoices({
-      page,
-      per_page: 100,
-      sort_by: 'issue_date',
-      sort_order: 'desc',
-      status: INVOICE_NON_DRAFT_STATUSES,
-      issue_date: issueDateRange,
-    })
-    for (const inv of res.data as { amount?: number }[]) {
-      sum += typeof inv.amount === 'number' ? inv.amount : Number(inv.amount ?? 0)
+  const base = {
+    per_page: PAGE_SIZE,
+    sort_by: 'issue_date' as const,
+    sort_order: 'desc' as const,
+    status: INVOICE_NON_DRAFT_STATUSES,
+    issue_date: issueDateRange,
+  }
+  const first = await invoiceApi.getInvoices({ page: 1, ...base })
+  let sum = sumInvoiceAmountRows(first.data as { amount?: number }[])
+  const lastPage = first.pagination.last_page
+
+  for (let batchStart = 2; batchStart <= lastPage; batchStart += PAGE_FETCH_CONCURRENCY) {
+    const batchEnd = Math.min(batchStart + PAGE_FETCH_CONCURRENCY - 1, lastPage)
+    const pages: number[] = []
+    for (let p = batchStart; p <= batchEnd; p++) pages.push(p)
+    const results = await Promise.all(pages.map((page) => invoiceApi.getInvoices({ page, ...base })))
+    for (const res of results) {
+      sum += sumInvoiceAmountRows(res.data as { amount?: number }[])
     }
-    lastPage = res.pagination.last_page
-    page += 1
-  } while (page <= lastPage)
+  }
   return sum
 }
 
-/** Sum payment amounts in USD equivalent (`amount_usd` from API; mixed-currency safe). */
+/** Sum payment amounts (USD basis) for the inclusive date range — one API call. */
 export async function sumInvoicePaymentsForDateRange(dateFrom: string, dateTo: string): Promise<number> {
-  let sum = 0
-  let page = 1
-  let lastPage = 1
-  do {
-    const res = await paymentApi.getPayments({
-      page,
-      per_page: 100,
-      sort_by: 'date',
-      sort_order: 'desc',
-      date_from: dateFrom,
-      date_to: dateTo,
-    })
-    for (const pmt of res.data as { amount_usd?: number; amount?: number }[]) {
-      sum += Number(pmt.amount_usd ?? pmt.amount ?? 0)
-    }
-    lastPage = res.pagination.last_page
-    page += 1
-  } while (page <= lastPage)
-  return sum
+  return paymentApi.getPaymentsMonthUsdTotal({ date_from: dateFrom, date_to: dateTo })
 }

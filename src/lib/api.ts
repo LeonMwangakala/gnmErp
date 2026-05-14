@@ -926,6 +926,25 @@ export const paymentApi = {
     }
   },
 
+  /** One request: SUM(COALESCE(amount_usd, amount)) for payments in date range (same scope as payment list). */
+  getPaymentsMonthUsdTotal: async (params: {
+    date_from: string
+    date_to: string
+  }): Promise<number> => {
+    const response = await api.get('/payments/month-usd-total', {
+      params: { date_from: params.date_from, date_to: params.date_to },
+    })
+    const body = response.data as {
+      status?: number
+      message?: string
+      data?: { total_usd?: number }
+    }
+    if (body?.status === 200 && body.data && typeof body.data.total_usd === 'number') {
+      return Number(body.data.total_usd)
+    }
+    throw new Error(String(body?.message || 'Failed to load payment total'))
+  },
+
   exportInvoicePaymentsByDate: async (date: string): Promise<Blob> => {
     const response = await api.get('/payments/export-by-date', {
       params: { date },
