@@ -9,9 +9,8 @@ import {
 } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
-import { customerApi, invoiceApi, paymentApi, revenueApi, expensePaymentApi, type PaginationMeta } from '@/lib/api'
+import { customerApi, invoiceApi, paymentApi, expensePaymentApi, type PaginationMeta } from '@/lib/api'
 import { Analytics } from './components/analytics'
-import { Overview, type OverviewDatum } from './components/overview'
 import { RecentSales } from './components/recent-sales'
 import { Reports } from './components/reports'
 import {
@@ -58,7 +57,6 @@ type DashboardExpensePayment = {
 
 export function Dashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
-  const [overviewData, setOverviewData] = useState<OverviewDatum[]>([])
   const [recentInvoices, setRecentInvoices] = useState<DashboardInvoice[]>([])
   const [recentPayments, setRecentPayments] = useState<DashboardPayment[]>([])
   const [recentExpensePayments, setRecentExpensePayments] = useState<DashboardExpensePayment[]>([])
@@ -83,7 +81,6 @@ export function Dashboard() {
       const monthRange = `${formatDate(startOfMonth)} to ${formatDate(endOfMonth)}`
 
       const [
-        revenuesRes,
         expensePaymentsRes,
         recentInvoicesRes,
         paymentsRes,
@@ -91,7 +88,6 @@ export function Dashboard() {
         totalInvoiceAmount,
         totalPayments,
       ] = await Promise.all([
-        revenueApi.getRevenues({ per_page: 500, date: monthRange }),
         expensePaymentApi.getExpensePayments({ per_page: 500, date: monthRange }),
         invoiceApi.getInvoices({ per_page: 5, sort_by: 'issue_date', sort_order: 'desc' }),
         paymentApi.getPayments({ per_page: 5, sort_by: 'date', sort_order: 'desc' }),
@@ -100,7 +96,6 @@ export function Dashboard() {
         sumInvoicePaymentsForDateRange(formatDate(startOfMonth), formatDate(endOfMonth)),
       ])
 
-      const revenues = revenuesRes.data as any[]
       const expensePayments = expensePaymentsRes.data as any[]
       const recentInvoicesList = recentInvoicesRes.data as DashboardInvoice[]
       const payments = paymentsRes.data as DashboardPayment[]
@@ -113,33 +108,6 @@ export function Dashboard() {
 
       const customerCount = customersPagination?.total ?? 0
 
-      const revenueByDate = new Map<string, number>()
-      const expensesByDate = new Map<string, number>()
-
-      revenues.forEach((r) => {
-        const key = (r.date_raw || r.date || '').slice(0, 10)
-        if (!key) return
-        const value = typeof r.amount === 'number' ? r.amount : Number(r.amount || 0)
-        revenueByDate.set(key, (revenueByDate.get(key) || 0) + value)
-      })
-
-      expensePayments.forEach((ep) => {
-        const key = (ep.date_raw || ep.date || '').slice(0, 10)
-        if (!key) return
-        const value = typeof ep.amount === 'number' ? ep.amount : Number(ep.amount || 0)
-        expensesByDate.set(key, (expensesByDate.get(key) || 0) + value)
-      })
-
-      const allDates = Array.from(
-        new Set<string>([...revenueByDate.keys(), ...expensesByDate.keys()]),
-      ).sort()
-
-      const overview: OverviewDatum[] = allDates.map((date) => ({
-        name: date.slice(5), // MM-DD
-        revenue: revenueByDate.get(date) || 0,
-        expenses: expensesByDate.get(date) || 0,
-      }))
-
       const recentExpensePaymentsList = expensePayments.slice(0, 5) as DashboardExpensePayment[]
 
       setMetrics({
@@ -148,7 +116,6 @@ export function Dashboard() {
         totalExpenses,
         customerCount,
       })
-      setOverviewData(overview)
       setRecentInvoices(recentInvoicesList)
       setRecentPayments(payments.slice(0, 5))
       setRecentExpensePayments(recentExpensePaymentsList)
@@ -260,7 +227,7 @@ export function Dashboard() {
                         ? '...'
                         : '0'}
                   </div>
-                  <p className='text-xs text-muted-foreground'>Invoice payments received</p>
+                  <p className='text-xs text-muted-foreground'>Sum of USD equivalents</p>
                 </CardContent>
               </Card>
               <Card>
@@ -322,35 +289,22 @@ export function Dashboard() {
                 </CardContent>
               </Card>
             </div>
-            <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
-              <Card className='col-span-1 lg:col-span-4'>
-                <CardHeader>
-                  <CardTitle>Daily revenue & expenses</CardTitle>
-                  <CardDescription>
-                    Revenue entries and expense payments recorded by day this month.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className='ps-2'>
-                  <Overview data={overviewData} />
-                </CardContent>
-              </Card>
-              <Card className='col-span-1 lg:col-span-3'>
-                <CardHeader>
-                  <CardTitle>Recent activity</CardTitle>
-                  <CardDescription>
-                    Latest invoices, invoice payments and expense payments.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <RecentSales
-                    invoices={recentInvoices}
-                    payments={recentPayments}
-                    expensePayments={recentExpensePayments}
-                    isLoading={isLoading}
-                  />
-                </CardContent>
-              </Card>
-            </div>
+            <Card>
+              <CardHeader className='border-b pb-4'>
+                <CardTitle className='text-lg'>Recent activity</CardTitle>
+                <CardDescription>
+                  Latest invoices, invoice payments, and expense payments.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className='pt-6'>
+                <RecentSales
+                  invoices={recentInvoices}
+                  payments={recentPayments}
+                  expensePayments={recentExpensePayments}
+                  isLoading={isLoading}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
           <TabsContent value='analytics' className='space-y-4'>
             <Analytics />

@@ -29,7 +29,7 @@ export async function sumInvoiceTotalsNonDraftForIssueDateRange(issueDateRange: 
   return sum
 }
 
-/** Sum payment `amount` for payments whose `date` falls in the inclusive range. */
+/** Sum payment amounts in USD equivalent (`amount_usd` from API; mixed-currency safe). */
 export async function sumInvoicePaymentsForDateRange(dateFrom: string, dateTo: string): Promise<number> {
   let sum = 0
   let page = 1
@@ -43,8 +43,8 @@ export async function sumInvoicePaymentsForDateRange(dateFrom: string, dateTo: s
       date_from: dateFrom,
       date_to: dateTo,
     })
-    for (const pmt of res.data as { amount?: number }[]) {
-      sum += typeof pmt.amount === 'number' ? pmt.amount : Number(pmt.amount ?? 0)
+    for (const pmt of res.data as { amount_usd?: number; amount?: number }[]) {
+      sum += Number(pmt.amount_usd ?? pmt.amount ?? 0)
     }
     lastPage = res.pagination.last_page
     page += 1
