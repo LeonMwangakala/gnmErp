@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,6 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
+import { cn } from '@/lib/utils'
 import { customerApi, invoiceApi, paymentApi, expensePaymentApi, type PaginationMeta } from '@/lib/api'
 import { Analytics } from './components/analytics'
 import { RecentSales } from './components/recent-sales'
@@ -47,6 +49,8 @@ type LoanDispatchMetrics = {
   outstandingBalance: number
   creditPaidRows: number
   creditUnpaidRows: number
+  outstandingBillCount: number
+  rowsWithoutBill: number
 }
 
 type DashboardMetrics = {
@@ -94,6 +98,7 @@ export function Dashboard() {
   const [customModalOpen, setCustomModalOpen] = useState(false)
   const [draftFrom, setDraftFrom] = useState('')
   const [draftTo, setDraftTo] = useState('')
+  const [loanDispatchDetailsOpen, setLoanDispatchDetailsOpen] = useState(false)
 
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [recentInvoices, setRecentInvoices] = useState<DashboardInvoice[]>([])
@@ -189,6 +194,8 @@ export function Dashboard() {
           outstandingBalance: s.loan_outstanding_balance_total,
           creditPaidRows: s.credit_dispatch_paid_rows,
           creditUnpaidRows: s.credit_dispatch_unpaid_rows,
+          outstandingBillCount: s.loan_outstanding_bill_count ?? 0,
+          rowsWithoutBill: s.loan_rows_without_bill ?? 0,
         }
       }
 
@@ -214,6 +221,10 @@ export function Dashboard() {
   useEffect(() => {
     void loadDashboardData()
   }, [loadDashboardData])
+
+  useEffect(() => {
+    setLoanDispatchDetailsOpen(false)
+  }, [periodPreset, customFrom, customTo])
 
   const openCustomRangeModal = () => {
     setDraftFrom(activeRange.fromStr)
@@ -399,22 +410,28 @@ export function Dashboard() {
                 </CardContent>
               </Card>
               <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Loan dispatch (CMTS)</CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='h-4 w-4 text-muted-foreground'
-                  >
-                    <path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z' />
-                    <polyline points='3.27 6.96 12 12.01 20.73 6.96' />
-                    <line x1='12' x2='12' y1='22.08' y2='12' />
-                  </svg>
+                <CardHeader className='flex flex-row items-start justify-between gap-2 space-y-0 pb-2'>
+                  <CardTitle className='text-sm font-medium leading-tight'>Loan dispatch (CMTS)</CardTitle>
+                  {metrics?.loanDispatch ? (
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon'
+                      className={cn(
+                        'h-8 w-8 shrink-0 text-muted-foreground',
+                        loanDispatchDetailsOpen && 'text-foreground',
+                      )}
+                      aria-expanded={loanDispatchDetailsOpen}
+                      aria-label={
+                        loanDispatchDetailsOpen
+                          ? 'Hide loan dispatch details'
+                          : 'Show loan dispatch details'
+                      }
+                      onClick={() => setLoanDispatchDetailsOpen((open) => !open)}
+                    >
+                      <Info className='h-4 w-4' aria-hidden />
+                    </Button>
+                  ) : null}
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold tabular-nums'>
@@ -427,18 +444,46 @@ export function Dashboard() {
                         : '—'}
                   </div>
                   {metrics?.loanDispatch ? (
-                    <>
-                      <p className='mt-1 text-xs text-muted-foreground'>
-                        Outstanding bill balance on loan releases
-                      </p>
-                      <p className='mt-2 text-xs text-muted-foreground'>
-                        {metrics.loanDispatch.loanRows.toLocaleString()} line
-                        {metrics.loanDispatch.loanRows === 1 ? '' : 's'} on loan ·{' '}
-                        {metrics.loanDispatch.creditPaidRows.toLocaleString()} paid ·{' '}
-                        {metrics.loanDispatch.creditUnpaidRows.toLocaleString()} open
-                      </p>
-                      <CardDescription className='pt-1 text-xs'>{activeRange.subtitle}</CardDescription>
-                    </>
+                    loanDispatchDetailsOpen ? (
+                      <div className='mt-3 space-y-2 border-t pt-3 text-xs text-muted-foreground'>
+                        <p>
+                          Total is the sum of each distinct CMTS bill&apos;s outstanding balance
+                          (bill line items minus discount minus payments). Multiple goods lines that
+                          share one bill are counted once in the total.
+                        </p>
+                        <p>
+                          <span className='font-medium text-foreground'>
+                            {metrics.loanDispatch.loanRows.toLocaleString()}
+                          </span>{' '}
+                          goods line{metrics.loanDispatch.loanRows === 1 ? '' : 's'} on loan in this
+                          period ·{' '}
+                          <span className='font-medium text-foreground'>
+                            {metrics.loanDispatch.outstandingBillCount.toLocaleString()}
+                          </span>{' '}
+                          bill{metrics.loanDispatch.outstandingBillCount === 1 ? '' : 's'} tied to
+                          those lines (each counted once toward the total)
+                          <span className='font-medium text-foreground'>
+                            {metrics.loanDispatch.creditPaidRows.toLocaleString()}
+                          </span>{' '}
+                          credit line{metrics.loanDispatch.creditPaidRows === 1 ? '' : 's'} settled ·{' '}
+                          <span className='font-medium text-foreground'>
+                            {metrics.loanDispatch.creditUnpaidRows.toLocaleString()}
+                          </span>{' '}
+                          credit line{metrics.loanDispatch.creditUnpaidRows === 1 ? '' : 's'} not
+                          fully settled
+                        </p>
+                        {metrics.loanDispatch.rowsWithoutBill > 0 ? (
+                          <p>
+                            <span className='font-medium text-foreground'>
+                              {metrics.loanDispatch.rowsWithoutBill.toLocaleString()}
+                            </span>{' '}
+                            open loan line{metrics.loanDispatch.rowsWithoutBill === 1 ? '' : 's'}{' '}
+                            have no CMTS bill linked, so they do not add to the balance total.
+                          </p>
+                        ) : null}
+                        <p className='text-[11px]'>Period: {activeRange.subtitle}</p>
+                      </div>
+                    ) : null
                   ) : (
                     <CardDescription className='pt-1 text-xs'>
                       {isLoading

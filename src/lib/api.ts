@@ -618,6 +618,8 @@ export interface GoodsDispatchedReportRow {
   /** Human-readable credit vs cash and paid vs outstanding */
   credit_dispatch_note: string
   invoice_no: string | null
+  /** CMTS Bill.id when linked; null if no bill on consignment */
+  bill_id: number | null
   bill_fully_paid: boolean
   bill_balance: number | null
   bill_status: string | null
@@ -641,8 +643,12 @@ export interface GoodsDispatchedReportData {
     credit_dispatch_paid_rows: number
     /** Credit dispatch lines still not fully paid (includes no invoice) */
     credit_dispatch_unpaid_rows: number
-    /** Sum of `bill_balance` on unpaid loan release rows (CMTS billing currency). */
+    /** Sum of outstanding CMTS bill balances, once per distinct bill (not per goods line). */
     loan_outstanding_balance_total: number
+    /** Distinct bills included in `loan_outstanding_balance_total`. */
+    loan_outstanding_bill_count: number
+    /** Loan dispatch lines that are “open” but have no CMTS bill linked (no balance in sum). */
+    loan_rows_without_bill: number
   }
 }
 
@@ -759,6 +765,14 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
     const credit_dispatch_note =
       noteRaw || fallbackCreditDispatchNote(release_type, invoice_no, bill_fully_paid)
 
+    const billIdRaw = r.bill_id ?? r.billId
+    const bill_id =
+      billIdRaw == null || billIdRaw === ''
+        ? null
+        : Number.isFinite(Number(billIdRaw))
+          ? Number(billIdRaw)
+          : null
+
     return {
       id: String(r.id ?? `${index}`),
       dispatch_reference: String(r.dispatch_reference ?? r.dispatchReference ?? '').trim(),
@@ -799,6 +813,7 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
       credit_invoice_status,
       credit_dispatch_note,
       invoice_no,
+      bill_id,
       bill_fully_paid,
       bill_balance:
         bal == null || bal === '' || !Number.isFinite(Number(bal)) ? null : Number(bal),
@@ -861,6 +876,12 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
         : creditUnpaidFromRows,
       loan_outstanding_balance_total: Number.isFinite(Number(sum.loan_outstanding_balance_total))
         ? Number(sum.loan_outstanding_balance_total)
+        : 0,
+      loan_outstanding_bill_count: Number.isFinite(Number(sum.loan_outstanding_bill_count))
+        ? Number(sum.loan_outstanding_bill_count)
+        : 0,
+      loan_rows_without_bill: Number.isFinite(Number(sum.loan_rows_without_bill))
+        ? Number(sum.loan_rows_without_bill)
         : 0,
     },
   }
