@@ -326,17 +326,38 @@ export const invoiceApi = {
     date_to: string
     /** Omit or 'all' = loan and cash; 'cash' | 'loan' to restrict */
     release?: 'all' | 'cash' | 'loan'
+    /** Optional: narrow rows to CMTS consignments whose customer matches (OR across set fields) */
+    customer_email?: string
+    customer_phone?: string
+    customer_tax_id?: string
+    customer_name?: string
+    customer_company?: string
   }): Promise<
     | { ok: true; data: GoodsDispatchedReportData }
     | { ok: false; message: string }
   > => {
     try {
+      const qp: Record<string, string> = {
+        date_from: params.date_from,
+        date_to: params.date_to,
+      }
+      if (params.release && params.release !== 'all') {
+        qp.release = params.release
+      }
+      const trim = (s?: string) => (s && String(s).trim() ? String(s).trim() : '')
+      const ce = trim(params.customer_email)
+      const cp = trim(params.customer_phone)
+      const ct = trim(params.customer_tax_id)
+      const cn = trim(params.customer_name)
+      const cc = trim(params.customer_company)
+      if (ce) qp.customer_email = ce
+      if (cp) qp.customer_phone = cp
+      if (ct) qp.customer_tax_id = ct
+      if (cn) qp.customer_name = cn
+      if (cc) qp.customer_company = cc
+
       const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/goods-dispatched-report`, {
-        params: {
-          date_from: params.date_from,
-          date_to: params.date_to,
-          ...(params.release && params.release !== 'all' ? { release: params.release } : {}),
-        },
+        params: qp,
       })
       const body = response.data as Record<string, unknown>
       if (body?.status === true && body.rows != null) {

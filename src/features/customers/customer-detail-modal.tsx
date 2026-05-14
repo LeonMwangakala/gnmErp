@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Loader2, ChevronLeft, ChevronRight, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -24,11 +24,26 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { customerApi, PaginationMeta } from '@/lib/api'
+import { Input } from '@/components/ui/input'
+import { customerApi, invoiceApi, PaginationMeta, type GoodsDispatchedReportRow } from '@/lib/api'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { EMPTY_INVOICE_REFS, useInvoiceContainers } from './use-invoice-containers'
 import { InvoiceConsignmentsGoodsModal } from '@/features/invoices/invoice-consignments-goods-modal'
+
+function defaultDispatchDateRange() {
+  const to = new Date()
+  const from = new Date()
+  from.setFullYear(from.getFullYear() - 1)
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }
+}
+
+function formatDispatchedShort(iso: string | null) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+}
 
 interface CustomerDetail {
   id: number
@@ -119,6 +134,11 @@ export function CustomerDetailModal({
   const [cargoModalOpen, setCargoModalOpen] = useState(false)
   const [cargoInvoiceNo, setCargoInvoiceNo] = useState<string | null>(null)
 
+  const [dispatchDateFrom, setDispatchDateFrom] = useState(() => defaultDispatchDateRange().from)
+  const [dispatchDateTo, setDispatchDateTo] = useState(() => defaultDispatchDateRange().to)
+  const [dispatchRows, setDispatchRows] = useState<GoodsDispatchedReportRow[]>([])
+  const [dispatchLoading, setDispatchLoading] = useState(false)
+
   const { containerByInvoiceId, containersLoading } = useInvoiceContainers(
     activeTab === 'invoices' ? invoices : EMPTY_INVOICE_REFS
   )
@@ -139,8 +159,45 @@ export function CustomerDetailModal({
         from: null,
         to: null,
       })
+      const r = defaultDispatchDateRange()
+      setDispatchDateFrom(r.from)
+      setDispatchDateTo(r.to)
+      setDispatchRows([])
     }
   }, [open, customerId])
+
+  const loadDispatches = useCallback(async () => {
+    if (!customer) return
+    setDispatchLoading(true)
+    try {
+      const res = await invoiceApi.getGoodsDispatchedReport({
+        date_from: dispatchDateFrom,
+        date_to: dispatchDateTo,
+        release: 'all',
+        customer_email: customer.email?.trim() || undefined,
+        customer_phone: customer.contact?.trim() || undefined,
+        customer_tax_id: customer.tax_number?.trim() || undefined,
+        customer_name: customer.name?.trim() || undefined,
+        customer_company: customer.billing?.name?.trim() || undefined,
+      })
+      if (res.ok) {
+        setDispatchRows(res.data.rows)
+      } else {
+        setDispatchRows([])
+        toast.error(res.message)
+      }
+    } catch {
+      setDispatchRows([])
+    } finally {
+      setDispatchLoading(false)
+    }
+  }, [customer, dispatchDateFrom, dispatchDateTo])
+
+  useEffect(() => {
+    if (open && customerId && activeTab === 'dispatches' && customer) {
+      void loadDispatches()
+    }
+  }, [open, customerId, activeTab, customer, loadDispatches])
 
   useEffect(() => {
     if (open && customerId && activeTab === 'invoices') {
@@ -226,11 +283,12 @@ export function CustomerDetailModal({
           </div>
         ) : customer ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className='space-y-4'>
-            <TabsList>
+            <TabsList className='flex h-auto min-h-10 flex-wrap gap-1'>
               <TabsTrigger value='info'>Customer Info</TabsTrigger>
               <TabsTrigger value='invoices'>
                 Invoices ({customer.statistics.total_invoice_count})
               </TabsTrigger>
+              <TabsTrigger value='dispatches'>Dispatches</TabsTrigger>
             </TabsList>
 
             <TabsContent value='info' className='space-y-4'>
@@ -542,6 +600,108 @@ export function CustomerDetailModal({
                           <ChevronRight className='h-4 w-4' />
                         </Button>
                       </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value='dispatches' className='space-y-4'>
+              <Card>
+                <CardHeader className='pb-3'>
+                  <CardTitle className='text-base'>Goods dispatched (CMTS)</CardTitle>
+                  <CardDescription className='text-xs'>
+                    Cash and credit dispatches in range. Rows match this customer in GNM using email,
+                    phone, tax number, name, or billing contact — same company profile as Torchlight.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className='space-y-3'>
+                  <div className='flex flex-wrap items-end gap-2'>
+                    <div className='space-y-1'>
+                      <label className='text-muted-foreground text-xs'>From</label>
+                      <Input
+                        type='date'
+                        className='h-9 w-[150px]'
+                        value={dispatchDateFrom}
+                        onChange={(e) => setDispatchDateFrom(e.target.value)}
+                      />
+                    </div>
+                    <div className='space-y-1'>
+                      <label className='text-muted-foreground text-xs'>To</label>
+                      <Input
+                        type='date'
+                        className='h-9 w-[150px]'
+                        value={dispatchDateTo}
+                        onChange={(e) => setDispatchDateTo(e.target.value)}
+                      />
+                    </div>
+                    <Button type='button' size='sm' variant='secondary' onClick={() => void loadDispatches()}>
+                      Refresh
+                    </Button>
+                  </div>
+                  {dispatchLoading ? (
+                    <div className='text-muted-foreground flex items-center gap-2 py-8 text-sm'>
+                      <Loader2 className='h-5 w-5 animate-spin' />
+                      Loading…
+                    </div>
+                  ) : dispatchRows.length === 0 ? (
+                    <p className='text-muted-foreground py-6 text-center text-sm'>
+                      No dispatched lines in this period for a matching CMTS customer profile.
+                    </p>
+                  ) : (
+                    <div className='max-h-[min(52vh,480px)] overflow-auto rounded-md border'>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className='whitespace-nowrap'>When</TableHead>
+                            <TableHead className='whitespace-nowrap'>Type</TableHead>
+                            <TableHead>Dispatch</TableHead>
+                            <TableHead>Good</TableHead>
+                            <TableHead className='text-right'>Qty</TableHead>
+                            <TableHead className='text-right'>Pkgs</TableHead>
+                            <TableHead>Container</TableHead>
+                            <TableHead>Invoice</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {dispatchRows.map((r) => (
+                            <TableRow key={r.id}>
+                              <TableCell className='text-muted-foreground whitespace-nowrap text-xs'>
+                                {formatDispatchedShort(r.dispatched_at)}
+                              </TableCell>
+                              <TableCell>
+                                {r.release_type === 'loan' ? (
+                                  <Badge variant='outline' className='font-normal'>
+                                    Credit
+                                  </Badge>
+                                ) : (
+                                  <Badge variant='secondary' className='font-normal'>
+                                    Cash
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className='max-w-[120px] truncate text-xs font-medium'>
+                                {r.dispatch_reference || '—'}
+                              </TableCell>
+                              <TableCell className='max-w-[180px] truncate text-xs'>
+                                {r.good_name || '—'}
+                              </TableCell>
+                              <TableCell className='text-right text-xs'>
+                                {r.quantity != null ? r.quantity : '—'}
+                              </TableCell>
+                              <TableCell className='text-right text-xs'>
+                                {r.pkgs != null ? r.pkgs : '—'}
+                              </TableCell>
+                              <TableCell className='max-w-[100px] truncate font-mono text-xs'>
+                                {r.container_no ?? '—'}
+                              </TableCell>
+                              <TableCell className='max-w-[100px] truncate text-xs'>
+                                {r.invoice_no ?? '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   )}
                 </CardContent>
