@@ -641,6 +641,8 @@ export interface GoodsDispatchedReportData {
     credit_dispatch_paid_rows: number
     /** Credit dispatch lines still not fully paid (includes no invoice) */
     credit_dispatch_unpaid_rows: number
+    /** Sum of `bill_balance` on unpaid loan release rows (CMTS billing currency). */
+    loan_outstanding_balance_total: number
   }
 }
 
@@ -857,6 +859,9 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
       credit_dispatch_unpaid_rows: Number.isFinite(Number(sum.credit_dispatch_unpaid_rows))
         ? Number(sum.credit_dispatch_unpaid_rows)
         : creditUnpaidFromRows,
+      loan_outstanding_balance_total: Number.isFinite(Number(sum.loan_outstanding_balance_total))
+        ? Number(sum.loan_outstanding_balance_total)
+        : 0,
     },
   }
 }
