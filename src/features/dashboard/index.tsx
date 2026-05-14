@@ -14,12 +14,15 @@ import { Analytics } from './components/analytics'
 import { Overview, type OverviewDatum } from './components/overview'
 import { RecentSales } from './components/recent-sales'
 import { Reports } from './components/reports'
+import {
+  sumInvoicePaymentsForDateRange,
+  sumInvoiceTotalsNonDraftForIssueDateRange,
+} from './dashboard-metrics'
 
 type DashboardMetrics = {
-  totalRevenue: number
+  totalInvoiceAmount: number
+  totalPayments: number
   totalExpenses: number
-  openInvoicesCount: number
-  openInvoicesAmount: number
   customerCount: number
 }
 
@@ -40,6 +43,8 @@ type DashboardInvoice = {
 type DashboardPayment = {
   id: number
   invoice_number: string
+  customer_name?: string
+  cashier_name?: string
   amount_formatted: string
   date: string
 }
@@ -63,7 +68,7 @@ export function Dashboard() {
   const now = useMemo(() => new Date(), [])
 
   useEffect(() => {
-    void loadDashboardData()
+    loadDashboardData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -76,47 +81,33 @@ export function Dashboard() {
       const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
       const formatDate = (d: Date) => d.toISOString().slice(0, 10)
       const monthRange = `${formatDate(startOfMonth)} to ${formatDate(endOfMonth)}`
-      const monthPrefix = formatDate(startOfMonth).slice(0, 7) // YYYY-MM
 
       const [
         revenuesRes,
         expensePaymentsRes,
-        invoicesRes,
+        recentInvoicesRes,
         paymentsRes,
         customersRes,
+        totalInvoiceAmount,
+        totalPayments,
       ] = await Promise.all([
         revenueApi.getRevenues({ per_page: 500, date: monthRange }),
         expensePaymentApi.getExpensePayments({ per_page: 500, date: monthRange }),
-        invoiceApi.getInvoices({ per_page: 500, sort_by: 'issue_date', sort_order: 'desc' }),
+        invoiceApi.getInvoices({ per_page: 5, sort_by: 'issue_date', sort_order: 'desc' }),
         paymentApi.getPayments({ per_page: 5, sort_by: 'date', sort_order: 'desc' }),
         customerApi.getCustomers({ per_page: 1 }),
+        sumInvoiceTotalsNonDraftForIssueDateRange(monthRange),
+        sumInvoicePaymentsForDateRange(formatDate(startOfMonth), formatDate(endOfMonth)),
       ])
 
       const revenues = revenuesRes.data as any[]
       const expensePayments = expensePaymentsRes.data as any[]
-      const invoices = invoicesRes.data as DashboardInvoice[]
+      const recentInvoicesList = recentInvoicesRes.data as DashboardInvoice[]
       const payments = paymentsRes.data as DashboardPayment[]
       const customersPagination: PaginationMeta = customersRes.pagination
 
-      const totalRevenue = revenues.reduce(
-        (sum, r) => sum + (typeof r.amount === 'number' ? r.amount : Number(r.amount || 0)),
-        0,
-      )
-
       const totalExpenses = expensePayments.reduce(
         (sum, ep) => sum + (typeof ep.amount === 'number' ? ep.amount : Number(ep.amount || 0)),
-        0,
-      )
-
-      const invoicesThisMonth = invoices.filter((inv) => {
-        const raw = inv.issue_date_raw || inv.issue_date || ''
-        return raw.startsWith(monthPrefix)
-      })
-
-      const openInvoices = invoicesThisMonth.filter((inv) => inv.due > 0)
-      const openInvoicesCount = openInvoices.length
-      const openInvoicesAmount = openInvoices.reduce(
-        (sum, inv) => sum + (typeof inv.due === 'number' ? inv.due : Number(inv.due || 0)),
         0,
       )
 
@@ -149,14 +140,12 @@ export function Dashboard() {
         expenses: expensesByDate.get(date) || 0,
       }))
 
-      const recentInvoicesList = invoices.slice(0, 5)
       const recentExpensePaymentsList = expensePayments.slice(0, 5) as DashboardExpensePayment[]
 
       setMetrics({
-        totalRevenue,
+        totalInvoiceAmount,
+        totalPayments,
         totalExpenses,
-        openInvoicesCount,
-        openInvoicesAmount,
         customerCount,
       })
       setOverviewData(overview)
@@ -191,7 +180,7 @@ export function Dashboard() {
               size='sm'
               disabled={isLoading}
               onClick={() => {
-                void loadDashboardData()
+                loadDashboardData()
               }}
             >
               Refresh
@@ -215,7 +204,7 @@ export function Dashboard() {
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>
-                    Total revenue (this month)
+                    Total invoices (this month)
                   </CardTitle>
                   <svg
                     xmlns='http://www.w3.org/2000/svg'
@@ -233,14 +222,45 @@ export function Dashboard() {
                 <CardContent>
                   <div className='text-2xl font-bold tabular-nums'>
                     {metrics
-                      ? metrics.totalRevenue.toLocaleString(undefined, {
+                      ? metrics.totalInvoiceAmount.toLocaleString(undefined, {
                           maximumFractionDigits: 2,
                         })
                       : isLoading
                         ? '...'
                         : '0'}
                   </div>
-                  <p className='text-xs text-muted-foreground'>Summed from revenue records</p>
+                  <p className='text-xs text-muted-foreground'>Non-draft invoice totals</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+                  <CardTitle className='text-sm font-medium'>
+                    Total payments (this month)
+                  </CardTitle>
+                  <svg
+                    xmlns='http://www.w3.org/2000/svg'
+                    viewBox='0 0 24 24'
+                    fill='none'
+                    stroke='currentColor'
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth='2'
+                    className='h-4 w-4 text-muted-foreground'
+                  >
+                    <path d='M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' />
+                  </svg>
+                </CardHeader>
+                <CardContent>
+                  <div className='text-2xl font-bold tabular-nums'>
+                    {metrics
+                      ? metrics.totalPayments.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        })
+                      : isLoading
+                        ? '...'
+                        : '0'}
+                  </div>
+                  <p className='text-xs text-muted-foreground'>Invoice payments received</p>
                 </CardContent>
               </Card>
               <Card>
@@ -279,43 +299,6 @@ export function Dashboard() {
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>
-                    Open invoices (this month)
-                  </CardTitle>
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth='2'
-                    className='h-4 w-4 text-muted-foreground'
-                  >
-                    <rect width='20' height='14' x='2' y='5' rx='2' />
-                    <path d='M2 10h20' />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold tabular-nums'>
-                    {metrics ? metrics.openInvoicesCount : isLoading ? '...' : '0'}
-                  </div>
-                  <p className='text-xs text-muted-foreground'>
-                    Due amount:{' '}
-                    <span className='font-semibold'>
-                      {metrics
-                        ? metrics.openInvoicesAmount.toLocaleString(undefined, {
-                            maximumFractionDigits: 2,
-                          })
-                        : isLoading
-                          ? '...'
-                          : '0'}
-                    </span>
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>
                     Customers
                   </CardTitle>
                   <svg
@@ -342,7 +325,10 @@ export function Dashboard() {
             <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
               <Card className='col-span-1 lg:col-span-4'>
                 <CardHeader>
-                  <CardTitle>Overview</CardTitle>
+                  <CardTitle>Daily revenue & expenses</CardTitle>
+                  <CardDescription>
+                    Revenue entries and expense payments recorded by day this month.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className='ps-2'>
                   <Overview data={overviewData} />

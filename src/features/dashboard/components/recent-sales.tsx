@@ -9,6 +9,8 @@ type RecentInvoice = {
 type RecentPayment = {
   id: number
   invoice_number: string
+  customer_name?: string
+  cashier_name?: string
   amount_formatted: string
   date: string
 }
@@ -83,7 +85,7 @@ export function RecentSales({
                 <div className='min-w-0'>
                   <p className='truncate font-medium'>{pmt.invoice_number}</p>
                   <p className='truncate text-xs text-muted-foreground'>
-                    {pmt.date}
+                    {[pmt.date, pmt.customer_name, pmt.cashier_name].filter(Boolean).join(' · ')}
                   </p>
                 </div>
                 <div className='ms-2 shrink-0 text-right text-xs font-semibold tabular-nums'>
