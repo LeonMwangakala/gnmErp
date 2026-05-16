@@ -424,9 +424,15 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
 </html>`
 }
 
+function isChiefAccountantUser(user: ReturnType<typeof useAuthStore.getState>['auth']['user']) {
+  const designation = (user?.employee_context?.designation_name || '').trim().toLowerCase()
+  return designation === 'chief accountant'
+}
+
 export function Payments() {
   const user = useAuthStore((s) => s.auth.user)
   const isCreatorUser = (user?.type || '').toLowerCase() === 'company'
+  const canDeletePayment = isChiefAccountantUser(user)
   const [payments, setPayments] = useState<Payment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [exportDate, setExportDate] = useState<string>(() => {
@@ -1012,16 +1018,18 @@ export function Payments() {
                                 )}
                               </Button>
                             )}
-                            <Button
-                              variant='ghost'
-                              size='sm'
-                              className='h-8 w-8 p-0 text-destructive'
-                              onClick={() => setPaymentToDelete(payment)}
-                              title='Delete'
-                              disabled={isDeletingPaymentId === payment.id}
-                            >
-                              <Trash2 className='h-4 w-4' />
-                            </Button>
+                            {canDeletePayment ? (
+                              <Button
+                                variant='ghost'
+                                size='sm'
+                                className='h-8 w-8 p-0 text-destructive'
+                                onClick={() => setPaymentToDelete(payment)}
+                                title='Delete'
+                                disabled={isDeletingPaymentId === payment.id}
+                              >
+                                <Trash2 className='h-4 w-4' />
+                              </Button>
+                            ) : null}
                             <Button
                               variant='ghost'
                               size='sm'

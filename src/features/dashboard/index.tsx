@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,8 +19,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Main } from '@/components/layout/main'
+import { cn } from '@/lib/utils'
 import { customerApi, invoiceApi, paymentApi, expensePaymentApi, type PaginationMeta } from '@/lib/api'
 import { Analytics } from './components/analytics'
+import {
+  DashboardStatDetailModal,
+  type DashboardStatKey,
+} from './components/dashboard-stat-detail-modal'
 import { RecentSales } from './components/recent-sales'
 import { Reports } from './components/reports'
 import {
@@ -98,6 +103,28 @@ export function Dashboard() {
   const [recentExpensePayments, setRecentExpensePayments] = useState<DashboardExpensePayment[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [statDetailKey, setStatDetailKey] = useState<DashboardStatKey | null>(null)
+
+  const openStatDetail = (key: DashboardStatKey) => {
+    if (isLoading) return
+    setStatDetailKey(key)
+  }
+
+  const statCardProps = (key: DashboardStatKey) => ({
+    role: 'button' as const,
+    tabIndex: 0,
+    className: cn(
+      'cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+      isLoading && 'pointer-events-none opacity-80',
+    ),
+    onClick: () => openStatDetail(key),
+    onKeyDown: (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        openStatDetail(key)
+      }
+    },
+  })
 
   const activeRange = useMemo(
     () =>
@@ -280,7 +307,7 @@ export function Dashboard() {
             </div>
 
             <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'>
-              <Card>
+              <Card {...statCardProps('customers')}>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>Customers</CardTitle>
                   <svg
@@ -302,7 +329,7 @@ export function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card {...statCardProps('invoices')}>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>Total invoices</CardTitle>
                   <svg
@@ -335,7 +362,7 @@ export function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card {...statCardProps('payments')}>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>Total payments</CardTitle>
                   <svg
@@ -368,7 +395,7 @@ export function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card {...statCardProps('expenses')}>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>Total expenses</CardTitle>
                   <svg
@@ -403,7 +430,7 @@ export function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card {...statCardProps('loan-dispatch')}>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
                   <CardTitle className='text-sm font-medium'>Loan dispatch</CardTitle>
                   <svg
@@ -471,6 +498,15 @@ export function Dashboard() {
           </TabsContent>
         </Tabs>
       </Main>
+
+      <DashboardStatDetailModal
+        open={statDetailKey !== null}
+        onOpenChange={(next) => {
+          if (!next) setStatDetailKey(null)
+        }}
+        statKey={statDetailKey}
+        range={activeRange}
+      />
 
       <Dialog open={customModalOpen} onOpenChange={setCustomModalOpen}>
         <DialogContent className='sm:max-w-md'>
