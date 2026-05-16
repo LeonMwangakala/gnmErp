@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -54,6 +55,57 @@ const EMPTY_PAGINATION: PaginationMeta = {
   last_page: 1,
   from: null,
   to: null,
+}
+
+const SKELETON_ROW_COUNT = 8
+
+const STAT_TABLE_HEADERS: Record<DashboardStatKey, string[]> = {
+  customers: ['#', 'Number', 'Name', 'Phone', 'Email', 'Balance'],
+  invoices: ['#', 'Invoice', 'Customer', 'Issue date', 'Amount', 'Due', 'Status'],
+  payments: ['S/N', 'Customer', 'Invoice Number', 'Invoice Amount', 'Paid Amount', 'Account', 'Status'],
+  expenses: ['#', 'Date', 'Amount', 'Vendor', 'Category', 'Account', 'Reference'],
+  'loan-dispatch': ['Dispatch', 'Customer', 'Goods', 'Billing'],
+}
+
+/** Per-column skeleton widths (repeat last entry if fewer than column count). */
+const STAT_SKELETON_WIDTHS: Partial<Record<DashboardStatKey, string[]>> = {
+  customers: ['w-8', 'w-20', 'w-32', 'w-24', 'w-40', 'w-16'],
+  invoices: ['w-8', 'w-24', 'w-28', 'w-20', 'w-16', 'w-16', 'w-20'],
+  payments: ['w-8', 'w-28', 'w-28', 'w-16', 'w-20', 'w-24', 'w-20'],
+  expenses: ['w-8', 'w-20', 'w-16', 'w-28', 'w-24', 'w-24', 'w-20'],
+  'loan-dispatch': ['w-32', 'w-28', 'w-36', 'w-28'],
+}
+
+function StatTableSkeleton({ statKey }: { statKey: DashboardStatKey }) {
+  const headers = STAT_TABLE_HEADERS[statKey]
+  const widths = STAT_SKELETON_WIDTHS[statKey] ?? []
+
+  return (
+    <div className='rounded-md border'>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {headers.map((label) => (
+              <TableHead key={label}>{label}</TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: SKELETON_ROW_COUNT }).map((_, rowIdx) => (
+            <TableRow key={rowIdx}>
+              {headers.map((label, colIdx) => (
+                <TableCell key={`${rowIdx}-${label}`}>
+                  <Skeleton
+                    className={`h-4 ${widths[colIdx] ?? widths[widths.length - 1] ?? 'w-full max-w-[120px]'}`}
+                  />
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
 }
 
 function formatGoodsDispatchedAt(iso: string | null): string {
@@ -289,10 +341,8 @@ export function DashboardStatDetailModal({
         </DialogHeader>
 
         <div className='min-h-0 flex-1 overflow-auto py-3'>
-          {loading && rows.length === 0 && loanRows.length === 0 ? (
-            <div className='flex items-center justify-center py-12'>
-              <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
-            </div>
+          {loading && statKey ? (
+            <StatTableSkeleton statKey={statKey} />
           ) : error ? (
             <p className='py-8 text-center text-sm text-destructive'>{error}</p>
           ) : statKey === 'loan-dispatch' ? (
@@ -317,7 +367,18 @@ export function DashboardStatDetailModal({
           ) : null}
         </div>
 
-        <PaginationBar pagination={pagination} loading={loading} onPageChange={handlePageChange} />
+        {loading ? (
+          <div className='flex items-center justify-between gap-2 border-t pt-3'>
+            <Skeleton className='h-4 w-36' />
+            <div className='flex items-center gap-2'>
+              <Skeleton className='h-8 w-24' />
+              <Skeleton className='h-4 w-24' />
+              <Skeleton className='h-8 w-20' />
+            </div>
+          </div>
+        ) : (
+          <PaginationBar pagination={pagination} loading={loading} onPageChange={handlePageChange} />
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -424,27 +485,41 @@ function PaymentsTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className='w-12'>#</TableHead>
-          <TableHead>Date</TableHead>
-          <TableHead>Invoice</TableHead>
+          <TableHead>S/N</TableHead>
           <TableHead>Customer</TableHead>
-          <TableHead className='text-right'>Amount</TableHead>
+          <TableHead>Invoice Number</TableHead>
+          <TableHead className='text-right'>Invoice Amount</TableHead>
+          <TableHead className='text-right'>Paid Amount</TableHead>
           <TableHead>Account</TableHead>
-          <TableHead>Method</TableHead>
+          <TableHead>Status</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((r, i) => (
           <TableRow key={String(r.id ?? i)}>
             <TableCell>{rowIndex(page, perPage, i)}</TableCell>
-            <TableCell>{String(r.date ?? '—')}</TableCell>
-            <TableCell className='font-medium'>{String(r.invoice_number ?? '—')}</TableCell>
-            <TableCell>{String(r.customer_name ?? '—')}</TableCell>
+            <TableCell>{String(r.customer_name ?? '--')}</TableCell>
+            <TableCell className='font-medium'>
+              <div className='flex items-center gap-2'>
+                <FileText className='h-4 w-4 shrink-0 text-muted-foreground' />
+                {String(r.invoice_number ?? '—')}
+              </div>
+            </TableCell>
             <TableCell className='text-right tabular-nums'>
-              {String(r.amount_formatted ?? r.amount_usd_formatted ?? '—')}
+              {String(r.invoice_amount_formatted ?? '—')}
+            </TableCell>
+            <TableCell className='text-right'>
+              <div className='flex flex-col items-end'>
+                <span className='tabular-nums'>{String(r.amount_formatted ?? '—')}</span>
+                {r.amount_usd_formatted ? (
+                  <span className='text-xs text-muted-foreground'>
+                    USD: {String(r.amount_usd_formatted)}
+                  </span>
+                ) : null}
+              </div>
             </TableCell>
             <TableCell>{String(r.account_name ?? '—')}</TableCell>
-            <TableCell>{String(r.payment_method ?? r.payment_type ?? '—')}</TableCell>
+            <TableCell>{String(r.invoice_status_label ?? '—')}</TableCell>
           </TableRow>
         ))}
       </TableBody>
