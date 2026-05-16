@@ -966,11 +966,15 @@ export function Reports() {
     if (!goodsDispatchedReportData) return
     setGoodsDispatchedReportExporting(true)
     try {
-      const result = await invoiceApi.getGoodsDispatchedReport({
+      const exportParams = {
         date_from: goodsDispatchedReportData.date_from,
         date_to: goodsDispatchedReportData.date_to,
         release: goodsDispatchedReportData.release,
-      })
+      }
+      const result =
+        goodsDispatchedReportData.report_kind === 'authorized_pending'
+          ? await invoiceApi.getAuthorizedPendingDispatchReport(exportParams)
+          : await invoiceApi.getGoodsDispatchedReport(exportParams)
       if (!result.ok) {
         toast.error(result.message)
         return
@@ -1195,7 +1199,9 @@ export function Reports() {
                           ? 'Posted date range'
                           : selectedReport.key === 'goods-dispatched'
                             ? 'Dispatch date range'
-                            : 'Invoice date range'}
+                            : selectedReport.key === 'authorized-pending-dispatch'
+                              ? 'Authorization date range'
+                              : 'Invoice date range'}
                     </Label>
                     <div className='flex flex-wrap gap-2'>
                       {(
@@ -2118,7 +2124,11 @@ export function Reports() {
       >
         <DialogContent className='flex max-h-[min(90vh,800px)] w-[min(1400px,98vw)] max-w-[min(1400px,98vw)] flex-col gap-0 overflow-hidden sm:max-w-[min(1400px,98vw)]'>
           <DialogHeader className='shrink-0'>
-            <DialogTitle>Good dispatched report</DialogTitle>
+            <DialogTitle>
+              {goodsDispatchedReportData?.report_kind === 'authorized_pending'
+                ? 'Authorized — not dispatched'
+                : 'Good dispatched report'}
+            </DialogTitle>
           </DialogHeader>
           {goodsDispatchedReportData ? (
             <>
@@ -2197,6 +2207,13 @@ export function Reports() {
                 Credit dispatch · invoice now paid in full{' '}
                 {goodsDispatchedReportData.summary.credit_dispatch_paid_rows} · still outstanding{' '}
                 {goodsDispatchedReportData.summary.credit_dispatch_unpaid_rows}
+                {goodsDispatchedReportData.report_kind === 'authorized_pending' ? (
+                  <>
+                    <br />
+                    Longest wait {goodsDispatchedReportData.summary.max_days_pending ?? 0} day(s)
+                    · average {goodsDispatchedReportData.summary.avg_days_pending ?? 0} day(s)
+                  </>
+                ) : null}
               </p>
               <div className='min-h-0 flex-1 overflow-auto pr-1'>
                 <div className='space-y-4 pb-4'>
@@ -2207,7 +2224,11 @@ export function Reports() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className='min-w-[140px]'>Dispatch</TableHead>
+                          <TableHead className='min-w-[140px]'>
+                            {goodsDispatchedReportData.report_kind === 'authorized_pending'
+                              ? 'Authorization'
+                              : 'Dispatch'}
+                          </TableHead>
                           <TableHead className='min-w-[160px]'>Customer</TableHead>
                           <TableHead className='min-w-[220px]'>Consignment</TableHead>
                           <TableHead className='min-w-[140px]'>Pickup / vehicle</TableHead>
@@ -2219,7 +2240,9 @@ export function Reports() {
                         {goodsDispatchedReportData.rows.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={6} className='text-center text-muted-foreground'>
-                              No dispatched goods in this range.
+                              {goodsDispatchedReportData.report_kind === 'authorized_pending'
+                                ? 'No authorized goods awaiting pickup in this range.'
+                                : 'No dispatched goods in this range.'}
                             </TableCell>
                           </TableRow>
                         ) : (
@@ -2227,12 +2250,25 @@ export function Reports() {
                             <TableRow key={r.id}>
                               <TableCell className='align-top whitespace-normal text-sm'>
                                 <div className='tabular-nums whitespace-nowrap'>
-                                  {formatGoodsDispatchedAt(r.dispatched_at)}
+                                  {goodsDispatchedReportData.report_kind === 'authorized_pending'
+                                    ? formatGoodsDispatchedAt(r.authorized_at ?? null)
+                                    : formatGoodsDispatchedAt(r.dispatched_at)}
                                 </div>
+                                {goodsDispatchedReportData.report_kind === 'authorized_pending' &&
+                                r.days_pending != null ? (
+                                  <div className='mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400'>
+                                    {r.days_pending} day{r.days_pending === 1 ? '' : 's'} waiting
+                                  </div>
+                                ) : null}
                                 <div className='mt-1 font-mono text-xs text-muted-foreground'>
                                   {r.dispatch_reference || '—'}
                                 </div>
-                                {r.dispatched_by_name ? (
+                                {goodsDispatchedReportData.report_kind === 'authorized_pending' &&
+                                r.authorized_by_name ? (
+                                  <div className='mt-1 text-xs text-muted-foreground'>
+                                    Authorized by {r.authorized_by_name}
+                                  </div>
+                                ) : r.dispatched_by_name ? (
                                   <div className='mt-1 text-xs text-muted-foreground'>
                                     By {r.dispatched_by_name}
                                   </div>
