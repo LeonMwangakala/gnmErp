@@ -1118,6 +1118,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                           <tr>
                             <th className='text-left px-2 py-1.5 font-medium'>Dispatched</th>
                             <th className='text-left px-2 py-1.5 font-medium'>Ref</th>
+                            <th className='text-left px-2 py-1.5 font-medium'>Container</th>
                             <th className='text-left px-2 py-1.5 font-medium'>Invoice</th>
                             <th className='text-right px-2 py-1.5 font-medium'>Balance</th>
                           </tr>
@@ -1129,6 +1130,9 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                                 {formatDispatchedAt(r.dispatched_at)}
                               </td>
                               <td className='px-2 py-1.5 font-mono'>{r.dispatch_reference || '—'}</td>
+                              <td className='px-2 py-1.5 font-mono whitespace-nowrap'>
+                                {r.container_no?.trim() || '—'}
+                              </td>
                               <td className='px-2 py-1.5'>
                                 <div className='font-medium'>{r.invoice_no ?? '—'}</div>
                                 <div className='text-muted-foreground mt-0.5 leading-snug'>
