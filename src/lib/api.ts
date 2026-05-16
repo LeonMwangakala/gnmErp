@@ -338,50 +338,24 @@ export const invoiceApi = {
   }): Promise<
     | { ok: true; data: GoodsDispatchedReportData }
     | { ok: false; message: string }
-  > => {
-    try {
-      const qp: Record<string, string> = {
-        date_from: params.date_from,
-        date_to: params.date_to,
-      }
-      if (params.release && params.release !== 'all') {
-        qp.release = params.release
-      }
-      const trim = (s?: string) => (s && String(s).trim() ? String(s).trim() : '')
-      const ce = trim(params.customer_email)
-      const cp = trim(params.customer_phone)
-      const ct = trim(params.customer_tax_id)
-      const cn = trim(params.customer_name)
-      const cc = trim(params.customer_company)
-      if (ce) qp.customer_email = ce
-      if (cp) qp.customer_phone = cp
-      if (ct) qp.customer_tax_id = ct
-      if (cn) qp.customer_name = cn
-      if (cc) qp.customer_company = cc
-      if (params.page != null && Number.isFinite(params.page) && params.page >= 1) {
-        qp.page = String(Math.floor(params.page))
-      }
-      if (params.per_page != null && Number.isFinite(params.per_page) && params.per_page >= 1) {
-        qp.per_page = String(Math.floor(params.per_page))
-      }
+  > => fetchDispatchReleaseReport('goods-dispatched-report', params),
 
-      const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/goods-dispatched-report`, {
-        params: qp,
-      })
-      const body = response.data as Record<string, unknown>
-      if (body?.status === true && body.rows != null) {
-        return { ok: true, data: normalizeGoodsDispatchedReportData(body) }
-      }
-      return { ok: false, message: String(body?.message || 'Failed to load report') }
-    } catch (err: unknown) {
-      const ax = err as AxiosError<{ message?: string }>
-      const msg =
-        ax.response?.data && typeof ax.response.data === 'object' && 'message' in ax.response.data
-          ? String((ax.response.data as { message?: string }).message)
-          : ax.message
-      return { ok: false, message: msg || 'Failed to load report' }
-    }
-  },
+  /** Authorized for pickup but not yet dispatched (still in warehouse). */
+  getAuthorizedPendingDispatchReport: async (params: {
+    date_from: string
+    date_to: string
+    release?: 'all' | 'cash' | 'loan'
+    page?: number
+    per_page?: number
+    customer_email?: string
+    customer_phone?: string
+    customer_tax_id?: string
+    customer_name?: string
+    customer_company?: string
+  }): Promise<
+    | { ok: true; data: GoodsDispatchedReportData }
+    | { ok: false; message: string }
+  > => fetchDispatchReleaseReport('authorized-pending-dispatch-report', params),
 
   getInvoices: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
     const response = await api.get('/invoices', { params })
@@ -594,6 +568,10 @@ export interface GoodsDispatchedReportRow {
   id: string
   dispatch_reference: string
   dispatched_at: string | null
+  /** Set on authorized-pending report (warehouse, not yet dispatched) */
+  authorized_at?: string | null
+  authorized_by_name?: string
+  days_pending?: number | null
   dispatched_by_name: string
   pickup_by: string
   pickup_cellphone: string
@@ -623,11 +601,14 @@ export interface GoodsDispatchedReportRow {
   bill_fully_paid: boolean
   bill_balance: number | null
   bill_status: string | null
+  consignment_delivery_status_label?: string
+  awaiting_dispatch?: boolean
 }
 
 export interface GoodsDispatchedReportData {
   date_from: string
   date_to: string
+  report_kind?: 'dispatched' | 'authorized_pending'
   /** Echo from API: which release types were included */
   release: 'all' | 'cash' | 'loan'
   rows: GoodsDispatchedReportRow[]
@@ -649,6 +630,8 @@ export interface GoodsDispatchedReportData {
     loan_outstanding_bill_count: number
     /** Loan dispatch lines that are “open” but have no CMTS bill linked (no balance in sum). */
     loan_rows_without_bill: number
+    max_days_pending?: number
+    avg_days_pending?: number
   }
 }
 
@@ -780,6 +763,17 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
         r.dispatched_at == null || r.dispatched_at === ''
           ? null
           : String(r.dispatched_at ?? r.dispatchedAt),
+      authorized_at:
+        r.authorized_at == null || r.authorized_at === ''
+          ? null
+          : String(r.authorized_at ?? r.authorizedAt),
+      authorized_by_name: String(r.authorized_by_name ?? r.authorizedByName ?? '').trim(),
+      days_pending:
+        r.days_pending == null || r.days_pending === ''
+          ? null
+          : Number.isFinite(Number(r.days_pending))
+            ? Number(r.days_pending)
+            : null,
       dispatched_by_name: String(r.dispatched_by_name ?? r.dispatchedByName ?? '').trim(),
       pickup_by: String(r.pickup_by ?? r.pickupBy ?? '').trim(),
       pickup_cellphone: String(r.pickup_cellphone ?? r.cellphone ?? '').trim(),
@@ -821,6 +815,10 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
         r.bill_status == null && r.billStatus == null
           ? null
           : String(r.bill_status ?? r.billStatus ?? '').trim() || null,
+      consignment_delivery_status_label: String(
+        r.consignment_delivery_status_label ?? r.consignmentDeliveryStatusLabel ?? ''
+      ).trim(),
+      awaiting_dispatch: Boolean(r.awaiting_dispatch ?? r.awaitingDispatch),
     }
   })
   const sum = data.summary && typeof data.summary === 'object' ? (data.summary as Record<string, unknown>) : {}
@@ -856,9 +854,14 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
     }
   }
 
+  const reportKindRaw = String(data.report_kind ?? data.reportKind ?? 'dispatched').toLowerCase()
+  const report_kind: 'dispatched' | 'authorized_pending' =
+    reportKindRaw === 'authorized_pending' ? 'authorized_pending' : 'dispatched'
+
   return {
     date_from: String(data.date_from ?? ''),
     date_to: String(data.date_to ?? ''),
+    report_kind,
     release,
     rows,
     pagination,
@@ -883,7 +886,70 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
       loan_rows_without_bill: Number.isFinite(Number(sum.loan_rows_without_bill))
         ? Number(sum.loan_rows_without_bill)
         : 0,
+      max_days_pending: Number.isFinite(Number(sum.max_days_pending))
+        ? Number(sum.max_days_pending)
+        : 0,
+      avg_days_pending: Number.isFinite(Number(sum.avg_days_pending))
+        ? Number(sum.avg_days_pending)
+        : 0,
     },
+  }
+}
+
+async function fetchDispatchReleaseReport(
+  path: string,
+  params: {
+    date_from: string
+    date_to: string
+    release?: 'all' | 'cash' | 'loan'
+    page?: number
+    per_page?: number
+    customer_email?: string
+    customer_phone?: string
+    customer_tax_id?: string
+    customer_name?: string
+    customer_company?: string
+  }
+): Promise<{ ok: true; data: GoodsDispatchedReportData } | { ok: false; message: string }> {
+  try {
+    const qp: Record<string, string> = {
+      date_from: params.date_from,
+      date_to: params.date_to,
+    }
+    if (params.release && params.release !== 'all') {
+      qp.release = params.release
+    }
+    const trim = (s?: string) => (s && String(s).trim() ? String(s).trim() : '')
+    const ce = trim(params.customer_email)
+    const cp = trim(params.customer_phone)
+    const ct = trim(params.customer_tax_id)
+    const cn = trim(params.customer_name)
+    const cc = trim(params.customer_company)
+    if (ce) qp.customer_email = ce
+    if (cp) qp.customer_phone = cp
+    if (ct) qp.customer_tax_id = ct
+    if (cn) qp.customer_name = cn
+    if (cc) qp.customer_company = cc
+    if (params.page != null && Number.isFinite(params.page) && params.page >= 1) {
+      qp.page = String(Math.floor(params.page))
+    }
+    if (params.per_page != null && Number.isFinite(params.per_page) && params.per_page >= 1) {
+      qp.per_page = String(Math.floor(params.per_page))
+    }
+
+    const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/${path}`, { params: qp })
+    const body = response.data as Record<string, unknown>
+    if (body?.status === true && body.rows != null) {
+      return { ok: true, data: normalizeGoodsDispatchedReportData(body) }
+    }
+    return { ok: false, message: String(body?.message || 'Failed to load report') }
+  } catch (err: unknown) {
+    const ax = err as AxiosError<{ message?: string }>
+    const msg =
+      ax.response?.data && typeof ax.response.data === 'object' && 'message' in ax.response.data
+        ? String((ax.response.data as { message?: string }).message)
+        : ax.message
+    return { ok: false, message: msg || 'Failed to load report' }
   }
 }
 

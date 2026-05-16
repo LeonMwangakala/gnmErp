@@ -329,7 +329,7 @@ export function DashboardStatDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='flex max-h-[min(90vh,820px)] flex-col gap-0 overflow-hidden sm:max-w-4xl'>
+      <DialogContent className='flex max-h-[min(90vh,820px)] w-[min(1400px,98vw)] max-w-[min(1400px,98vw)] flex-col gap-0 overflow-hidden sm:max-w-[min(1400px,98vw)]'>
         <DialogHeader className='shrink-0'>
           <DialogTitle>{statKey ? STAT_TITLES[statKey] : 'Details'}</DialogTitle>
           <DialogDescription>

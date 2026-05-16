@@ -520,6 +520,7 @@ type ReportType =
   | 'invoice-payments'
   | 'posted-containers'
   | 'goods-dispatched'
+  | 'authorized-pending-dispatch'
   | 'petty-cash'
   | 'expense-payments'
   | 'container-payments'
@@ -553,6 +554,12 @@ const REPORTS: ReportDefinition[] = [
     title: 'Good dispatched report',
     description:
       'Goods released by dispatch date from CMTS. Credit (loan) dispatches stay on the report after the invoice is paid, with a clear paid vs outstanding record.',
+  },
+  {
+    key: 'authorized-pending-dispatch',
+    title: 'Authorized — not dispatched',
+    description:
+      'Goods authorized for pickup but still in the warehouse (pending dispatch). Filter by authorization date; see how long each line has been waiting.',
   },
   {
     key: 'petty-cash',
@@ -704,7 +711,7 @@ function isPostedContainersFilters(
   return f != null && 'containerNo' in f && 'dateFrom' in f && 'datePreset' in f
 }
 
-function isGoodsDispatchedFilters(
+function isDispatchReleaseReportFilters(
   f: ReportFilters | null | undefined
 ): f is GoodsDispatchedFilters {
   return (
@@ -712,6 +719,7 @@ function isGoodsDispatchedFilters(
     'dateFrom' in f &&
     'dateTo' in f &&
     'datePreset' in f &&
+    'releaseFilter' in f &&
     !('containerNo' in f) &&
     !('status' in f) &&
     !('userId' in f)
@@ -894,21 +902,29 @@ export function Reports() {
     }
   }
 
-  const submitGoodsDispatchedReport = async () => {
-    if (!filters || !isGoodsDispatchedFilters(filters)) return
+  const submitDispatchReleaseReport = async (kind: 'dispatched' | 'authorized_pending') => {
+    if (!filters || !isDispatchReleaseReportFilters(filters)) return
     if (!filters.dateFrom || !filters.dateTo) {
-      toast.error('Choose a dispatch date range.')
+      toast.error(
+        kind === 'authorized_pending'
+          ? 'Choose an authorization date range.'
+          : 'Choose a dispatch date range.'
+      )
       return
     }
     setGoodsDispatchedReportSubmitting(true)
     try {
-      const result = await invoiceApi.getGoodsDispatchedReport({
+      const params = {
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
         release: filters.releaseFilter,
         page: 1,
         per_page: GOODS_DISPATCHED_PER_PAGE,
-      })
+      }
+      const result =
+        kind === 'authorized_pending'
+          ? await invoiceApi.getAuthorizedPendingDispatchReport(params)
+          : await invoiceApi.getGoodsDispatchedReport(params)
       if (!result.ok) {
         toast.error(result.message)
         return
@@ -925,13 +941,17 @@ export function Reports() {
     if (!goodsDispatchedReportData) return
     setGoodsDispatchedReportPaging(true)
     try {
-      const result = await invoiceApi.getGoodsDispatchedReport({
+      const params = {
         date_from: goodsDispatchedReportData.date_from,
         date_to: goodsDispatchedReportData.date_to,
         release: goodsDispatchedReportData.release,
         page,
         per_page: GOODS_DISPATCHED_PER_PAGE,
-      })
+      }
+      const result =
+        goodsDispatchedReportData.report_kind === 'authorized_pending'
+          ? await invoiceApi.getAuthorizedPendingDispatchReport(params)
+          : await invoiceApi.getGoodsDispatchedReport(params)
       if (!result.ok) {
         toast.error(result.message)
         return
@@ -1030,7 +1050,8 @@ export function Reports() {
           containerNo: '',
         }
       }
-      case 'goods-dispatched': {
+      case 'goods-dispatched':
+      case 'authorized-pending-dispatch': {
         const { dateFrom, dateTo } = getInvoicePaymentRangeForPreset('month')
         return {
           datePreset: 'month' as const,
@@ -1065,7 +1086,8 @@ export function Reports() {
       selectedReport.key === 'invoice-payments' ||
       selectedReport.key === 'invoice' ||
       selectedReport.key === 'posted-containers' ||
-      selectedReport.key === 'goods-dispatched'
+      selectedReport.key === 'goods-dispatched' ||
+      selectedReport.key === 'authorized-pending-dispatch'
     )
       return
     try {
@@ -1146,6 +1168,7 @@ export function Reports() {
                 selectedReport?.key !== 'invoice' &&
                 selectedReport?.key !== 'posted-containers' &&
                 selectedReport?.key !== 'goods-dispatched' &&
+                selectedReport?.key !== 'authorized-pending-dispatch' &&
                 'dateRange' in filters && (
               <div className='space-y-2'>
                 <Label htmlFor='dateRange'>Date range</Label>
@@ -1161,7 +1184,8 @@ export function Reports() {
               {(selectedReport?.key === 'invoice-payments' ||
                 selectedReport?.key === 'invoice' ||
                 selectedReport?.key === 'posted-containers' ||
-                selectedReport?.key === 'goods-dispatched') &&
+                selectedReport?.key === 'goods-dispatched' ||
+                selectedReport?.key === 'authorized-pending-dispatch') &&
                 isDateRangedReportFilters(filters) && (
                   <div className='space-y-3'>
                     <Label>
@@ -1271,7 +1295,9 @@ export function Reports() {
                 </div>
               )}
 
-              {selectedReport?.key === 'goods-dispatched' && isGoodsDispatchedFilters(filters) && (
+              {(selectedReport?.key === 'goods-dispatched' ||
+                selectedReport?.key === 'authorized-pending-dispatch') &&
+                isDispatchReleaseReportFilters(filters) && (
                 <div className='space-y-2'>
                   <Label htmlFor='goodsDispatchedRelease'>Dispatch on</Label>
                   <Select
@@ -1663,11 +1689,26 @@ export function Reports() {
                   disabled={
                     goodsDispatchedReportSubmitting ||
                     !filters ||
-                    !isGoodsDispatchedFilters(filters) ||
+                    !isDispatchReleaseReportFilters(filters) ||
                     !filters.dateFrom ||
                     !filters.dateTo
                   }
-                  onClick={() => void submitGoodsDispatchedReport()}
+                  onClick={() => void submitDispatchReleaseReport('dispatched')}
+                >
+                  {goodsDispatchedReportSubmitting ? 'Loading…' : 'Submit'}
+                </Button>
+              ) : selectedReport?.key === 'authorized-pending-dispatch' ? (
+                <Button
+                  type='button'
+                  size='sm'
+                  disabled={
+                    goodsDispatchedReportSubmitting ||
+                    !filters ||
+                    !isDispatchReleaseReportFilters(filters) ||
+                    !filters.dateFrom ||
+                    !filters.dateTo
+                  }
+                  onClick={() => void submitDispatchReleaseReport('authorized_pending')}
                 >
                   {goodsDispatchedReportSubmitting ? 'Loading…' : 'Submit'}
                 </Button>
