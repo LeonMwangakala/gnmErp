@@ -16,9 +16,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { paymentApi, bankAccountApi, invoiceApi } from '@/lib/api'
+import { paymentApi, bankAccountApi, invoiceApi, customerApi, type GoodsDispatchedReportRow } from '@/lib/api'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
 
 
 interface PaymentAccountOption {
@@ -66,11 +67,41 @@ interface InvoiceOption {
   id: number
   invoice_number: string
   subject: string
+  customer_id?: number
   customer_name: string
   total: number
   due: number
   currency: number | null
   currency_exchange_rate: number
+}
+
+const CREDIT_DISPATCH_LOOKUP_YEARS = 5
+
+function creditDispatchLookupDateRange() {
+  const to = new Date()
+  const from = new Date()
+  from.setFullYear(from.getFullYear() - CREDIT_DISPATCH_LOOKUP_YEARS)
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }
+}
+
+function formatDispatchedAt(iso: string | null) {
+  if (!iso) return '—'
+  try {
+    const d = parseISO(iso)
+    if (Number.isNaN(d.getTime())) return iso
+    return format(d, 'yyyy-MM-dd HH:mm')
+  } catch {
+    return iso
+  }
+}
+
+function digitsOnly(s: string) {
+  return s.replace(/\D/g, '')
+}
+
+function isUnpaidCreditDispatchRow(r: GoodsDispatchedReportRow) {
+  const onCredit = r.dispatched_on_credit || r.release_type === 'loan'
+  return onCredit && !r.bill_fully_paid
 }
 
 const CONTAINER_INVOICE_LOOKUP_CONCURRENCY = 4
@@ -132,6 +163,8 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
   const [accounts, setAccounts] = useState<PaymentAccountOption[]>([])
   const [currencies, setCurrencies] = useState<PaymentCurrencyOption[]>([])
   const [maxAmount, setMaxAmount] = useState<number | null>(null)
+  const [creditDispatchRows, setCreditDispatchRows] = useState<GoodsDispatchedReportRow[]>([])
+  const [creditDispatchLoading, setCreditDispatchLoading] = useState(false)
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const [form, setForm] = useState<PaymentFormData>({
@@ -167,6 +200,8 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
       setContainerInvoices([])
       setSelectedInvoice(null)
       setMaxAmount(null)
+      setCreditDispatchRows([])
+      setCreditDispatchLoading(false)
       // Default date to now in YYYY-MM-DD HH:mm:ss format
       const now = new Date()
       const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
@@ -202,8 +237,60 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
       setStep(1)
       setContainerNo('')
       setContainerInvoices([])
+      setCreditDispatchRows([])
+      setCreditDispatchLoading(false)
     }
   }, [open])
+
+  const loadUnpaidCreditDispatches = useCallback(async (selected: InvoiceOption) => {
+    setCreditDispatchLoading(true)
+    setCreditDispatchRows([])
+    try {
+      let customerEmail: string | undefined
+      let customerPhone: string | undefined
+      let customerTaxId: string | undefined
+      let customerName = (selected.customer_name || '').trim()
+
+      if (selected.customer_id) {
+        try {
+          const customer = await customerApi.getCustomer(selected.customer_id)
+          customerEmail = customer.email?.trim() || undefined
+          const phoneDigits = digitsOnly(customer.contact || '')
+          customerPhone = phoneDigits.length >= 9 ? phoneDigits : undefined
+          customerTaxId = customer.tax_number?.trim() || undefined
+          customerName = (customer.name || customerName).trim()
+        } catch {
+          // Fall back to invoice customer name only
+        }
+      }
+
+      if (customerName.length < 2 && !customerEmail && !customerPhone && !customerTaxId) {
+        setCreditDispatchRows([])
+        return
+      }
+
+      const range = creditDispatchLookupDateRange()
+      const res = await invoiceApi.getGoodsDispatchedReport({
+        date_from: range.from,
+        date_to: range.to,
+        release: 'loan',
+        customer_email: customerEmail,
+        customer_phone: customerPhone,
+        customer_tax_id: customerTaxId,
+        customer_name: customerName.length >= 2 ? customerName : undefined,
+      })
+
+      if (res.ok) {
+        setCreditDispatchRows(res.data.rows.filter(isUnpaidCreditDispatchRow))
+      } else {
+        setCreditDispatchRows([])
+      }
+    } catch {
+      setCreditDispatchRows([])
+    } finally {
+      setCreditDispatchLoading(false)
+    }
+  }, [])
 
   const loadFormData = async () => {
     try {
@@ -256,6 +343,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
         id: inv.id,
         invoice_number: inv.invoice_number || '',
         subject: inv.subject || '',
+        customer_id: inv.customer_id ? Number(inv.customer_id) : undefined,
         customer_name: inv.customer_name || '',
         total: inv.total || 0,
         due: inv.due || 0,
@@ -330,6 +418,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
               id: match.id,
               invoice_number: match.invoice_number || '',
               subject: match.subject || '',
+              customer_id: match.customer_id ? Number(match.customer_id) : undefined,
               customer_name: match.customer_name || '',
               total: match.total || 0,
               due: match.due || 0,
@@ -398,8 +487,18 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
     }
   }
 
+  useEffect(() => {
+    if (step === 2 && selectedInvoice) {
+      void loadUnpaidCreditDispatches(selectedInvoice)
+    } else if (step !== 2) {
+      setCreditDispatchRows([])
+      setCreditDispatchLoading(false)
+    }
+  }, [step, selectedInvoice?.id, loadUnpaidCreditDispatches])
+
   const handleInvoiceChange = (selected: InvoiceOption | null) => {
     setSelectedInvoice(selected)
+    setCreditDispatchRows([])
     
     if (selected) {
       setForm((prev) => ({
@@ -429,6 +528,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
         reference: '',
       }))
       setMaxAmount(null)
+      setCreditDispatchLoading(false)
     }
   }
 
@@ -961,6 +1061,10 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                 <h3 className='text-sm font-semibold mb-2'>Invoice Details</h3>
                 <div className='text-sm space-y-1'>
                   <p>
+                    <span className='text-muted-foreground'>Customer: </span>
+                    <span>{selectedInvoice?.customer_name || '—'}</span>
+                  </p>
+                  <p>
                     <span className='text-muted-foreground'>Invoice Amount: </span>
                     <span>
                       {selectedInvoice
@@ -988,6 +1092,63 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                       })()}
                     </span>
                   </p>
+                </div>
+
+                <div className='border-t pt-3 mt-3 space-y-2'>
+                  <h4 className='text-sm font-semibold leading-snug'>
+                    Credit dispatches — invoice not paid
+                  </h4>
+                  <p className='text-xs text-muted-foreground leading-snug'>
+                    Loan releases for this customer where the linked invoice is still outstanding (
+                    last {CREDIT_DISPATCH_LOOKUP_YEARS} years).
+                  </p>
+                  {creditDispatchLoading ? (
+                    <div className='flex items-center gap-2 py-2 text-xs text-muted-foreground'>
+                      <Loader2 className='h-4 w-4 animate-spin' />
+                      Checking dispatches…
+                    </div>
+                  ) : creditDispatchRows.length === 0 ? (
+                    <p className='text-xs text-muted-foreground'>
+                      No outstanding credit dispatches found for this customer.
+                    </p>
+                  ) : (
+                    <div className='max-h-52 overflow-auto rounded border bg-background'>
+                      <table className='w-full text-xs'>
+                        <thead className='bg-muted/40 sticky top-0'>
+                          <tr>
+                            <th className='text-left px-2 py-1.5 font-medium'>Dispatched</th>
+                            <th className='text-left px-2 py-1.5 font-medium'>Ref</th>
+                            <th className='text-left px-2 py-1.5 font-medium'>Invoice</th>
+                            <th className='text-right px-2 py-1.5 font-medium'>Balance</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {creditDispatchRows.map((r) => (
+                            <tr key={r.id} className='border-t'>
+                              <td className='px-2 py-1.5 whitespace-nowrap tabular-nums'>
+                                {formatDispatchedAt(r.dispatched_at)}
+                              </td>
+                              <td className='px-2 py-1.5 font-mono'>{r.dispatch_reference || '—'}</td>
+                              <td className='px-2 py-1.5'>
+                                <div className='font-medium'>{r.invoice_no ?? '—'}</div>
+                                <div className='text-muted-foreground mt-0.5 leading-snug'>
+                                  {r.credit_dispatch_note}
+                                </div>
+                                {r.good_name ? (
+                                  <div className='text-muted-foreground mt-0.5 truncate max-w-[140px]'>
+                                    {r.good_name}
+                                  </div>
+                                ) : null}
+                              </td>
+                              <td className='px-2 py-1.5 text-right tabular-nums'>
+                                {r.bill_balance != null ? r.bill_balance : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
                 </div>
               )}
