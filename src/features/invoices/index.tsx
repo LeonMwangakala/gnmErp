@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Send,
+  Undo2,
   Filter,
   Info,
   Pencil,
@@ -41,6 +42,7 @@ import { Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { InvoiceDetailModal } from './invoice-detail-modal'
 import { PostInvoicesModal } from './post-invoices-modal'
+import { UnpostInvoicesModal } from './unpost-invoices-modal'
 import { InvoiceConsignmentsGoodsModal } from './invoice-consignments-goods-modal'
 import { UpdateInvoiceAmountModal } from './update-invoice-amount-modal'
 import { useAuthStore } from '@/stores/auth-store'
@@ -96,6 +98,7 @@ export function Invoices() {
   const [searchInput, setSearchInput] = useState('')
   const [statusFilter, setStatusFilter] = useState<number[]>([])
   const [isPostInvoicesModalOpen, setIsPostInvoicesModalOpen] = useState(false)
+  const [isUnpostInvoicesModalOpen, setIsUnpostInvoicesModalOpen] = useState(false)
   const [cargoModalOpen, setCargoModalOpen] = useState(false)
   const [cargoInvoiceNo, setCargoInvoiceNo] = useState<string | null>(null)
   const [updateAmountModalOpen, setUpdateAmountModalOpen] = useState(false)
@@ -248,6 +251,16 @@ export function Invoices() {
               <Send className='mr-2 h-4 w-4' />
               Post Invoices
             </Button>
+            {canSeeUpdateAmountAction && (
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => setIsUnpostInvoicesModalOpen(true)}
+              >
+                <Undo2 className='mr-2 h-4 w-4' />
+                Unpost Invoices
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant='outline' size='sm'>
@@ -534,6 +547,12 @@ export function Invoices() {
         open={isPostInvoicesModalOpen}
         onOpenChange={setIsPostInvoicesModalOpen}
         onPosted={() => fetchInvoices()}
+      />
+
+      <UnpostInvoicesModal
+        open={isUnpostInvoicesModalOpen}
+        onOpenChange={setIsUnpostInvoicesModalOpen}
+        onUnposted={() => fetchInvoices()}
       />
 
       <InvoiceConsignmentsGoodsModal

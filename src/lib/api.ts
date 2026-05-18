@@ -422,6 +422,19 @@ export const invoiceApi = {
     const response = await api.post('/invoices/bulk-post', payload)
     return response.data
   },
+  bulkUnpost: async (
+    invoiceIds: number[],
+    options?: { container_no?: string }
+  ) => {
+    const payload: Record<string, unknown> = {
+      invoice_ids: invoiceIds,
+    }
+    if (options?.container_no !== undefined && options.container_no.trim() !== '') {
+      payload.container_no = options.container_no.trim()
+    }
+    const response = await api.post('/invoices/bulk-unpost', payload)
+    return response.data
+  },
   syncSourceAmount: async (invoiceNumber: string, sourceAmount: number) => {
     const response = await api.post('/invoices/sync-source-amount', {
       invoice_number: invoiceNumber,
