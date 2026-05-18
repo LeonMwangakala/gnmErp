@@ -53,12 +53,23 @@ function roundOffAmount(value: number | null | undefined): number {
   return Math.round(amount)
 }
 
-/** Sent (1), no payments, present in Torchlight. */
-function isRowUnpostable(row: Row): boolean {
+function invoiceHasPayments(torch: TorchlightInvoiceDetails): boolean {
+  const total = roundOffAmount(torch.amount)
+  const due = roundOffAmount(torch.due ?? torch.amount)
+  return Math.abs(due - total) >= 0.02
+}
+
+function getPaidInvoicesOnContainer(rows: Row[]): string[] {
+  return rows
+    .filter((r) => r.torchlight && invoiceHasPayments(r.torchlight))
+    .map((r) => r.source.invoice_no)
+}
+
+/** Sent (1), no payments, present in Torchlight; blocked when container has any paid invoice. */
+function isRowUnpostable(row: Row, containerBlocked: boolean): boolean {
+  if (containerBlocked) return false
   if (!row.torchlight || row.torchlight.status !== 1) return false
-  const total = roundOffAmount(row.torchlight.amount)
-  const due = roundOffAmount(row.torchlight.due ?? row.torchlight.amount)
-  return Math.abs(due - total) < 0.02
+  return !invoiceHasPayments(row.torchlight)
 }
 
 async function mapWithConcurrency<T, R>(
@@ -112,20 +123,28 @@ export function UnpostInvoicesModal({
   const [isFetching, setIsFetching] = useState(false)
   const [rows, setRows] = useState<Row[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [paidInvoiceNosOnContainer, setPaidInvoiceNosOnContainer] = useState<string[]>([])
+
+  const containerBlocked = paidInvoiceNosOnContainer.length > 0
 
   useEffect(() => {
     if (!open) {
       setContainerNo('')
       setRows([])
+      setPaidInvoiceNosOnContainer([])
       setIsFetching(false)
       setIsSubmitting(false)
     }
   }, [open])
 
-  const unpostableRows = useMemo(() => rows.filter(isRowUnpostable), [rows])
+  const unpostableRows = useMemo(
+    () => rows.filter((r) => isRowUnpostable(r, containerBlocked)),
+    [rows, containerBlocked]
+  )
   const selectedCount = useMemo(
-    () => rows.filter((r) => r.selected && isRowUnpostable(r)).length,
-    [rows]
+    () =>
+      rows.filter((r) => r.selected && isRowUnpostable(r, containerBlocked)).length,
+    [rows, containerBlocked]
   )
   const allSelected =
     unpostableRows.length > 0 && unpostableRows.every((r) => r.selected)
@@ -150,6 +169,7 @@ export function UnpostInvoicesModal({
     try {
       setIsFetching(true)
       setRows([])
+      setPaidInvoiceNosOnContainer([])
 
       const sourceResp = await invoiceApi.getInvoiceNosByContainer(trimmed)
       const sourceInvoices: SourceInvoice[] = sourceResp?.invoices || []
@@ -172,17 +192,27 @@ export function UnpostInvoicesModal({
         4
       )
 
-      const nextRows: Row[] = torchlightResults.map((res) => {
-        const row: Row = {
-          source: res.source,
-          torchlight: res.torchlight,
-          selected: false,
-        }
-        return {
-          ...row,
-          selected: isRowUnpostable(row),
-        }
-      })
+      const mappedRows: Row[] = torchlightResults.map((res) => ({
+        source: res.source,
+        torchlight: res.torchlight,
+        selected: false,
+      }))
+
+      const paidOnContainer = getPaidInvoicesOnContainer(mappedRows)
+      setPaidInvoiceNosOnContainer(paidOnContainer)
+
+      if (paidOnContainer.length > 0) {
+        setRows(mappedRows)
+        toast.error(
+          `Cannot unpost: this container has paid invoice(s): ${paidOnContainer.join(', ')}`
+        )
+        return
+      }
+
+      const nextRows: Row[] = mappedRows.map((row) => ({
+        ...row,
+        selected: isRowUnpostable(row, false),
+      }))
 
       setRows(nextRows)
     } catch (error: unknown) {
@@ -197,7 +227,7 @@ export function UnpostInvoicesModal({
     setRows((prev) =>
       prev.map((r, i) => {
         if (i !== index) return r
-        if (!isRowUnpostable(r)) return { ...r, selected: false }
+        if (!isRowUnpostable(r, containerBlocked)) return { ...r, selected: false }
         return { ...r, selected: value }
       })
     )
@@ -206,14 +236,21 @@ export function UnpostInvoicesModal({
   const toggleAll = (value: boolean) => {
     setRows((prev) =>
       prev.map((r) =>
-        isRowUnpostable(r) ? { ...r, selected: value } : { ...r, selected: false }
+        isRowUnpostable(r, containerBlocked) ? { ...r, selected: value } : { ...r, selected: false }
       )
     )
   }
 
   const handleSubmit = async () => {
+    if (containerBlocked) {
+      toast.error(
+        `Cannot unpost: this container has paid invoice(s): ${paidInvoiceNosOnContainer.join(', ')}`
+      )
+      return
+    }
+
     const selectedIds = rows
-      .filter((r) => r.selected && isRowUnpostable(r))
+      .filter((r) => r.selected && isRowUnpostable(r, false))
       .map((r) => r.torchlight!.id)
 
     if (selectedIds.length === 0) {
@@ -240,6 +277,17 @@ export function UnpostInvoicesModal({
         )
         await onUnposted?.()
         onOpenChange(false)
+      } else if (response.status === 422) {
+        const paid = (response.data?.paid_invoices || []) as Array<{
+          invoice_number?: string
+        }>
+        const paidNos = paid
+          .map((p) => p.invoice_number)
+          .filter((n): n is string => Boolean(n))
+        if (paidNos.length) {
+          setPaidInvoiceNosOnContainer(paidNos)
+        }
+        toast.error(response.message || 'Cannot unpost: container has paid invoice(s).')
       } else {
         toast.error(response.message || 'Failed to unpost invoices')
       }
@@ -257,9 +305,10 @@ export function UnpostInvoicesModal({
         <DialogHeader>
           <DialogTitle>Unpost Invoices</DialogTitle>
           <DialogDescription>
-            Load invoices by container. Only <span className='font-medium'>Sent</span> invoices with{' '}
-            <span className='font-medium'>no payments</span> that were posted for this container can be
-            reverted to draft.
+            Load invoices by container. Unpost is only allowed when{' '}
+            <span className='font-medium'>no invoice on the container has any payment</span>. Eligible
+            rows must be <span className='font-medium'>Sent</span>, fully unpaid, and posted for this
+            container.
           </DialogDescription>
         </DialogHeader>
 
@@ -295,7 +344,12 @@ export function UnpostInvoicesModal({
                 type='button'
                 variant='destructive'
                 onClick={() => void handleSubmit()}
-                disabled={isSubmitting || rows.length === 0 || selectedCount === 0}
+                disabled={
+                  isSubmitting ||
+                  containerBlocked ||
+                  rows.length === 0 ||
+                  selectedCount === 0
+                }
               >
                 {isSubmitting ? (
                   <>
@@ -311,7 +365,17 @@ export function UnpostInvoicesModal({
 
           {rows.length > 0 && (
             <>
-              {unpostableRows.length === 0 && (
+              {containerBlocked && (
+                <div className='rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive'>
+                  Cannot unpost this container: paid invoice(s){' '}
+                  <span className='font-mono font-medium'>
+                    {paidInvoiceNosOnContainer.join(', ')}
+                  </span>
+                  . All invoices on the container must be unpaid before any can be reverted to draft.
+                </div>
+              )}
+
+              {!containerBlocked && unpostableRows.length === 0 && (
                 <div className='rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100'>
                   No sent, unpaid invoices for this container can be unposted. Invoices may still be
                   draft, already paid, or were not posted with this container number.
@@ -350,7 +414,9 @@ export function UnpostInvoicesModal({
                       </TableCell>
                     </TableRow>
                     {rows.map((row, idx) => {
-                      const unpostable = isRowUnpostable(row)
+                      const hasPayment =
+                        row.torchlight != null && invoiceHasPayments(row.torchlight)
+                      const unpostable = isRowUnpostable(row, containerBlocked)
                       return (
                         <TableRow
                           key={row.source.invoice_no}
@@ -380,6 +446,8 @@ export function UnpostInvoicesModal({
                           <TableCell>
                             {!row.torchlight ? (
                               <Badge variant='secondary'>Not in Torchlight</Badge>
+                            ) : hasPayment ? (
+                              <Badge variant='destructive'>Paid / partial</Badge>
                             ) : unpostable ? (
                               <Badge variant='outline' className='bg-yellow-500/10'>
                                 {row.torchlight.status_label ?? 'Sent'}

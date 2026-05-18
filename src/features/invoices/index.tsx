@@ -251,16 +251,14 @@ export function Invoices() {
               <Send className='mr-2 h-4 w-4' />
               Post Invoices
             </Button>
-            {canSeeUpdateAmountAction && (
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() => setIsUnpostInvoicesModalOpen(true)}
-              >
-                <Undo2 className='mr-2 h-4 w-4' />
-                Unpost Invoices
-              </Button>
-            )}
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => setIsUnpostInvoicesModalOpen(true)}
+            >
+              <Undo2 className='mr-2 h-4 w-4' />
+              Unpost Invoices
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant='outline' size='sm'>
