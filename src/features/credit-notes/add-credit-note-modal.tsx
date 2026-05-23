@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { creditNoteApi } from '@/lib/api'
+import { amountExceedsMax, formatMoney, roundMoney } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 
@@ -197,9 +198,9 @@ export function AddCreditNoteModal({
 
     if (field === 'amount') {
       const numericAmount = parseFloat(value || '0')
-      if (maxAmount !== null && numericAmount > maxAmount) {
+      if (maxAmount !== null && amountExceedsMax(numericAmount, maxAmount)) {
         toast.error(
-          `Amount cannot exceed ${maxAmount.toFixed(2)} (converted due amount).`
+          `Amount cannot exceed ${formatMoney(maxAmount)} (converted due amount).`
         )
       }
     }
@@ -284,7 +285,7 @@ export function AddCreditNoteModal({
       maximumAmount = invoiceDue * invoiceRate
       maximumAmount = maximumAmount / selectedRate
     }
-    setMaxAmount(maximumAmount)
+    setMaxAmount(roundMoney(maximumAmount))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -296,9 +297,9 @@ export function AddCreditNoteModal({
     }
 
     const amountValue = parseFloat(form.amount || '0')
-    if (maxAmount !== null && amountValue > maxAmount) {
+    if (maxAmount !== null && amountExceedsMax(amountValue, maxAmount)) {
       toast.error(
-        `Amount cannot exceed ${maxAmount.toFixed(2)} (converted due amount).`
+        `Amount cannot exceed ${formatMoney(maxAmount)} (converted due amount).`
       )
       return
     }
@@ -518,7 +519,7 @@ export function AddCreditNoteModal({
                     {maxAmount !== null && (
                       <p className='mt-1 text-xs text-muted-foreground'>
                         Maximum allowed (based on due & currency):{' '}
-                        {maxAmount.toFixed(2)}
+                        {formatMoney(maxAmount)}
                       </p>
                     )}
                   </div>

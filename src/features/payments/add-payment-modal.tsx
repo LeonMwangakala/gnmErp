@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { paymentApi, bankAccountApi, invoiceApi, customerApi, type GoodsDispatchedReportRow } from '@/lib/api'
 import { toast } from 'sonner'
+import { amountExceedsMax, formatMoney, roundMoney } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
@@ -470,8 +471,8 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
 
     if (field === 'amount') {
       const numericAmount = parseFloat(value || '0')
-      if (maxAmount !== null && numericAmount > maxAmount) {
-        toast.error(`Amount cannot exceed ${maxAmount.toFixed(2)} (converted due amount).`)
+      if (maxAmount !== null && amountExceedsMax(numericAmount, maxAmount)) {
+        toast.error(`Amount cannot exceed ${formatMoney(maxAmount)} (converted due amount).`)
       }
     }
 
@@ -585,7 +586,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
       // So: amount_in_selected = amount_in_invoice / invoiceRate * selectedRate
       maximumAmount = (invoiceDue / invoiceRate) * selectedRate
     }
-    setMaxAmount(maximumAmount)
+    setMaxAmount(roundMoney(maximumAmount))
   }
 
   const handleFileChange = (file: File | null) => {
@@ -618,8 +619,8 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
     }
 
     const amountValue = parseFloat(form.amount || '0')
-    if (maxAmount !== null && amountValue > maxAmount) {
-      toast.error(`Amount cannot exceed ${maxAmount.toFixed(2)} (converted due amount).`)
+    if (maxAmount !== null && amountExceedsMax(amountValue, maxAmount)) {
+      toast.error(`Amount cannot exceed ${formatMoney(maxAmount)} (converted due amount).`)
       return
     }
 
@@ -997,7 +998,7 @@ export function AddPaymentModal({ open, onOpenChange, onSuccess }: AddPaymentMod
                         {(() => {
                           const cur = currencies.find((c) => String(c.id) === form.currency)
                           const symbol = cur?.currency_symbol || '$'
-                          return `${symbol}${maxAmount.toFixed(2)}`
+                          return `${symbol}${formatMoney(maxAmount)}`
                         })()}
                       </p>
                     )}

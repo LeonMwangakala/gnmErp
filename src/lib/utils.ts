@@ -29,6 +29,22 @@ export function sleep(ms: number = 1000) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** Round monetary values to cents (2 dp) for stable display and comparisons. */
+export function roundMoney(amount: number, decimals = 2): number {
+  if (!Number.isFinite(amount)) return 0
+  const factor = 10 ** decimals
+  return Math.round((amount + Number.EPSILON) * factor) / factor
+}
+
+/** Compare payment/credit amounts without float noise (e.g. 1 vs 0.999999999). */
+export function amountExceedsMax(amount: number, max: number): boolean {
+  return roundMoney(amount) > roundMoney(max)
+}
+
+export function formatMoney(amount: number, decimals = 2): string {
+  return roundMoney(amount, decimals).toFixed(decimals)
+}
+
 /**
  * Generates page numbers for pagination with ellipsis
  * @param currentPage - Current page number (1-based)
