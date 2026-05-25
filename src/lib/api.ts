@@ -435,9 +435,12 @@ export const invoiceApi = {
     const response = await api.post('/invoices/bulk-unpost', payload)
     return response.data
   },
-  /** Partial Paid invoices with zero total/due (≤ epsilon) → Paid */
-  markZeroPartialPaid: async (epsilon = 0.001) => {
-    const response = await api.post('/invoices/mark-zero-partial-paid', { epsilon })
+  /** Partial Paid invoices with zero total/due (≤ epsilon) → Paid; dry_run returns preview rows */
+  markZeroPartialPaid: async (epsilon = 0.001, dryRun = false) => {
+    const response = await api.post('/invoices/mark-zero-partial-paid', {
+      epsilon,
+      dry_run: dryRun,
+    })
     return response.data
   },
   syncSourceAmount: async (invoiceNumber: string, sourceAmount: number) => {

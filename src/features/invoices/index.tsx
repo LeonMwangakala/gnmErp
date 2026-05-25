@@ -46,6 +46,7 @@ import { PostInvoicesModal } from './post-invoices-modal'
 import { UnpostInvoicesModal } from './unpost-invoices-modal'
 import { InvoiceConsignmentsGoodsModal } from './invoice-consignments-goods-modal'
 import { UpdateInvoiceAmountModal } from './update-invoice-amount-modal'
+import { MarkZeroPartialPaidModal } from './mark-zero-partial-paid-modal'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   DropdownMenu,
@@ -104,7 +105,7 @@ export function Invoices() {
   const [cargoInvoiceNo, setCargoInvoiceNo] = useState<string | null>(null)
   const [updateAmountModalOpen, setUpdateAmountModalOpen] = useState(false)
   const [selectedInvoiceForAmountUpdate, setSelectedInvoiceForAmountUpdate] = useState<Invoice | null>(null)
-  const [isMarkingZeroPartialPaid, setIsMarkingZeroPartialPaid] = useState(false)
+  const [isMarkZeroPartialModalOpen, setIsMarkZeroPartialModalOpen] = useState(false)
   const authUser = useAuthStore((state) => state.auth.user)
   const canSeeUpdateAmountAction = (authUser?.email || '').toLowerCase().startsWith('admin@')
 
@@ -198,32 +199,6 @@ export function Invoices() {
     setPagination((prev) => ({ ...prev, current_page: 1 }))
   }
 
-  const handleMarkZeroPartialPaid = async () => {
-    const confirmed = window.confirm(
-      'Mark all Partial Paid invoices as Paid when their total or balance due is zero (including amounts like 0.001)?'
-    )
-    if (!confirmed) {
-      return
-    }
-
-    try {
-      setIsMarkingZeroPartialPaid(true)
-      const response = await invoiceApi.markZeroPartialPaid(0.001)
-      if (response?.status === 200) {
-        const count = Number(response?.data?.updated_count ?? 0)
-        toast.success(response?.message || `Updated ${count} invoice(s).`)
-        await fetchInvoices()
-      } else {
-        toast.error(response?.message || 'Failed to update invoice statuses')
-      }
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } }
-      toast.error(err?.response?.data?.message || 'Failed to update invoice statuses')
-    } finally {
-      setIsMarkingZeroPartialPaid(false)
-    }
-  }
-
   const statusOptions = [
     { value: 0, label: 'Draft' },
     { value: 1, label: 'Sent' },
@@ -290,14 +265,9 @@ export function Invoices() {
             <Button
               variant='outline'
               size='sm'
-              disabled={isMarkingZeroPartialPaid}
-              onClick={() => void handleMarkZeroPartialPaid()}
+              onClick={() => setIsMarkZeroPartialModalOpen(true)}
             >
-              {isMarkingZeroPartialPaid ? (
-                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-              ) : (
-                <CheckCircle2 className='mr-2 h-4 w-4' />
-              )}
+              <CheckCircle2 className='mr-2 h-4 w-4' />
               Fix zero partials
             </Button>
             <DropdownMenu>
@@ -619,6 +589,12 @@ export function Invoices() {
             : null
         }
         onUpdated={() => fetchInvoices()}
+      />
+
+      <MarkZeroPartialPaidModal
+        open={isMarkZeroPartialModalOpen}
+        onOpenChange={setIsMarkZeroPartialModalOpen}
+        onApplied={() => void fetchInvoices()}
       />
     </>
   )
