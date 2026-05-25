@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -41,9 +42,17 @@ const EPSILON = 0.001
 
 export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Props) {
   const [rows, setRows] = useState<ZeroPartialInvoiceRow[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+
+  const allSelected = useMemo(
+    () => rows.length > 0 && selectedIds.size === rows.length,
+    [rows.length, selectedIds.size]
+  )
+
+  const someSelected = selectedIds.size > 0 && !allSelected
 
   const loadPreview = useCallback(async () => {
     setIsLoadingPreview(true)
@@ -52,13 +61,17 @@ export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Prop
       const response = await invoiceApi.markZeroPartialPaid(EPSILON, true)
       if (response?.status === 200) {
         const list = (response?.data?.invoices ?? []) as ZeroPartialInvoiceRow[]
-        setRows(Array.isArray(list) ? list : [])
+        const nextRows = Array.isArray(list) ? list : []
+        setRows(nextRows)
+        setSelectedIds(new Set(nextRows.map((row) => row.id)))
       } else {
         setRows([])
+        setSelectedIds(new Set())
         setPreviewError(response?.message || 'Failed to load preview')
       }
     } catch (error: unknown) {
       setRows([])
+      setSelectedIds(new Set())
       const err = error as { response?: { data?: { message?: string } } }
       setPreviewError(err?.response?.data?.message || 'Failed to load preview')
     } finally {
@@ -71,24 +84,46 @@ export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Prop
       void loadPreview()
     } else {
       setRows([])
+      setSelectedIds(new Set())
       setPreviewError(null)
       setIsApplying(false)
     }
   }, [open, loadPreview])
+
+  const toggleRow = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const toggleAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(rows.map((row) => row.id)))
+    } else {
+      setSelectedIds(new Set())
+    }
+  }
 
   const handleReject = () => {
     onOpenChange(false)
   }
 
   const handleAccept = async () => {
-    if (rows.length === 0) {
-      onOpenChange(false)
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) {
+      toast.error('Select at least one invoice.')
       return
     }
 
     try {
       setIsApplying(true)
-      const response = await invoiceApi.markZeroPartialPaid(EPSILON, false)
+      const response = await invoiceApi.markZeroPartialPaid(EPSILON, false, ids)
       if (response?.status === 200) {
         const count = Number(response?.data?.updated_count ?? 0)
         toast.success(response?.message || `Updated ${count} invoice(s).`)
@@ -107,17 +142,16 @@ export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Prop
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-4xl max-h-[85vh] flex flex-col'>
+      <DialogContent className='max-w-[95vw]! w-[95vw]! max-h-[90vh] flex flex-col overflow-hidden sm:max-w-[95vw]! md:max-w-[90vw]! lg:max-w-[85vw]!'>
         <DialogHeader>
           <DialogTitle>Mark zero-balance partials as paid</DialogTitle>
           <DialogDescription>
-            These invoices are Partial Paid but their total or balance due is effectively zero
-            (≤ {EPSILON}). Review the amounts below, then accept to mark them as Paid or reject to
-            cancel.
+            Partial Paid invoices with total or balance due effectively zero (≤ {EPSILON}).
+            Select which invoices to mark as Paid, then accept or reject.
           </DialogDescription>
         </DialogHeader>
 
-        <div className='flex-1 min-h-0 overflow-auto border rounded-md'>
+        <div className='flex-1 min-h-[280px] overflow-auto border rounded-md'>
           {isLoadingPreview ? (
             <div className='flex items-center justify-center gap-2 py-12 text-muted-foreground'>
               <Loader2 className='h-5 w-5 animate-spin' />
@@ -133,6 +167,13 @@ export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Prop
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className='w-12'>
+                    <Checkbox
+                      checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                      onCheckedChange={(value) => toggleAll(value === true)}
+                      aria-label='Select all invoices'
+                    />
+                  </TableHead>
                   <TableHead>Invoice #</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead className='text-right'>Amount</TableHead>
@@ -141,23 +182,37 @@ export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Prop
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className='font-medium'>{row.invoice_number}</TableCell>
-                    <TableCell className='text-muted-foreground max-w-[200px] truncate'>
-                      {row.customer_name || '—'}
-                    </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {formatMoney(row.amount)}
-                    </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {formatMoney(row.paid_amount)}
-                    </TableCell>
-                    <TableCell className='text-right tabular-nums'>
-                      {formatMoney(row.balance)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {rows.map((row) => {
+                  const checked = selectedIds.has(row.id)
+                  return (
+                    <TableRow
+                      key={row.id}
+                      data-state={checked ? 'selected' : undefined}
+                      className={checked ? 'bg-muted/50' : undefined}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(value) => toggleRow(row.id, value === true)}
+                          aria-label={`Select invoice ${row.invoice_number}`}
+                        />
+                      </TableCell>
+                      <TableCell className='font-medium'>{row.invoice_number}</TableCell>
+                      <TableCell className='text-muted-foreground max-w-[240px] truncate'>
+                        {row.customer_name || '—'}
+                      </TableCell>
+                      <TableCell className='text-right tabular-nums'>
+                        {formatMoney(row.amount)}
+                      </TableCell>
+                      <TableCell className='text-right tabular-nums'>
+                        {formatMoney(row.paid_amount)}
+                      </TableCell>
+                      <TableCell className='text-right tabular-nums'>
+                        {formatMoney(row.balance)}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           )}
@@ -165,11 +220,12 @@ export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Prop
 
         {!isLoadingPreview && !previewError && rows.length > 0 && (
           <p className='text-sm text-muted-foreground'>
-            {rows.length} invoice{rows.length === 1 ? '' : 's'} will be marked as Paid.
+            {selectedIds.size} of {rows.length} invoice{rows.length === 1 ? '' : 's'} selected
+            {selectedIds.size > 0 ? ' to mark as Paid' : ''}.
           </p>
         )}
 
-        <DialogFooter className='gap-2 sm:gap-0'>
+        <DialogFooter className='gap-2 sm:gap-0 shrink-0'>
           <Button
             type='button'
             variant='outline'
@@ -181,7 +237,13 @@ export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Prop
           <Button
             type='button'
             onClick={() => void handleAccept()}
-            disabled={isLoadingPreview || isApplying || !!previewError || rows.length === 0}
+            disabled={
+              isLoadingPreview ||
+              isApplying ||
+              !!previewError ||
+              rows.length === 0 ||
+              selectedIds.size === 0
+            }
           >
             {isApplying ? (
               <>
@@ -189,7 +251,7 @@ export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Prop
                 Applying…
               </>
             ) : (
-              'Accept'
+              `Accept (${selectedIds.size})`
             )}
           </Button>
         </DialogFooter>
