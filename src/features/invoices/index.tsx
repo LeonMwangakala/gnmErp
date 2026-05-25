@@ -10,6 +10,7 @@ import {
   Filter,
   Info,
   Pencil,
+  CheckCircle2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -103,6 +104,7 @@ export function Invoices() {
   const [cargoInvoiceNo, setCargoInvoiceNo] = useState<string | null>(null)
   const [updateAmountModalOpen, setUpdateAmountModalOpen] = useState(false)
   const [selectedInvoiceForAmountUpdate, setSelectedInvoiceForAmountUpdate] = useState<Invoice | null>(null)
+  const [isMarkingZeroPartialPaid, setIsMarkingZeroPartialPaid] = useState(false)
   const authUser = useAuthStore((state) => state.auth.user)
   const canSeeUpdateAmountAction = (authUser?.email || '').toLowerCase().startsWith('admin@')
 
@@ -196,6 +198,32 @@ export function Invoices() {
     setPagination((prev) => ({ ...prev, current_page: 1 }))
   }
 
+  const handleMarkZeroPartialPaid = async () => {
+    const confirmed = window.confirm(
+      'Mark all Partial Paid invoices as Paid when their total or balance due is zero (including amounts like 0.001)?'
+    )
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setIsMarkingZeroPartialPaid(true)
+      const response = await invoiceApi.markZeroPartialPaid(0.001)
+      if (response?.status === 200) {
+        const count = Number(response?.data?.updated_count ?? 0)
+        toast.success(response?.message || `Updated ${count} invoice(s).`)
+        await fetchInvoices()
+      } else {
+        toast.error(response?.message || 'Failed to update invoice statuses')
+      }
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } }
+      toast.error(err?.response?.data?.message || 'Failed to update invoice statuses')
+    } finally {
+      setIsMarkingZeroPartialPaid(false)
+    }
+  }
+
   const statusOptions = [
     { value: 0, label: 'Draft' },
     { value: 1, label: 'Sent' },
@@ -258,6 +286,19 @@ export function Invoices() {
             >
               <Undo2 className='mr-2 h-4 w-4' />
               Unpost Invoices
+            </Button>
+            <Button
+              variant='outline'
+              size='sm'
+              disabled={isMarkingZeroPartialPaid}
+              onClick={() => void handleMarkZeroPartialPaid()}
+            >
+              {isMarkingZeroPartialPaid ? (
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+              ) : (
+                <CheckCircle2 className='mr-2 h-4 w-4' />
+              )}
+              Fix zero partials
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
