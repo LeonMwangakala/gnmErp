@@ -41,6 +41,7 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { invoiceApi, paymentApi, PaginationMeta, userApi, type StaffUserOption } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
+import { canDeleteReceivePayment } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { AddPaymentModal } from './add-payment-modal'
@@ -424,15 +425,10 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
 </html>`
 }
 
-function isChiefAccountantUser(user: ReturnType<typeof useAuthStore.getState>['auth']['user']) {
-  const designation = (user?.employee_context?.designation_name || '').trim().toLowerCase()
-  return designation === 'chief accountant'
-}
-
 export function Payments() {
   const user = useAuthStore((s) => s.auth.user)
   const isCreatorUser = (user?.type || '').toLowerCase() === 'company'
-  const canDeletePayment = isChiefAccountantUser(user)
+  const canDeletePayment = canDeleteReceivePayment(user)
   const [payments, setPayments] = useState<Payment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [exportDate, setExportDate] = useState<string>(() => {

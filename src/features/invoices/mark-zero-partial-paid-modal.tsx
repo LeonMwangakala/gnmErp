@@ -225,7 +225,7 @@ export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Prop
           </p>
         )}
 
-        <DialogFooter className='gap-2 sm:gap-0 shrink-0'>
+        <DialogFooter className='gap-4 shrink-0'>
           <Button
             type='button'
             variant='outline'
