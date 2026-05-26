@@ -45,22 +45,6 @@ export function formatMoney(amount: number, decimals = 2): string {
   return roundMoney(amount, decimals).toFixed(decimals)
 }
 
-type EmployeeContextLike = {
-  department_name?: string | null
-  designation_name?: string | null
-}
-
-/** Receive Payments list: delete action — G.M (General Manager) or FM (Finance) only. */
-export function canDeleteReceivePayment(
-  user: { employee_context?: EmployeeContextLike | null } | null | undefined
-): boolean {
-  const dept = (user?.employee_context?.department_name || '').trim().toLowerCase()
-  const desig = (user?.employee_context?.designation_name || '').trim().toLowerCase()
-  const isGeneralManager = dept === 'general manager' && desig === 'g.m'
-  const isFinanceManager = dept === 'finance' && desig === 'fm'
-  return isGeneralManager || isFinanceManager
-}
-
 /**
  * Generates page numbers for pagination with ellipsis
  * @param currentPage - Current page number (1-based)

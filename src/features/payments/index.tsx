@@ -41,7 +41,6 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { invoiceApi, paymentApi, PaginationMeta, userApi, type StaffUserOption } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
-import { canDeleteReceivePayment } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { AddPaymentModal } from './add-payment-modal'
@@ -423,6 +422,19 @@ function buildPaymentSlipHtml(viewPayment: Payment, slipConsignments: any[]): st
   </div>
 </body>
 </html>`
+}
+
+/** Torchlight user type (users.type), not HR designation (e.g. FM, G.M.). */
+const PAYMENT_DELETE_USER_TYPES = new Set(['chief accountant', 'manager'])
+
+function normalizeUserType(type: string | null | undefined): string {
+  return (type || '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function canDeleteReceivePayment(
+  user: ReturnType<typeof useAuthStore.getState>['auth']['user']
+) {
+  return PAYMENT_DELETE_USER_TYPES.has(normalizeUserType(user?.type))
 }
 
 export function Payments() {
