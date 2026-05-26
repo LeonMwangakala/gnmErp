@@ -38,7 +38,8 @@ type Props = {
   onApplied?: () => void
 }
 
-const EPSILON = 0.001
+/** Matches backend InvoiceStatusService::DEFAULT_ZERO_EPSILON (rounded currency balance). */
+const EPSILON = 1
 
 export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Props) {
   const [rows, setRows] = useState<ZeroPartialInvoiceRow[]>([])
@@ -146,8 +147,9 @@ export function MarkZeroPartialPaidModal({ open, onOpenChange, onApplied }: Prop
         <DialogHeader>
           <DialogTitle>Mark zero-balance partials as paid</DialogTitle>
           <DialogDescription>
-            Partial Paid invoices with total or balance due effectively zero (≤ {EPSILON}).
-            Select which invoices to mark as Paid, then accept or reject.
+            Partial Paid invoices whose balance rounds to zero or is at most {EPSILON} in
+            invoice currency (e.g. 0.02 from rounding). Select rows to mark as Paid, then accept
+            or reject.
           </DialogDescription>
         </DialogHeader>
 

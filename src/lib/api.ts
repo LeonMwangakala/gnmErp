@@ -437,7 +437,7 @@ export const invoiceApi = {
   },
   /** Partial Paid invoices with zero total/due (≤ epsilon) → Paid; dry_run returns preview rows */
   markZeroPartialPaid: async (
-    epsilon = 0.001,
+    epsilon = 1,
     dryRun = false,
     invoiceIds?: number[]
   ) => {
