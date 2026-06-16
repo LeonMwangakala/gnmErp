@@ -335,6 +335,8 @@ export const invoiceApi = {
     customer_tax_id?: string
     customer_name?: string
     customer_company?: string
+    /** paid = bill_fully_paid only; unpaid = not fully paid */
+    payment_status?: 'all' | 'paid' | 'unpaid'
   }): Promise<
     | { ok: true; data: GoodsDispatchedReportData }
     | { ok: false; message: string }
@@ -352,6 +354,7 @@ export const invoiceApi = {
     customer_tax_id?: string
     customer_name?: string
     customer_company?: string
+    payment_status?: 'all' | 'paid' | 'unpaid'
   }): Promise<
     | { ok: true; data: GoodsDispatchedReportData }
     | { ok: false; message: string }
@@ -640,6 +643,8 @@ export interface GoodsDispatchedReportData {
   report_kind?: 'dispatched' | 'authorized_pending'
   /** Echo from API: which release types were included */
   release: 'all' | 'cash' | 'loan'
+  /** Echo from API: paid filter applied server-side */
+  payment_status?: 'all' | 'paid' | 'unpaid'
   rows: GoodsDispatchedReportRow[]
   /** Set when the CMTS request included page and/or per_page */
   pagination: PaginationMeta | null
@@ -854,6 +859,13 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
   const rel = String(data.release ?? 'all').toLowerCase()
   const release: 'all' | 'cash' | 'loan' =
     rel === 'cash' ? 'cash' : rel === 'loan' ? 'loan' : 'all'
+  const paymentStatusRaw = String(data.payment_status ?? data.paymentStatus ?? 'all').toLowerCase()
+  const payment_status: 'all' | 'paid' | 'unpaid' =
+    paymentStatusRaw === 'paid'
+      ? 'paid'
+      : paymentStatusRaw === 'unpaid'
+        ? 'unpaid'
+        : 'all'
   const creditPaidFromRows = rows.filter((x) => x.dispatched_on_credit && x.bill_fully_paid).length
   const creditUnpaidFromRows = rows.filter((x) => x.dispatched_on_credit && !x.bill_fully_paid).length
 
@@ -892,6 +904,7 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
     date_to: String(data.date_to ?? ''),
     report_kind,
     release,
+    payment_status,
     rows,
     pagination,
     summary: {
@@ -938,6 +951,7 @@ async function fetchDispatchReleaseReport(
     customer_tax_id?: string
     customer_name?: string
     customer_company?: string
+    payment_status?: 'all' | 'paid' | 'unpaid'
   }
 ): Promise<{ ok: true; data: GoodsDispatchedReportData } | { ok: false; message: string }> {
   try {
@@ -947,6 +961,9 @@ async function fetchDispatchReleaseReport(
     }
     if (params.release && params.release !== 'all') {
       qp.release = params.release
+    }
+    if (params.payment_status && params.payment_status !== 'all') {
+      qp.payment_status = params.payment_status
     }
     const trim = (s?: string) => (s && String(s).trim() ? String(s).trim() : '')
     const ce = trim(params.customer_email)

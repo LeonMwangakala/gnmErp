@@ -519,7 +519,8 @@ type ReportType =
   | 'invoice'
   | 'invoice-payments'
   | 'posted-containers'
-  | 'goods-dispatched'
+  | 'goods-dispatched-cash'
+  | 'goods-dispatched-loan'
   | 'authorized-pending-dispatch'
   | 'petty-cash'
   | 'expense-payments'
@@ -550,10 +551,16 @@ const REPORTS: ReportDefinition[] = [
       'Container numbers recorded when invoices were posted, by post date. Optional container filter.',
   },
   {
-    key: 'goods-dispatched',
-    title: 'Good dispatched report',
+    key: 'goods-dispatched-cash',
+    title: 'Goods dispatched on cash',
     description:
-      'Goods released by dispatch date from CMTS. Credit (loan) dispatches stay on the report after the invoice is paid, with a clear paid vs outstanding record.',
+      'Goods released by dispatch date from CMTS, filtered to cash dispatches only.',
+  },
+  {
+    key: 'goods-dispatched-loan',
+    title: 'Goods dispatched on loan',
+    description:
+      'Goods released by dispatch date from CMTS, filtered to loan dispatches with paid/not paid status and customer filter.',
   },
   {
     key: 'authorized-pending-dispatch',
@@ -662,6 +669,9 @@ type GoodsDispatchedFilters = {
   dateTo: string
   datePreset: InvoicePaymentDatePreset
   releaseFilter: GoodsDispatchedReleaseFilter
+  paidFilter: 'all' | 'paid' | 'unpaid'
+  customerName: string
+  customerCompany: string
 }
 
 type PettyCashFilters = CommonFilters & {
@@ -728,6 +738,23 @@ function isDispatchReleaseReportFilters(
 
 const GOODS_DISPATCHED_PER_PAGE = 50
 
+function buildDispatchReportQueryParams(
+  filters: GoodsDispatchedFilters,
+  options?: { page?: number; perPage?: number }
+) {
+  return {
+    date_from: filters.dateFrom,
+    date_to: filters.dateTo,
+    release: filters.releaseFilter,
+    ...(options?.page != null
+      ? { page: options.page, per_page: options.perPage ?? GOODS_DISPATCHED_PER_PAGE }
+      : {}),
+    ...(filters.customerName ? { customer_name: filters.customerName } : {}),
+    ...(filters.customerCompany ? { customer_company: filters.customerCompany } : {}),
+    ...(filters.paidFilter !== 'all' ? { payment_status: filters.paidFilter } : {}),
+  }
+}
+
 export function Reports() {
   const loggedInUser = useAuthStore((s) => s.auth.user)
   const [open, setOpen] = useState(false)
@@ -736,6 +763,7 @@ export function Reports() {
   const [isDownloading, setIsDownloading] = useState(false)
   const [selectedInvoiceCustomer, setSelectedInvoiceCustomer] = useState<CustomerOption | null>(null)
   const [selectedPaymentCustomer, setSelectedPaymentCustomer] = useState<CustomerOption | null>(null)
+  const [selectedGoodsDispatchedCustomer, setSelectedGoodsDispatchedCustomer] = useState<CustomerOption | null>(null)
   const [staffUsers, setStaffUsers] = useState<{ id: number; name: string; email: string }[]>([])
   const [staffUsersLoading, setStaffUsersLoading] = useState(false)
   const [invoicePaymentReportOpen, setInvoicePaymentReportOpen] = useState(false)
@@ -815,6 +843,7 @@ export function Reports() {
     setFilters(getInitialFilters(report.key))
     setSelectedInvoiceCustomer(null)
     setSelectedPaymentCustomer(null)
+    setSelectedGoodsDispatchedCustomer(null)
     setInvoicePaymentReportOpen(false)
     setInvoicePaymentReportData(null)
     setInvoiceReportOpen(false)
@@ -914,13 +943,10 @@ export function Reports() {
     }
     setGoodsDispatchedReportSubmitting(true)
     try {
-      const params = {
-        date_from: filters.dateFrom,
-        date_to: filters.dateTo,
-        release: filters.releaseFilter,
+      const params = buildDispatchReportQueryParams(filters, {
         page: 1,
-        per_page: GOODS_DISPATCHED_PER_PAGE,
-      }
+        perPage: GOODS_DISPATCHED_PER_PAGE,
+      })
       const result =
         kind === 'authorized_pending'
           ? await invoiceApi.getAuthorizedPendingDispatchReport(params)
@@ -938,16 +964,13 @@ export function Reports() {
   }
 
   const fetchGoodsDispatchedReportPage = async (page: number) => {
-    if (!goodsDispatchedReportData) return
+    if (!goodsDispatchedReportData || !filters || !isDispatchReleaseReportFilters(filters)) return
     setGoodsDispatchedReportPaging(true)
     try {
-      const params = {
-        date_from: goodsDispatchedReportData.date_from,
-        date_to: goodsDispatchedReportData.date_to,
-        release: goodsDispatchedReportData.release,
+      const params = buildDispatchReportQueryParams(filters, {
         page,
-        per_page: GOODS_DISPATCHED_PER_PAGE,
-      }
+        perPage: GOODS_DISPATCHED_PER_PAGE,
+      })
       const result =
         goodsDispatchedReportData.report_kind === 'authorized_pending'
           ? await invoiceApi.getAuthorizedPendingDispatchReport(params)
@@ -963,14 +986,10 @@ export function Reports() {
   }
 
   const exportGoodsDispatchedFull = async (kind: 'csv' | 'pdf') => {
-    if (!goodsDispatchedReportData) return
+    if (!goodsDispatchedReportData || !filters || !isDispatchReleaseReportFilters(filters)) return
     setGoodsDispatchedReportExporting(true)
     try {
-      const exportParams = {
-        date_from: goodsDispatchedReportData.date_from,
-        date_to: goodsDispatchedReportData.date_to,
-        release: goodsDispatchedReportData.release,
-      }
+      const exportParams = buildDispatchReportQueryParams(filters)
       const result =
         goodsDispatchedReportData.report_kind === 'authorized_pending'
           ? await invoiceApi.getAuthorizedPendingDispatchReport(exportParams)
@@ -1054,14 +1073,20 @@ export function Reports() {
           containerNo: '',
         }
       }
-      case 'goods-dispatched':
+      case 'goods-dispatched-cash':
+      case 'goods-dispatched-loan':
       case 'authorized-pending-dispatch': {
         const { dateFrom, dateTo } = getInvoicePaymentRangeForPreset('month')
+        const isLoan = type === 'goods-dispatched-loan'
+        const isCash = type === 'goods-dispatched-cash'
         return {
           datePreset: 'month' as const,
           dateFrom,
           dateTo,
-          releaseFilter: 'all',
+          releaseFilter: isLoan ? 'loan' : isCash ? 'cash' : 'all',
+          paidFilter: 'all',
+          customerName: '',
+          customerCompany: '',
         }
       }
       case 'petty-cash':
@@ -1090,7 +1115,8 @@ export function Reports() {
       selectedReport.key === 'invoice-payments' ||
       selectedReport.key === 'invoice' ||
       selectedReport.key === 'posted-containers' ||
-      selectedReport.key === 'goods-dispatched' ||
+      selectedReport.key === 'goods-dispatched-cash' ||
+      selectedReport.key === 'goods-dispatched-loan' ||
       selectedReport.key === 'authorized-pending-dispatch'
     )
       return
@@ -1171,7 +1197,8 @@ export function Reports() {
               {selectedReport?.key !== 'invoice-payments' &&
                 selectedReport?.key !== 'invoice' &&
                 selectedReport?.key !== 'posted-containers' &&
-                selectedReport?.key !== 'goods-dispatched' &&
+                selectedReport?.key !== 'goods-dispatched-cash' &&
+                selectedReport?.key !== 'goods-dispatched-loan' &&
                 selectedReport?.key !== 'authorized-pending-dispatch' &&
                 'dateRange' in filters && (
               <div className='space-y-2'>
@@ -1188,7 +1215,8 @@ export function Reports() {
               {(selectedReport?.key === 'invoice-payments' ||
                 selectedReport?.key === 'invoice' ||
                 selectedReport?.key === 'posted-containers' ||
-                selectedReport?.key === 'goods-dispatched' ||
+                selectedReport?.key === 'goods-dispatched-cash' ||
+                selectedReport?.key === 'goods-dispatched-loan' ||
                 selectedReport?.key === 'authorized-pending-dispatch') &&
                 isDateRangedReportFilters(filters) && (
                   <div className='space-y-3'>
@@ -1197,7 +1225,8 @@ export function Reports() {
                         ? 'Payment date range'
                         : selectedReport.key === 'posted-containers'
                           ? 'Posted date range'
-                          : selectedReport.key === 'goods-dispatched'
+                          : selectedReport.key === 'goods-dispatched-cash' ||
+                            selectedReport.key === 'goods-dispatched-loan'
                             ? 'Dispatch date range'
                             : selectedReport.key === 'authorized-pending-dispatch'
                               ? 'Authorization date range'
@@ -1301,7 +1330,8 @@ export function Reports() {
                 </div>
               )}
 
-              {(selectedReport?.key === 'goods-dispatched' ||
+              {(selectedReport?.key === 'goods-dispatched-cash' ||
+                selectedReport?.key === 'goods-dispatched-loan' ||
                 selectedReport?.key === 'authorized-pending-dispatch') &&
                 isDispatchReleaseReportFilters(filters) && (
                 <div className='space-y-2'>
@@ -1309,6 +1339,10 @@ export function Reports() {
                   <Select
                     value={filters.releaseFilter}
                     onValueChange={(value) => handleFilterChange('releaseFilter', value)}
+                    disabled={
+                      selectedReport?.key === 'goods-dispatched-cash' ||
+                      selectedReport?.key === 'goods-dispatched-loan'
+                    }
                   >
                     <SelectTrigger id='goodsDispatchedRelease'>
                       <SelectValue placeholder='Cash or credit' />
@@ -1324,6 +1358,54 @@ export function Reports() {
                   </p>
                 </div>
               )}
+
+              {selectedReport?.key === 'goods-dispatched-loan' &&
+                isDispatchReleaseReportFilters(filters) && (
+                  <>
+                    <div className='space-y-2'>
+                      <Label htmlFor='goodsDispatchedPaidFilter'>Payment status</Label>
+                      <Select
+                        value={filters.paidFilter}
+                        onValueChange={(value) => handleFilterChange('paidFilter', value)}
+                      >
+                        <SelectTrigger id='goodsDispatchedPaidFilter'>
+                          <SelectValue placeholder='All loaned goods' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='all'>All loaned goods</SelectItem>
+                          <SelectItem value='paid'>Paid in full</SelectItem>
+                          <SelectItem value='unpaid'>Not paid in full</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className='text-xs text-muted-foreground'>
+                        Filters previously loaned goods by whether the linked invoice is fully paid.
+                      </p>
+                    </div>
+                    <div className='space-y-2'>
+                      <Label htmlFor='goodsDispatchedCustomer'>Customer (optional)</Label>
+                      <AsyncSelect<CustomerOption>
+                        value={selectedGoodsDispatchedCustomer}
+                        onChange={(selected) => {
+                          setSelectedGoodsDispatchedCustomer(selected)
+                          handleFilterChange('customerName', selected?.name?.trim() || '')
+                          handleFilterChange('customerCompany', '')
+                        }}
+                        loadOptions={loadCustomerOptionsDebounced}
+                        placeholder='Type customer name...'
+                        isClearable
+                        isSearchable
+                        noOptionsMessage={({ inputValue }) =>
+                          inputValue.length < 2
+                            ? 'Type at least 2 characters to search'
+                            : 'No customers found'
+                        }
+                        loadingMessage={() => 'Searching customers...'}
+                        className='react-select-container'
+                        classNamePrefix='react-select'
+                      />
+                    </div>
+                  </>
+                )}
 
               {selectedReport?.key === 'invoice' && (
                 <>
@@ -1632,6 +1714,7 @@ export function Reports() {
                   setFilters(getInitialFilters(selectedReport.key))
                   setSelectedInvoiceCustomer(null)
                   setSelectedPaymentCustomer(null)
+                  setSelectedGoodsDispatchedCustomer(null)
                     setInvoiceReportData(null)
                     setInvoiceReportOpen(false)
                     setPostedContainersReportData(null)
@@ -1688,7 +1771,8 @@ export function Reports() {
                 >
                   {postedContainersReportSubmitting ? 'Loading…' : 'Submit'}
                 </Button>
-              ) : selectedReport?.key === 'goods-dispatched' ? (
+              ) : selectedReport?.key === 'goods-dispatched-cash' ||
+                selectedReport?.key === 'goods-dispatched-loan' ? (
                 <Button
                   type='button'
                   size='sm'
@@ -2127,7 +2211,11 @@ export function Reports() {
             <DialogTitle>
               {goodsDispatchedReportData?.report_kind === 'authorized_pending'
                 ? 'Authorized — not dispatched'
-                : 'Good dispatched report'}
+                : selectedReport?.key === 'goods-dispatched-cash'
+                  ? 'Goods dispatched on cash'
+                  : selectedReport?.key === 'goods-dispatched-loan'
+                    ? 'Goods dispatched on loan'
+                    : 'Good dispatched report'}
             </DialogTitle>
           </DialogHeader>
           {goodsDispatchedReportData ? (
@@ -2142,6 +2230,15 @@ export function Reports() {
                       ? 'Credit only'
                       : 'Cash and credit'}
                 </span>
+                {goodsDispatchedReportData.payment_status &&
+                goodsDispatchedReportData.payment_status !== 'all' ? (
+                  <span className='ms-2'>
+                    · Payment:{' '}
+                    {goodsDispatchedReportData.payment_status === 'paid'
+                      ? 'Paid in full'
+                      : 'Not paid in full'}
+                  </span>
+                ) : null}
                 <span className='ms-2'>
                   ({goodsDispatchedReportData.summary.row_count}{' '}
                   {goodsDispatchedReportData.summary.row_count === 1 ? 'line' : 'lines'}
