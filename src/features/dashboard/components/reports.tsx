@@ -521,6 +521,7 @@ type ReportType =
   | 'posted-containers'
   | 'goods-dispatched-cash'
   | 'goods-dispatched-loan'
+  | 'loan-balance'
   | 'authorized-pending-dispatch'
   | 'petty-cash'
   | 'expense-payments'
@@ -561,6 +562,12 @@ const REPORTS: ReportDefinition[] = [
     title: 'Goods dispatched on loan',
     description:
       'Goods released by dispatch date from CMTS, filtered to loan dispatches with paid/not paid status and customer filter.',
+  },
+  {
+    key: 'loan-balance',
+    title: 'Loan balance',
+    description:
+      'Loan dispatch balances by dispatch date with invoice amount, paid amount, and outstanding balance.',
   },
   {
     key: 'authorized-pending-dispatch',
@@ -1075,9 +1082,10 @@ export function Reports() {
       }
       case 'goods-dispatched-cash':
       case 'goods-dispatched-loan':
+      case 'loan-balance':
       case 'authorized-pending-dispatch': {
         const { dateFrom, dateTo } = getInvoicePaymentRangeForPreset('month')
-        const isLoan = type === 'goods-dispatched-loan'
+        const isLoan = type === 'goods-dispatched-loan' || type === 'loan-balance'
         const isCash = type === 'goods-dispatched-cash'
         return {
           datePreset: 'month' as const,
@@ -1117,6 +1125,7 @@ export function Reports() {
       selectedReport.key === 'posted-containers' ||
       selectedReport.key === 'goods-dispatched-cash' ||
       selectedReport.key === 'goods-dispatched-loan' ||
+      selectedReport.key === 'loan-balance' ||
       selectedReport.key === 'authorized-pending-dispatch'
     )
       return
@@ -1199,6 +1208,7 @@ export function Reports() {
                 selectedReport?.key !== 'posted-containers' &&
                 selectedReport?.key !== 'goods-dispatched-cash' &&
                 selectedReport?.key !== 'goods-dispatched-loan' &&
+                selectedReport?.key !== 'loan-balance' &&
                 selectedReport?.key !== 'authorized-pending-dispatch' &&
                 'dateRange' in filters && (
               <div className='space-y-2'>
@@ -1217,6 +1227,7 @@ export function Reports() {
                 selectedReport?.key === 'posted-containers' ||
                 selectedReport?.key === 'goods-dispatched-cash' ||
                 selectedReport?.key === 'goods-dispatched-loan' ||
+                selectedReport?.key === 'loan-balance' ||
                 selectedReport?.key === 'authorized-pending-dispatch') &&
                 isDateRangedReportFilters(filters) && (
                   <div className='space-y-3'>
@@ -1226,7 +1237,8 @@ export function Reports() {
                         : selectedReport.key === 'posted-containers'
                           ? 'Posted date range'
                           : selectedReport.key === 'goods-dispatched-cash' ||
-                            selectedReport.key === 'goods-dispatched-loan'
+                            selectedReport.key === 'goods-dispatched-loan' ||
+                            selectedReport.key === 'loan-balance'
                             ? 'Dispatch date range'
                             : selectedReport.key === 'authorized-pending-dispatch'
                               ? 'Authorization date range'
@@ -1332,6 +1344,7 @@ export function Reports() {
 
               {(selectedReport?.key === 'goods-dispatched-cash' ||
                 selectedReport?.key === 'goods-dispatched-loan' ||
+                selectedReport?.key === 'loan-balance' ||
                 selectedReport?.key === 'authorized-pending-dispatch') &&
                 isDispatchReleaseReportFilters(filters) && (
                 <div className='space-y-2'>
@@ -1341,7 +1354,8 @@ export function Reports() {
                     onValueChange={(value) => handleFilterChange('releaseFilter', value)}
                     disabled={
                       selectedReport?.key === 'goods-dispatched-cash' ||
-                      selectedReport?.key === 'goods-dispatched-loan'
+                      selectedReport?.key === 'goods-dispatched-loan' ||
+                      selectedReport?.key === 'loan-balance'
                     }
                   >
                     <SelectTrigger id='goodsDispatchedRelease'>
@@ -1359,7 +1373,8 @@ export function Reports() {
                 </div>
               )}
 
-              {selectedReport?.key === 'goods-dispatched-loan' &&
+              {(selectedReport?.key === 'goods-dispatched-loan' ||
+                selectedReport?.key === 'loan-balance') &&
                 isDispatchReleaseReportFilters(filters) && (
                   <>
                     <div className='space-y-2'>
@@ -1772,7 +1787,8 @@ export function Reports() {
                   {postedContainersReportSubmitting ? 'Loading…' : 'Submit'}
                 </Button>
               ) : selectedReport?.key === 'goods-dispatched-cash' ||
-                selectedReport?.key === 'goods-dispatched-loan' ? (
+                selectedReport?.key === 'goods-dispatched-loan' ||
+                selectedReport?.key === 'loan-balance' ? (
                 <Button
                   type='button'
                   size='sm'
@@ -2215,6 +2231,8 @@ export function Reports() {
                   ? 'Goods dispatched on cash'
                   : selectedReport?.key === 'goods-dispatched-loan'
                     ? 'Goods dispatched on loan'
+                    : selectedReport?.key === 'loan-balance'
+                      ? 'Loan balance'
                     : 'Good dispatched report'}
             </DialogTitle>
           </DialogHeader>
@@ -2319,31 +2337,80 @@ export function Reports() {
                       <p className='text-muted-foreground py-2 text-center text-xs'>Loading page…</p>
                     ) : null}
                     <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className='min-w-[140px]'>
-                            {goodsDispatchedReportData.report_kind === 'authorized_pending'
-                              ? 'Authorization'
-                              : 'Dispatch'}
-                          </TableHead>
-                          <TableHead className='min-w-[160px]'>Customer</TableHead>
-                          <TableHead className='min-w-[220px]'>Consignment</TableHead>
-                          <TableHead className='min-w-[140px]'>Pickup / vehicle</TableHead>
-                          <TableHead className='min-w-[200px]'>Goods (line)</TableHead>
-                          <TableHead className='min-w-[180px]'>Billing</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {goodsDispatchedReportData.rows.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={6} className='text-center text-muted-foreground'>
-                              {goodsDispatchedReportData.report_kind === 'authorized_pending'
-                                ? 'No authorized goods awaiting pickup in this range.'
-                                : 'No dispatched goods in this range.'}
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          goodsDispatchedReportData.rows.map((r) => (
+                      {selectedReport?.key === 'loan-balance' ? (
+                        <>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className='min-w-[130px]'>Date</TableHead>
+                              <TableHead className='min-w-[200px]'>Customer Name</TableHead>
+                              <TableHead className='min-w-[140px]'>Container Number</TableHead>
+                              <TableHead className='min-w-[100px]'>Goods Pkgs</TableHead>
+                              <TableHead className='min-w-[120px]'>Invoice No</TableHead>
+                              <TableHead className='min-w-[120px] text-right'>Invoice Amount</TableHead>
+                              <TableHead className='min-w-[120px] text-right'>Paid Amount</TableHead>
+                              <TableHead className='min-w-[120px] text-right'>Balance</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {goodsDispatchedReportData.rows.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={8} className='text-center text-muted-foreground'>
+                                  No loan balance rows in this range.
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              goodsDispatchedReportData.rows.map((r) => (
+                                <TableRow key={r.id}>
+                                  <TableCell className='tabular-nums'>
+                                    {formatGoodsDispatchedAt(r.dispatched_at)}
+                                  </TableCell>
+                                  <TableCell>{r.customer_name || '—'}</TableCell>
+                                  <TableCell>{r.container_no || '—'}</TableCell>
+                                  <TableCell className='tabular-nums'>
+                                    {r.pkgs != null ? r.pkgs : '—'}
+                                  </TableCell>
+                                  <TableCell>{r.invoice_no || '—'}</TableCell>
+                                  <TableCell className='text-right tabular-nums'>
+                                    {r.bill_amount != null ? r.bill_amount : '—'}
+                                  </TableCell>
+                                  <TableCell className='text-right tabular-nums'>
+                                    {r.bill_paid_amount != null ? r.bill_paid_amount : '—'}
+                                  </TableCell>
+                                  <TableCell className='text-right tabular-nums'>
+                                    {r.bill_balance != null ? r.bill_balance : '—'}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </>
+                      ) : (
+                        <>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className='min-w-[140px]'>
+                                {goodsDispatchedReportData.report_kind === 'authorized_pending'
+                                  ? 'Authorization'
+                                  : 'Dispatch'}
+                              </TableHead>
+                              <TableHead className='min-w-[160px]'>Customer</TableHead>
+                              <TableHead className='min-w-[220px]'>Consignment</TableHead>
+                              <TableHead className='min-w-[140px]'>Pickup / vehicle</TableHead>
+                              <TableHead className='min-w-[200px]'>Goods (line)</TableHead>
+                              <TableHead className='min-w-[180px]'>Billing</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {goodsDispatchedReportData.rows.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={6} className='text-center text-muted-foreground'>
+                                  {goodsDispatchedReportData.report_kind === 'authorized_pending'
+                                    ? 'No authorized goods awaiting pickup in this range.'
+                                    : 'No dispatched goods in this range.'}
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              goodsDispatchedReportData.rows.map((r) => (
                             <TableRow key={r.id}>
                               <TableCell className='align-top whitespace-normal text-sm'>
                                 <div className='tabular-nums whitespace-nowrap'>
@@ -2447,10 +2514,12 @@ export function Reports() {
                                   </div>
                                 ) : null}
                               </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
+                              </TableRow>
+                            ))
+                          )}
+                          </TableBody>
+                        </>
+                      )}
                     </Table>
                   </div>
                 </div>

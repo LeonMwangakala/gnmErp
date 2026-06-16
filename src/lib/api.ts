@@ -630,6 +630,8 @@ export interface GoodsDispatchedReportRow {
   invoice_no: string | null
   /** CMTS Bill.id when linked; null if no bill on consignment */
   bill_id: number | null
+  bill_amount?: number | null
+  bill_paid_amount?: number | null
   bill_fully_paid: boolean
   bill_balance: number | null
   bill_status: string | null
@@ -754,6 +756,8 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
     const releaseRaw = String(r.release_type ?? r.releaseType ?? 'cash').toLowerCase()
     const release_type: 'cash' | 'loan' = releaseRaw === 'loan' ? 'loan' : 'cash'
     const bal = r.bill_balance
+    const billAmountRaw = r.bill_amount ?? r.billAmount
+    const billPaidRaw = r.bill_paid_amount ?? r.billPaidAmount
     const cPkgs = r.consignment_pkgs
     const cCbm = r.consignment_cbm
     const invoice_no =
@@ -842,6 +846,14 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
       credit_dispatch_note,
       invoice_no,
       bill_id,
+      bill_amount:
+        billAmountRaw == null || billAmountRaw === '' || !Number.isFinite(Number(billAmountRaw))
+          ? null
+          : Number(billAmountRaw),
+      bill_paid_amount:
+        billPaidRaw == null || billPaidRaw === '' || !Number.isFinite(Number(billPaidRaw))
+          ? null
+          : Number(billPaidRaw),
       bill_fully_paid,
       bill_balance:
         bal == null || bal === '' || !Number.isFinite(Number(bal)) ? null : Number(bal),
