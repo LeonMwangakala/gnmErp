@@ -2347,6 +2347,7 @@ export function Reports() {
                               <TableHead className='min-w-[100px]'>Goods Pkgs</TableHead>
                               <TableHead className='min-w-[120px]'>Invoice No</TableHead>
                               <TableHead className='min-w-[120px] text-right'>Invoice Amount</TableHead>
+                              <TableHead className='min-w-[120px] text-right'>Discount Amount</TableHead>
                               <TableHead className='min-w-[120px] text-right'>Paid Amount</TableHead>
                               <TableHead className='min-w-[120px] text-right'>Balance</TableHead>
                             </TableRow>
@@ -2354,7 +2355,7 @@ export function Reports() {
                           <TableBody>
                             {goodsDispatchedReportData.rows.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={8} className='text-center text-muted-foreground'>
+                                <TableCell colSpan={9} className='text-center text-muted-foreground'>
                                   No loan balance rows in this range.
                                 </TableCell>
                               </TableRow>
@@ -2372,6 +2373,9 @@ export function Reports() {
                                   <TableCell>{r.invoice_no || '—'}</TableCell>
                                   <TableCell className='text-right tabular-nums'>
                                     {r.bill_amount != null ? r.bill_amount : '—'}
+                                  </TableCell>
+                                  <TableCell className='text-right tabular-nums'>
+                                    {r.bill_discount_amount != null ? r.bill_discount_amount : '—'}
                                   </TableCell>
                                   <TableCell className='text-right tabular-nums'>
                                     {r.bill_paid_amount != null ? r.bill_paid_amount : '—'}

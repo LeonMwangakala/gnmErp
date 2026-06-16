@@ -631,6 +631,7 @@ export interface GoodsDispatchedReportRow {
   /** CMTS Bill.id when linked; null if no bill on consignment */
   bill_id: number | null
   bill_amount?: number | null
+  bill_discount_amount?: number | null
   bill_paid_amount?: number | null
   bill_fully_paid: boolean
   bill_balance: number | null
@@ -757,6 +758,7 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
     const release_type: 'cash' | 'loan' = releaseRaw === 'loan' ? 'loan' : 'cash'
     const bal = r.bill_balance
     const billAmountRaw = r.bill_amount ?? r.billAmount
+    const billDiscountRaw = r.bill_discount_amount ?? r.billDiscountAmount
     const billPaidRaw = r.bill_paid_amount ?? r.billPaidAmount
     const cPkgs = r.consignment_pkgs
     const cCbm = r.consignment_cbm
@@ -850,6 +852,10 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
         billAmountRaw == null || billAmountRaw === '' || !Number.isFinite(Number(billAmountRaw))
           ? null
           : Number(billAmountRaw),
+      bill_discount_amount:
+        billDiscountRaw == null || billDiscountRaw === '' || !Number.isFinite(Number(billDiscountRaw))
+          ? null
+          : Number(billDiscountRaw),
       bill_paid_amount:
         billPaidRaw == null || billPaidRaw === '' || !Number.isFinite(Number(billPaidRaw))
           ? null
