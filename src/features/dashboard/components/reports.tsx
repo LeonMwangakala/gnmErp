@@ -351,49 +351,187 @@ function formatGoodsDispatchedAt(iso: string | null): string {
   }
 }
 
-function downloadGoodsDispatchedReportCsv(data: GoodsDispatchedReportData) {
-  const releaseLabel =
-    data.release === 'cash'
-      ? 'Cash only'
-      : data.release === 'loan'
-        ? 'Credit only'
-        : 'Both (cash and credit)'
+type DispatchReportExportKey =
+  | 'goods-dispatched-cash'
+  | 'goods-dispatched-loan'
+  | 'loan-balance'
+  | 'authorized-pending-dispatch'
+
+function dispatchReportExportTitle(variant: DispatchReportExportKey): string {
+  switch (variant) {
+    case 'goods-dispatched-cash':
+      return 'Goods dispatched on cash'
+    case 'goods-dispatched-loan':
+      return 'Goods dispatched on loan'
+    case 'loan-balance':
+      return 'Loan balance'
+    case 'authorized-pending-dispatch':
+      return 'Authorized — not dispatched'
+  }
+}
+
+function dispatchReportExportFilename(
+  variant: DispatchReportExportKey,
+  dateFrom: string,
+  dateTo: string,
+  ext: 'csv' | 'pdf'
+): string {
+  const slug =
+    variant === 'goods-dispatched-cash'
+      ? 'goods-dispatched-cash'
+      : variant === 'goods-dispatched-loan'
+        ? 'goods-dispatched-loan'
+        : variant === 'loan-balance'
+          ? 'loan-balance'
+          : 'authorized-pending-dispatch'
+  return `${slug}-${dateFrom}-to-${dateTo}.${ext}`
+}
+
+function dispatchReportReleaseLabel(data: GoodsDispatchedReportData): string {
+  if (data.release === 'cash') return 'Cash only'
+  if (data.release === 'loan') return 'Credit only'
+  return 'Both (cash and credit)'
+}
+
+function dispatchReportPaymentStatusLabel(data: GoodsDispatchedReportData): string | null {
+  if (!data.payment_status || data.payment_status === 'all') return null
+  return data.payment_status === 'paid' ? 'Paid in full' : 'Not paid in full'
+}
+
+function downloadLoanBalanceReportCsv(data: GoodsDispatchedReportData) {
   const lines: string[] = [
-    ['Dispatch release', escapeCsvCell(releaseLabel)].join(','),
+    ['Report', escapeCsvCell(dispatchReportExportTitle('loan-balance'))].join(','),
+    ['Date range', escapeCsvCell(`${data.date_from} – ${data.date_to}`)].join(','),
+    ...(dispatchReportPaymentStatusLabel(data)
+      ? [['Payment status', escapeCsvCell(dispatchReportPaymentStatusLabel(data)!)].join(',')]
+      : []),
     '',
     [
-      'Dispatched at',
-      'Dispatch ref',
-      'Dispatched by',
-      'Pickup by',
-      'Pickup phone',
-      'Pickup vehicle',
-      'Customer name',
-      'Customer company',
-      'Consignment name',
-      'Tracking #',
-      'Consignment label',
-      'Consignment pkgs',
-      'Consignment CBM',
-      'Container',
-      'Good name',
-      'Supplier receipt',
-      'Good qty',
-      'Good pkgs',
-      'Unit',
-      'Release',
-      'Dispatched on credit',
-      'Credit / invoice record',
-      'Invoice',
-      'Paid in full',
+      'Date',
+      'Customer Name',
+      'Container Number',
+      'Goods Pkgs',
+      'Invoice No',
+      'Invoice Amount',
+      'Discount Amount',
+      'Paid Amount',
       'Balance',
-      'Bill status',
     ].join(','),
     ...data.rows.map((r) =>
       [
         escapeCsvCell(formatGoodsDispatchedAt(r.dispatched_at)),
+        escapeCsvCell(r.customer_name),
+        escapeCsvCell(r.container_no ?? ''),
+        r.pkgs != null ? String(r.pkgs) : '',
+        escapeCsvCell(r.invoice_no ?? ''),
+        r.bill_amount != null ? String(r.bill_amount) : '',
+        r.bill_discount_amount != null ? String(r.bill_discount_amount) : '',
+        r.bill_paid_amount != null ? String(r.bill_paid_amount) : '',
+        r.bill_balance != null ? String(r.bill_balance) : '',
+      ].join(',')
+    ),
+    '',
+    `Rows,${data.summary.row_count}`,
+  ]
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = dispatchReportExportFilename('loan-balance', data.date_from, data.date_to, 'csv')
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function printLoanBalanceReportAsPdf(data: GoodsDispatchedReportData) {
+  const w = window.open('', '_blank')
+  if (!w) {
+    toast.error('Pop-up blocked. Allow pop-ups to print or save as PDF.')
+    return
+  }
+  const paymentLabel = dispatchReportPaymentStatusLabel(data)
+  const rowHtml = data.rows
+    .map(
+      (r) =>
+        `<tr><td>${escapeHtml(formatGoodsDispatchedAt(r.dispatched_at))}</td><td>${escapeHtml(r.customer_name || '—')}</td><td>${escapeHtml(r.container_no ?? '—')}</td><td class="num">${r.pkgs != null ? escapeHtml(String(r.pkgs)) : '—'}</td><td>${escapeHtml(r.invoice_no ?? '—')}</td><td class="num">${r.bill_amount != null ? escapeHtml(String(r.bill_amount)) : '—'}</td><td class="num">${r.bill_discount_amount != null ? escapeHtml(String(r.bill_discount_amount)) : '—'}</td><td class="num">${r.bill_paid_amount != null ? escapeHtml(String(r.bill_paid_amount)) : '—'}</td><td class="num">${r.bill_balance != null ? escapeHtml(String(r.bill_balance)) : '—'}</td></tr>`
+    )
+    .join('')
+  w.document.write(`<!DOCTYPE html><html><head><title>Loan balance</title>
+<style>
+body{font-family:system-ui,sans-serif;padding:16px;font-size:12px;}
+h1{font-size:16px;margin-bottom:8px;}
+table{border-collapse:collapse;width:100%;margin-top:12px;}
+th,td{border:1px solid #ccc;padding:6px;text-align:left;}
+th{background:#f0f0f0;}
+td.num{text-align:right;}
+.meta{color:#444;margin-bottom:16px;}
+</style></head><body>
+<h1>Loan balance</h1>
+<div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}${paymentLabel ? `<br/>Payment: ${escapeHtml(paymentLabel)}` : ''}</div>
+<table><thead><tr><th>Date</th><th>Customer</th><th>Container</th><th>Pkgs</th><th>Invoice</th><th>Invoice amount</th><th>Discount</th><th>Paid</th><th>Balance</th></tr></thead>
+<tbody>${rowHtml || '<tr><td colspan="9">No rows</td></tr>'}</tbody></table>
+<p class="meta">${data.summary.row_count} row(s)</p>
+<script>window.onload=function(){window.print();}</script>
+</body></html>`)
+  w.document.close()
+}
+
+function downloadGoodsDispatchedReportCsv(
+  data: GoodsDispatchedReportData,
+  variant: Exclude<DispatchReportExportKey, 'loan-balance'>
+) {
+  const isPending = variant === 'authorized-pending-dispatch'
+  const isCash = variant === 'goods-dispatched-cash'
+  const isLoan = variant === 'goods-dispatched-loan'
+  const paymentLabel = dispatchReportPaymentStatusLabel(data)
+  const headers = [
+    isPending ? 'Authorized at' : 'Dispatched at',
+    ...(isPending ? ['Days waiting', 'Authorized by'] : []),
+    'Dispatch ref',
+    ...(isPending ? [] : ['Dispatched by']),
+    'Pickup by',
+    'Pickup phone',
+    'Pickup vehicle',
+    'Customer name',
+    'Customer company',
+    'Consignment name',
+    'Tracking #',
+    'Consignment label',
+    'Consignment pkgs',
+    'Consignment CBM',
+    'Container',
+    'Good name',
+    'Supplier receipt',
+    'Good qty',
+    'Good pkgs',
+    'Unit',
+    ...(!isCash ? ['Release', 'Dispatched on credit'] : []),
+    ...(isLoan ? ['Credit / invoice record'] : []),
+    'Invoice',
+    ...(isLoan ? ['Invoice amount', 'Discount amount', 'Paid amount'] : []),
+    'Paid in full',
+    'Balance',
+    'Bill status',
+  ]
+  const lines: string[] = [
+    ['Report', escapeCsvCell(dispatchReportExportTitle(variant))].join(','),
+    ['Date range', escapeCsvCell(`${data.date_from} – ${data.date_to}`)].join(','),
+    ['Release filter', escapeCsvCell(dispatchReportReleaseLabel(data))].join(','),
+    ...(paymentLabel ? [['Payment status', escapeCsvCell(paymentLabel)].join(',')] : []),
+    '',
+    headers.join(','),
+    ...data.rows.map((r) => {
+      const cells: string[] = [
+        escapeCsvCell(
+          formatGoodsDispatchedAt(isPending ? r.authorized_at ?? null : r.dispatched_at)
+        ),
+        ...(isPending
+          ? [
+              r.days_pending != null ? String(r.days_pending) : '',
+              escapeCsvCell(r.authorized_by_name ?? ''),
+            ]
+          : []),
         escapeCsvCell(r.dispatch_reference),
-        escapeCsvCell(r.dispatched_by_name),
+        ...(isPending ? [] : [escapeCsvCell(r.dispatched_by_name ?? '')]),
         escapeCsvCell(r.pickup_by),
         escapeCsvCell(r.pickup_cellphone),
         escapeCsvCell(r.pickup_vehicle),
@@ -410,47 +548,150 @@ function downloadGoodsDispatchedReportCsv(data: GoodsDispatchedReportData) {
         r.quantity != null ? String(r.quantity) : '',
         r.pkgs != null ? String(r.pkgs) : '',
         escapeCsvCell(r.unit ?? ''),
-        escapeCsvCell(r.release_type),
-        r.dispatched_on_credit ? 'Yes' : 'No',
-        escapeCsvCell(r.credit_dispatch_note),
+        ...(!isCash
+          ? [escapeCsvCell(r.release_type), r.dispatched_on_credit ? 'Yes' : 'No']
+          : []),
+        ...(isLoan ? [escapeCsvCell(r.credit_dispatch_note)] : []),
         escapeCsvCell(r.invoice_no ?? ''),
+        ...(isLoan
+          ? [
+              r.bill_amount != null ? String(r.bill_amount) : '',
+              r.bill_discount_amount != null ? String(r.bill_discount_amount) : '',
+              r.bill_paid_amount != null ? String(r.bill_paid_amount) : '',
+            ]
+          : []),
         r.bill_fully_paid ? 'Yes' : 'No',
         r.bill_balance != null ? String(r.bill_balance) : '',
         escapeCsvCell(r.bill_status ?? ''),
-      ].join(',')
-    ),
+      ]
+      return cells.join(',')
+    }),
     '',
     'Summary',
     `Rows,${data.summary.row_count}`,
-    `Cash lines,${data.summary.cash_rows}`,
-    `Loan lines,${data.summary.loan_rows}`,
+    ...(isCash ? [] : [`Cash lines,${data.summary.cash_rows}`, `Loan lines,${data.summary.loan_rows}`]),
     `Paid in full,${data.summary.paid_rows}`,
     `Not paid in full,${data.summary.unpaid_rows}`,
-    `Credit dispatch lines paid,${data.summary.credit_dispatch_paid_rows}`,
-    `Credit dispatch lines unpaid,${data.summary.credit_dispatch_unpaid_rows}`,
+    ...(isLoan || isPending
+      ? [
+          `Credit dispatch lines paid,${data.summary.credit_dispatch_paid_rows}`,
+          `Credit dispatch lines unpaid,${data.summary.credit_dispatch_unpaid_rows}`,
+        ]
+      : []),
+    ...(isPending
+      ? [
+          `Max days pending,${data.summary.max_days_pending ?? 0}`,
+          `Avg days pending,${data.summary.avg_days_pending ?? 0}`,
+        ]
+      : []),
   ]
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `goods-dispatched-${data.date_from}-to-${data.date_to}.csv`
+  a.download = dispatchReportExportFilename(variant, data.date_from, data.date_to, 'csv')
   a.click()
   URL.revokeObjectURL(url)
 }
 
-function printGoodsDispatchedReportAsPdf(data: GoodsDispatchedReportData) {
+function printGoodsDispatchedReportAsPdf(
+  data: GoodsDispatchedReportData,
+  variant: Exclude<DispatchReportExportKey, 'loan-balance'>
+) {
   const w = window.open('', '_blank')
   if (!w) {
     toast.error('Pop-up blocked. Allow pop-ups to print or save as PDF.')
     return
   }
+  const isPending = variant === 'authorized-pending-dispatch'
+  const isCash = variant === 'goods-dispatched-cash'
+  const isLoan = variant === 'goods-dispatched-loan'
+  const paymentLabel = dispatchReportPaymentStatusLabel(data)
   const rowHtml = data.rows
-    .map(
-      (r) =>
-        `<tr><td>${escapeHtml(formatGoodsDispatchedAt(r.dispatched_at))}</td><td>${escapeHtml(r.dispatch_reference)}</td><td>${escapeHtml(r.dispatched_by_name || '—')}</td><td>${escapeHtml(r.pickup_by || '—')}</td><td>${escapeHtml(r.pickup_cellphone || '—')}</td><td>${escapeHtml(r.pickup_vehicle || '—')}</td><td>${escapeHtml(r.customer_name)}</td><td>${escapeHtml(r.customer_company_name || '—')}</td><td>${escapeHtml(r.consignment_name || '—')}</td><td>${escapeHtml(r.consignment_tracking || '—')}</td><td>${escapeHtml(r.consignment_label || '—')}</td><td class="num">${r.consignment_pkgs != null ? escapeHtml(String(r.consignment_pkgs)) : '—'}</td><td class="num">${r.consignment_cbm != null ? escapeHtml(String(r.consignment_cbm)) : '—'}</td><td>${escapeHtml(r.container_no ?? '—')}</td><td>${escapeHtml(r.good_name || '—')}</td><td>${escapeHtml(r.good_supplier_receipt || '—')}</td><td class="num">${r.quantity != null ? escapeHtml(String(r.quantity)) : '—'}</td><td class="num">${r.pkgs != null ? escapeHtml(String(r.pkgs)) : '—'}</td><td>${escapeHtml(r.unit ?? '—')}</td><td>${escapeHtml(r.release_type === 'loan' ? 'credit' : r.release_type)}</td><td>${r.dispatched_on_credit ? 'Y' : 'N'}</td><td>${escapeHtml(r.credit_dispatch_note)}</td><td>${escapeHtml(r.invoice_no ?? '—')}</td><td>${r.bill_fully_paid ? 'Yes' : 'No'}</td><td class="num">${r.bill_balance != null ? escapeHtml(String(r.bill_balance)) : '—'}</td><td>${escapeHtml(r.bill_status ?? '—')}</td></tr>`
-    )
+    .map((r) => {
+      const when = escapeHtml(
+        formatGoodsDispatchedAt(isPending ? r.authorized_at ?? null : r.dispatched_at)
+      )
+      const cells = [
+        `<td>${when}</td>`,
+        ...(isPending
+          ? [
+              `<td class="num">${r.days_pending != null ? escapeHtml(String(r.days_pending)) : '—'}</td>`,
+              `<td>${escapeHtml(r.authorized_by_name || '—')}</td>`,
+            ]
+          : []),
+        `<td>${escapeHtml(r.dispatch_reference)}</td>`,
+        ...(isPending ? [] : [`<td>${escapeHtml(r.dispatched_by_name || '—')}</td>`]),
+        `<td>${escapeHtml(r.pickup_by || '—')}</td>`,
+        `<td>${escapeHtml(r.pickup_cellphone || '—')}</td>`,
+        `<td>${escapeHtml(r.pickup_vehicle || '—')}</td>`,
+        `<td>${escapeHtml(r.customer_name)}</td>`,
+        `<td>${escapeHtml(r.customer_company_name || '—')}</td>`,
+        `<td>${escapeHtml(r.consignment_name || '—')}</td>`,
+        `<td>${escapeHtml(r.consignment_tracking || '—')}</td>`,
+        `<td>${escapeHtml(r.consignment_label || '—')}</td>`,
+        `<td class="num">${r.consignment_pkgs != null ? escapeHtml(String(r.consignment_pkgs)) : '—'}</td>`,
+        `<td class="num">${r.consignment_cbm != null ? escapeHtml(String(r.consignment_cbm)) : '—'}</td>`,
+        `<td>${escapeHtml(r.container_no ?? '—')}</td>`,
+        `<td>${escapeHtml(r.good_name || '—')}</td>`,
+        `<td>${escapeHtml(r.good_supplier_receipt || '—')}</td>`,
+        `<td class="num">${r.quantity != null ? escapeHtml(String(r.quantity)) : '—'}</td>`,
+        `<td class="num">${r.pkgs != null ? escapeHtml(String(r.pkgs)) : '—'}</td>`,
+        `<td>${escapeHtml(r.unit ?? '—')}</td>`,
+        ...(!isCash
+          ? [
+              `<td>${escapeHtml(r.release_type === 'loan' ? 'credit' : r.release_type)}</td>`,
+              `<td>${r.dispatched_on_credit ? 'Y' : 'N'}</td>`,
+            ]
+          : []),
+        ...(isLoan ? [`<td>${escapeHtml(r.credit_dispatch_note)}</td>`] : []),
+        `<td>${escapeHtml(r.invoice_no ?? '—')}</td>`,
+        ...(isLoan
+          ? [
+              `<td class="num">${r.bill_amount != null ? escapeHtml(String(r.bill_amount)) : '—'}</td>`,
+              `<td class="num">${r.bill_discount_amount != null ? escapeHtml(String(r.bill_discount_amount)) : '—'}</td>`,
+              `<td class="num">${r.bill_paid_amount != null ? escapeHtml(String(r.bill_paid_amount)) : '—'}</td>`,
+            ]
+          : []),
+        `<td>${r.bill_fully_paid ? 'Yes' : 'No'}</td>`,
+        `<td class="num">${r.bill_balance != null ? escapeHtml(String(r.bill_balance)) : '—'}</td>`,
+        `<td>${escapeHtml(r.bill_status ?? '—')}</td>`,
+      ]
+      return `<tr>${cells.join('')}</tr>`
+    })
     .join('')
-  w.document.write(`<!DOCTYPE html><html><head><title>Good dispatched report</title>
+  const headerCells = [
+    isPending ? 'Authorized' : 'Dispatched',
+    ...(isPending ? ['Days', 'Auth. by'] : []),
+    'Ref',
+    ...(isPending ? [] : ['By']),
+    'Pickup',
+    'Phone',
+    'Vehicle',
+    'Customer',
+    'Company',
+    'Cnsg',
+    'Tracking',
+    'Label',
+    'C.pkgs',
+    'CBM',
+    'Cont.',
+    'Good',
+    'Receipt',
+    'Qty',
+    'Pkgs',
+    'U',
+    ...(!isCash ? ['Rel.', 'Cr'] : []),
+    ...(isLoan ? ['Credit note'] : []),
+    'Inv.',
+    ...(isLoan ? ['Inv. amt', 'Disc.', 'Paid'] : []),
+    'Paid?',
+    'Bal.',
+    'Bill',
+  ]
+  const colCount = headerCells.length
+  const title = dispatchReportExportTitle(variant)
+  w.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title>
 <style>
 body{font-family:system-ui,sans-serif;padding:16px;font-size:11px;}
 h1{font-size:16px;margin-bottom:8px;}
@@ -460,13 +701,12 @@ th{background:#f0f0f0;}
 td.num{text-align:right;}
 .meta{color:#444;margin-bottom:16px;}
 </style></head><body>
-<h1>Good dispatched report</h1>
+<h1>${escapeHtml(title)}</h1>
 <div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}<br/>
-Release: ${data.release === 'cash' ? 'Cash only' : data.release === 'loan' ? 'Credit only' : 'Both (cash and credit)'}<br/>
-Cash: ${data.summary.cash_rows} · Credit (loan): ${data.summary.loan_rows} · Paid in full: ${data.summary.paid_rows} · Not paid in full: ${data.summary.unpaid_rows}<br/>
-Credit lines · invoice paid: ${data.summary.credit_dispatch_paid_rows} · outstanding: ${data.summary.credit_dispatch_unpaid_rows}</div>
-<table><thead><tr><th>Dispatched</th><th>Ref</th><th>By</th><th>Pickup</th><th>Phone</th><th>Vehicle</th><th>Customer</th><th>Company</th><th>Cnsg name</th><th>Tracking</th><th>Label</th><th>C.pkgs</th><th>CBM</th><th>Cont.</th><th>Good</th><th>Receipt</th><th>Qty</th><th>Pkgs</th><th>U</th><th>Rel.</th><th>Cr</th><th>Credit note</th><th>Inv.</th><th>Paid</th><th>Bal.</th><th>Bill</th></tr></thead>
-<tbody>${rowHtml || '<tr><td colspan="26">No rows</td></tr>'}</tbody></table>
+Release: ${escapeHtml(dispatchReportReleaseLabel(data))}${paymentLabel ? `<br/>Payment: ${escapeHtml(paymentLabel)}` : ''}<br/>
+${isCash ? `Rows: ${data.summary.row_count}` : `Cash: ${data.summary.cash_rows} · Credit (loan): ${data.summary.loan_rows} · Paid in full: ${data.summary.paid_rows} · Not paid in full: ${data.summary.unpaid_rows}`}${isLoan || isPending ? `<br/>Credit lines · invoice paid: ${data.summary.credit_dispatch_paid_rows} · outstanding: ${data.summary.credit_dispatch_unpaid_rows}` : ''}${isPending ? `<br/>Longest wait: ${data.summary.max_days_pending ?? 0} day(s) · average: ${data.summary.avg_days_pending ?? 0} day(s)` : ''}</div>
+<table><thead><tr>${headerCells.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+<tbody>${rowHtml || `<tr><td colspan="${colCount}">No rows</td></tr>`}</tbody></table>
 <p class="meta">${data.summary.row_count} row(s)</p>
 <script>window.onload=function(){window.print();}</script>
 </body></html>`)
@@ -745,6 +985,21 @@ function isDispatchReleaseReportFilters(
 
 const GOODS_DISPATCHED_PER_PAGE = 50
 
+function resolveDispatchReportExportKey(
+  reportKey: ReportType | undefined,
+  reportKind: GoodsDispatchedReportData['report_kind']
+): DispatchReportExportKey | null {
+  if (reportKind === 'authorized_pending') return 'authorized-pending-dispatch'
+  if (
+    reportKey === 'goods-dispatched-cash' ||
+    reportKey === 'goods-dispatched-loan' ||
+    reportKey === 'loan-balance'
+  ) {
+    return reportKey
+  }
+  return null
+}
+
 function buildDispatchReportQueryParams(
   filters: GoodsDispatchedFilters,
   options?: { page?: number; perPage?: number }
@@ -1005,10 +1260,24 @@ export function Reports() {
         toast.error(result.message)
         return
       }
+      const exportKey = resolveDispatchReportExportKey(
+        selectedReport?.key,
+        result.data.report_kind
+      )
+      if (!exportKey) {
+        toast.error('This report cannot be exported.')
+        return
+      }
       if (kind === 'csv') {
-        downloadGoodsDispatchedReportCsv(result.data)
+        if (exportKey === 'loan-balance') {
+          downloadLoanBalanceReportCsv(result.data)
+        } else {
+          downloadGoodsDispatchedReportCsv(result.data, exportKey)
+        }
+      } else if (exportKey === 'loan-balance') {
+        printLoanBalanceReportAsPdf(result.data)
       } else {
-        printGoodsDispatchedReportAsPdf(result.data)
+        printGoodsDispatchedReportAsPdf(result.data, exportKey)
       }
     } finally {
       setGoodsDispatchedReportExporting(false)
