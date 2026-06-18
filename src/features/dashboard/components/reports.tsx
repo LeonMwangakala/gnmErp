@@ -757,6 +757,139 @@ interface CustomerOption {
   companyName?: string
 }
 
+const reportAsyncSelectStyles = {
+  control: (base: Record<string, unknown>, state: { isFocused: boolean }) => ({
+    ...base,
+    minHeight: '36px',
+    height: '36px',
+    borderColor: state.isFocused ? 'hsl(var(--ring))' : 'hsl(var(--input))',
+    backgroundColor: 'transparent',
+    borderRadius: 'calc(var(--radius) - 2px)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    boxShadow: state.isFocused ? '0 0 0 3px hsl(var(--ring) / 0.5)' : 'none',
+    '&:hover': {
+      borderColor: 'hsl(var(--ring))',
+    },
+  }),
+  input: (base: Record<string, unknown>) => ({
+    ...base,
+    margin: 0,
+    padding: 0,
+  }),
+  valueContainer: (base: Record<string, unknown>) => ({
+    ...base,
+    padding: '0 8px',
+    height: '36px',
+  }),
+  singleValue: (base: Record<string, unknown>) => ({
+    ...base,
+    color: 'hsl(var(--foreground))',
+  }),
+  placeholder: (base: Record<string, unknown>) => ({
+    ...base,
+    color: 'hsl(var(--muted-foreground))',
+  }),
+  menu: (base: Record<string, unknown>) => ({
+    ...base,
+    backgroundColor: 'hsl(var(--popover))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: 'calc(var(--radius) - 2px)',
+    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+  }),
+  option: (base: Record<string, unknown>, state: { isFocused: boolean }) => ({
+    ...base,
+    backgroundColor: state.isFocused ? 'hsl(var(--accent))' : 'transparent',
+    color: 'hsl(var(--foreground))',
+    '&:active': {
+      backgroundColor: 'hsl(var(--accent))',
+    },
+  }),
+}
+
+type ReportCustomerLoadOptions = (
+  inputValue: string,
+  callback: (options: CustomerOption[]) => void
+) => void
+
+function CmtsReportCustomerAsyncSelect({
+  id = 'cmtsReportCustomer',
+  value,
+  onChange,
+  loadOptions,
+}: {
+  id?: string
+  value: CustomerOption | null
+  onChange: (selected: CustomerOption | null) => void
+  loadOptions: ReportCustomerLoadOptions
+}) {
+  return (
+    <div className='space-y-2'>
+      <Label htmlFor={id}>Customer (optional)</Label>
+      <AsyncSelect<CustomerOption>
+        inputId={id}
+        value={value}
+        onChange={(selected) => onChange(selected)}
+        loadOptions={loadOptions}
+        placeholder='Type CMTS customer name or phone...'
+        isClearable
+        isSearchable
+        noOptionsMessage={({ inputValue }) =>
+          inputValue.length < 2
+            ? 'Type at least 2 characters to search'
+            : 'No CMTS customers found'
+        }
+        loadingMessage={() => 'Searching CMTS customers...'}
+        className='react-select-container'
+        classNamePrefix='react-select'
+        styles={reportAsyncSelectStyles}
+      />
+      <p className='text-xs text-muted-foreground'>
+        Searches CMTS customers (name, phone, company) — up to 50 matches per search.
+      </p>
+    </div>
+  )
+}
+
+function ErpReportCustomerAsyncSelect({
+  id,
+  value,
+  onChange,
+  loadOptions,
+}: {
+  id: string
+  value: CustomerOption | null
+  onChange: (selected: CustomerOption | null) => void
+  loadOptions: ReportCustomerLoadOptions
+}) {
+  return (
+    <div className='space-y-2'>
+      <Label htmlFor={id}>Customer (optional)</Label>
+      <AsyncSelect<CustomerOption>
+        inputId={id}
+        value={value}
+        onChange={(selected) => onChange(selected)}
+        loadOptions={loadOptions}
+        placeholder='Type customer name or email...'
+        isClearable
+        isSearchable
+        noOptionsMessage={({ inputValue }) =>
+          inputValue.length < 2
+            ? 'Type at least 2 characters to search'
+            : 'No customers found'
+        }
+        loadingMessage={() => 'Searching customers...'}
+        className='react-select-container'
+        classNamePrefix='react-select'
+        styles={reportAsyncSelectStyles}
+      />
+      <p className='text-xs text-muted-foreground'>
+        Searches Torchlight customers (name or email) — up to 50 matches per search.
+      </p>
+    </div>
+  )
+}
+
 type ReportType =
   | 'invoice'
   | 'invoice-payments'
@@ -768,6 +901,17 @@ type ReportType =
   | 'petty-cash'
   | 'expense-payments'
   | 'container-payments'
+
+const CMTS_DISPATCH_REPORT_KEYS = new Set<ReportType>([
+  'goods-dispatched-cash',
+  'goods-dispatched-loan',
+  'loan-balance',
+  'authorized-pending-dispatch',
+])
+
+function isCmtsDispatchReportKey(key: ReportType | undefined): boolean {
+  return key != null && CMTS_DISPATCH_REPORT_KEYS.has(key)
+}
 
 interface ReportDefinition {
   key: ReportType
@@ -1048,6 +1192,7 @@ export function Reports() {
   const [goodsDispatchedReportPaging, setGoodsDispatchedReportPaging] = useState(false)
   const [goodsDispatchedReportExporting, setGoodsDispatchedReportExporting] = useState(false)
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const cmtsDebounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     if (!open || selectedReport?.key !== 'invoice-payments') return
@@ -1074,7 +1219,7 @@ export function Reports() {
       return []
     }
     try {
-      const customers = await customerApi.searchCustomers(inputValue, 20)
+      const customers = await customerApi.searchCustomers(inputValue, 50)
       return customers.map((customer: any) => ({
         id: customer.id,
         value: String(customer.id),
@@ -1128,16 +1273,28 @@ export function Reports() {
 
   const loadCmtsReportCustomerOptionsDebounced = useCallback(
     (inputValue: string, callback: (options: CustomerOption[]) => void) => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current)
+      if (cmtsDebounceTimeoutRef.current) {
+        clearTimeout(cmtsDebounceTimeoutRef.current)
       }
-      debounceTimeoutRef.current = setTimeout(async () => {
+      cmtsDebounceTimeoutRef.current = setTimeout(async () => {
         const options = await loadCmtsReportCustomerOptions(inputValue)
         callback(options)
       }, 300)
     },
     [loadCmtsReportCustomerOptions]
   )
+
+  const handleCmtsReportCustomerChange = (selected: CustomerOption | null) => {
+    setSelectedGoodsDispatchedCustomer(selected)
+    setFilters((prev) => {
+      if (!prev || !isDispatchReleaseReportFilters(prev)) return prev
+      return {
+        ...prev,
+        customerName: selected?.name?.trim() || '',
+        customerCompany: '',
+      }
+    })
+  }
 
   const handleOpenReport = (report: ReportDefinition) => {
     setSelectedReport(report)
@@ -1684,53 +1841,35 @@ export function Reports() {
               {(selectedReport?.key === 'goods-dispatched-loan' ||
                 selectedReport?.key === 'loan-balance') &&
                 isDispatchReleaseReportFilters(filters) && (
-                  <>
-                    <div className='space-y-2'>
-                      <Label htmlFor='goodsDispatchedPaidFilter'>Payment status</Label>
-                      <Select
-                        value={filters.paidFilter}
-                        onValueChange={(value) => handleFilterChange('paidFilter', value)}
-                      >
-                        <SelectTrigger id='goodsDispatchedPaidFilter'>
-                          <SelectValue placeholder='All loaned goods' />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value='all'>All loaned goods</SelectItem>
-                          <SelectItem value='paid'>Paid in full</SelectItem>
-                          <SelectItem value='unpaid'>Not paid in full</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className='text-xs text-muted-foreground'>
-                        Filters previously loaned goods by whether the linked invoice is fully paid.
-                      </p>
-                    </div>
-                    <div className='space-y-2'>
-                      <Label htmlFor='goodsDispatchedCustomer'>Customer (optional)</Label>
-                      <AsyncSelect<CustomerOption>
-                        value={selectedGoodsDispatchedCustomer}
-                        onChange={(selected) => {
-                          setSelectedGoodsDispatchedCustomer(selected)
-                          handleFilterChange('customerName', selected?.name?.trim() || '')
-                          handleFilterChange('customerCompany', '')
-                        }}
-                        loadOptions={loadCmtsReportCustomerOptionsDebounced}
-                        placeholder='Type CMTS customer name or phone...'
-                        isClearable
-                        isSearchable
-                        noOptionsMessage={({ inputValue }) =>
-                          inputValue.length < 2
-                            ? 'Type at least 2 characters to search'
-                            : 'No customers found'
-                        }
-                        loadingMessage={() => 'Searching customers...'}
-                        className='react-select-container'
-                        classNamePrefix='react-select'
-                      />
-                      <p className='text-xs text-muted-foreground'>
-                        Searches CMTS customers (name, phone, company) — up to 50 matches per search.
-                      </p>
-                    </div>
-                  </>
+                  <div className='space-y-2'>
+                    <Label htmlFor='goodsDispatchedPaidFilter'>Payment status</Label>
+                    <Select
+                      value={filters.paidFilter}
+                      onValueChange={(value) => handleFilterChange('paidFilter', value)}
+                    >
+                      <SelectTrigger id='goodsDispatchedPaidFilter'>
+                        <SelectValue placeholder='All loaned goods' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='all'>All loaned goods</SelectItem>
+                        <SelectItem value='paid'>Paid in full</SelectItem>
+                        <SelectItem value='unpaid'>Not paid in full</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className='text-xs text-muted-foreground'>
+                      Filters previously loaned goods by whether the linked invoice is fully paid.
+                    </p>
+                  </div>
+                )}
+
+              {isCmtsDispatchReportKey(selectedReport?.key) &&
+                isDispatchReleaseReportFilters(filters) && (
+                  <CmtsReportCustomerAsyncSelect
+                    id='goodsDispatchedCustomer'
+                    value={selectedGoodsDispatchedCustomer}
+                    onChange={handleCmtsReportCustomerChange}
+                    loadOptions={loadCmtsReportCustomerOptionsDebounced}
+                  />
                 )}
 
               {selectedReport?.key === 'invoice' && (
@@ -1755,83 +1894,15 @@ export function Reports() {
                     </Select>
                   </div>
                   {SHOW_INVOICE_REPORT_CUSTOMER_FILTER && (
-                  <div className='space-y-2'>
-                    <Label htmlFor='invoiceCustomer'>Customer (optional)</Label>
-                    <AsyncSelect<CustomerOption>
-                      value={selectedInvoiceCustomer}
-                      onChange={(selected) => {
-                        setSelectedInvoiceCustomer(selected)
-                        handleFilterChange('customerId', selected ? String(selected.id) : '')
-                      }}
-                      loadOptions={loadCustomerOptionsDebounced}
-                      placeholder='Type customer name or email...'
-                      isClearable
-                      isSearchable
-                      noOptionsMessage={({ inputValue }) =>
-                        inputValue.length < 2
-                          ? 'Type at least 2 characters to search'
-                          : 'No customers found'
-                      }
-                      loadingMessage={() => 'Searching customers...'}
-                      className='react-select-container'
-                      classNamePrefix='react-select'
-                      styles={{
-                        control: (base, state) => ({
-                          ...base,
-                          minHeight: '36px',
-                          height: '36px',
-                          borderColor: state.isFocused
-                            ? 'hsl(var(--ring))'
-                            : 'hsl(var(--input))',
-                          backgroundColor: 'transparent',
-                          borderRadius: 'calc(var(--radius) - 2px)',
-                          borderWidth: '1px',
-                          borderStyle: 'solid',
-                          boxShadow: state.isFocused
-                            ? '0 0 0 3px hsl(var(--ring) / 0.5)'
-                            : 'none',
-                          '&:hover': {
-                            borderColor: 'hsl(var(--ring))',
-                          },
-                        }),
-                        input: (base) => ({
-                          ...base,
-                          margin: 0,
-                          padding: 0,
-                        }),
-                        valueContainer: (base) => ({
-                          ...base,
-                          padding: '0 8px',
-                          height: '36px',
-                        }),
-                        singleValue: (base) => ({
-                          ...base,
-                          color: 'hsl(var(--foreground))',
-                        }),
-                        placeholder: (base) => ({
-                          ...base,
-                          color: 'hsl(var(--muted-foreground))',
-                        }),
-                        menu: (base) => ({
-                          ...base,
-                          backgroundColor: 'hsl(var(--popover))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: 'calc(var(--radius) - 2px)',
-                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                        }),
-                        option: (base, state) => ({
-                          ...base,
-                          backgroundColor: state.isFocused
-                            ? 'hsl(var(--accent))'
-                            : 'transparent',
-                          color: 'hsl(var(--foreground))',
-                          '&:active': {
-                            backgroundColor: 'hsl(var(--accent))',
-                          },
-                        }),
-                      }}
-                    />
-                  </div>
+                  <ErpReportCustomerAsyncSelect
+                    id='invoiceCustomer'
+                    value={selectedInvoiceCustomer}
+                    onChange={(selected) => {
+                      setSelectedInvoiceCustomer(selected)
+                      handleFilterChange('customerId', selected ? String(selected.id) : '')
+                    }}
+                    loadOptions={loadCustomerOptionsDebounced}
+                  />
                   )}
                 </>
               )}
@@ -1871,83 +1942,15 @@ export function Reports() {
                   </div>
                   {SHOW_INVOICE_PAYMENT_CUSTOMER_AND_INVOICE_FILTERS && (
                     <>
-                  <div className='space-y-2'>
-                    <Label htmlFor='paymentCustomer'>Customer (optional)</Label>
-                    <AsyncSelect<CustomerOption>
-                      value={selectedPaymentCustomer}
-                      onChange={(selected) => {
-                        setSelectedPaymentCustomer(selected)
-                        handleFilterChange('customerId', selected ? String(selected.id) : '')
-                      }}
-                      loadOptions={loadCustomerOptionsDebounced}
-                      placeholder='Type customer name or email...'
-                      isClearable
-                      isSearchable
-                      noOptionsMessage={({ inputValue }) =>
-                        inputValue.length < 2
-                          ? 'Type at least 2 characters to search'
-                          : 'No customers found'
-                      }
-                      loadingMessage={() => 'Searching customers...'}
-                      className='react-select-container'
-                      classNamePrefix='react-select'
-                      styles={{
-                        control: (base, state) => ({
-                          ...base,
-                          minHeight: '36px',
-                          height: '36px',
-                          borderColor: state.isFocused
-                            ? 'hsl(var(--ring))'
-                            : 'hsl(var(--input))',
-                          backgroundColor: 'transparent',
-                          borderRadius: 'calc(var(--radius) - 2px)',
-                          borderWidth: '1px',
-                          borderStyle: 'solid',
-                          boxShadow: state.isFocused
-                            ? '0 0 0 3px hsl(var(--ring) / 0.5)'
-                            : 'none',
-                          '&:hover': {
-                            borderColor: 'hsl(var(--ring))',
-                          },
-                        }),
-                        input: (base) => ({
-                          ...base,
-                          margin: 0,
-                          padding: 0,
-                        }),
-                        valueContainer: (base) => ({
-                          ...base,
-                          padding: '0 8px',
-                          height: '36px',
-                        }),
-                        singleValue: (base) => ({
-                          ...base,
-                          color: 'hsl(var(--foreground))',
-                        }),
-                        placeholder: (base) => ({
-                          ...base,
-                          color: 'hsl(var(--muted-foreground))',
-                        }),
-                        menu: (base) => ({
-                          ...base,
-                          backgroundColor: 'hsl(var(--popover))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: 'calc(var(--radius) - 2px)',
-                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                        }),
-                        option: (base, state) => ({
-                          ...base,
-                          backgroundColor: state.isFocused
-                            ? 'hsl(var(--accent))'
-                            : 'transparent',
-                          color: 'hsl(var(--foreground))',
-                          '&:active': {
-                            backgroundColor: 'hsl(var(--accent))',
-                          },
-                        }),
-                      }}
-                    />
-                  </div>
+                  <ErpReportCustomerAsyncSelect
+                    id='paymentCustomer'
+                    value={selectedPaymentCustomer}
+                    onChange={(selected) => {
+                      setSelectedPaymentCustomer(selected)
+                      handleFilterChange('customerId', selected ? String(selected.id) : '')
+                    }}
+                    loadOptions={loadCustomerOptionsDebounced}
+                  />
                   <div className='space-y-2'>
                     <Label htmlFor='paymentInvoice'>Invoice (optional ID)</Label>
                     <Input
