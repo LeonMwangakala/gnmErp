@@ -751,8 +751,10 @@ interface CustomerOption {
   id: number
   value: string
   label: string
+  /** CMTS full name sent as customer_name to dispatch reports */
   name: string
   email: string
+  companyName?: string
 }
 
 type ReportType =
@@ -1087,6 +1089,30 @@ export function Reports() {
     }
   }, [])
 
+  const loadCmtsReportCustomerOptions = useCallback(
+    async (inputValue: string): Promise<CustomerOption[]> => {
+      if (!inputValue || inputValue.length < 2) {
+        return []
+      }
+      try {
+        const customers = await invoiceApi.searchReportCustomers(inputValue, 50)
+        return customers.map((customer) => ({
+          id: customer.id,
+          value: String(customer.id),
+          label: customer.label,
+          name: customer.full_name,
+          email: '',
+          companyName: customer.company_name ?? undefined,
+        }))
+      } catch (error: unknown) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to search CMTS customers:', error)
+        return []
+      }
+    },
+    []
+  )
+
   const loadCustomerOptionsDebounced = useCallback(
     (inputValue: string, callback: (options: CustomerOption[]) => void) => {
       if (debounceTimeoutRef.current) {
@@ -1098,6 +1124,19 @@ export function Reports() {
       }, 300)
     },
     [loadCustomerOptions]
+  )
+
+  const loadCmtsReportCustomerOptionsDebounced = useCallback(
+    (inputValue: string, callback: (options: CustomerOption[]) => void) => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+      debounceTimeoutRef.current = setTimeout(async () => {
+        const options = await loadCmtsReportCustomerOptions(inputValue)
+        callback(options)
+      }, 300)
+    },
+    [loadCmtsReportCustomerOptions]
   )
 
   const handleOpenReport = (report: ReportDefinition) => {
@@ -1674,8 +1713,8 @@ export function Reports() {
                           handleFilterChange('customerName', selected?.name?.trim() || '')
                           handleFilterChange('customerCompany', '')
                         }}
-                        loadOptions={loadCustomerOptionsDebounced}
-                        placeholder='Type customer name...'
+                        loadOptions={loadCmtsReportCustomerOptionsDebounced}
+                        placeholder='Type CMTS customer name or phone...'
                         isClearable
                         isSearchable
                         noOptionsMessage={({ inputValue }) =>
@@ -1687,6 +1726,9 @@ export function Reports() {
                         className='react-select-container'
                         classNamePrefix='react-select'
                       />
+                      <p className='text-xs text-muted-foreground'>
+                        Searches CMTS customers (name, phone, company) — up to 50 matches per search.
+                      </p>
                     </div>
                   </>
                 )}

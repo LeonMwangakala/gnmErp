@@ -360,6 +360,39 @@ export const invoiceApi = {
     | { ok: false; message: string }
   > => fetchDispatchReleaseReport('authorized-pending-dispatch-report', params),
 
+  /** CMTS customers for loan / loan-balance report filter (same names as dispatch report rows). */
+  searchReportCustomers: async (
+    search: string,
+    limit = 50
+  ): Promise<ReportCustomerSearchResult[]> => {
+    const q = search.trim()
+    if (q.length < 2) return []
+    try {
+      const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/report-customer-search`, {
+        params: { search: q, limit },
+      })
+      const body = response.data as { status?: boolean; results?: unknown[] }
+      if (body?.status !== true || !Array.isArray(body.results)) return []
+      return body.results
+        .map((item) => {
+          const r = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+          const id = Number(r.id)
+          if (!Number.isFinite(id)) return null
+          const full_name = String(r.full_name ?? r.fullName ?? '').trim()
+          const company_raw = r.company_name ?? r.companyName
+          const company_name =
+            company_raw == null || String(company_raw).trim() === ''
+              ? null
+              : String(company_raw).trim()
+          const label = String(r.label ?? full_name ?? company_name ?? id).trim()
+          return { id, full_name: full_name || company_name || label, company_name, label }
+        })
+        .filter((row): row is ReportCustomerSearchResult => row != null)
+    } catch {
+      return []
+    }
+  },
+
   getInvoices: async (params?: PaginationParams): Promise<PaginatedResponse<any>> => {
     const response = await api.get('/invoices', { params })
     return {
@@ -638,6 +671,13 @@ export interface GoodsDispatchedReportRow {
   bill_status: string | null
   consignment_delivery_status_label?: string
   awaiting_dispatch?: boolean
+}
+
+export interface ReportCustomerSearchResult {
+  id: number
+  full_name: string
+  company_name: string | null
+  label: string
 }
 
 export interface GoodsDispatchedReportData {
