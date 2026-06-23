@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, ChevronLeft, ChevronRight, Info } from 'lucide-react'
+import { Loader2, ChevronLeft, ChevronRight, Info, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -38,6 +38,7 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { EMPTY_INVOICE_REFS, useInvoiceContainers } from './use-invoice-containers'
 import { InvoiceConsignmentsGoodsModal } from '@/features/invoices/invoice-consignments-goods-modal'
+import { exportCustomerInvoicesCsv } from './export-customer-invoices'
 
 const DISPATCH_REPORT_PAGE_SIZE = 25
 
@@ -120,7 +121,6 @@ interface Invoice {
   due_date_raw: string
   is_overdue: boolean
   total_tax: number
-  total_tax_formatted: string
   amount: number
   amount_formatted: string
   paid_amount?: number
@@ -155,6 +155,7 @@ export function CustomerDetailModal({
     to: null,
   })
   const [activeTab, setActiveTab] = useState('info')
+  const [exportingInvoices, setExportingInvoices] = useState(false)
   const [cargoModalOpen, setCargoModalOpen] = useState(false)
   const [cargoInvoiceNo, setCargoInvoiceNo] = useState<string | null>(null)
 
@@ -312,6 +313,27 @@ export function CustomerDetailModal({
         )
       default:
         return <Badge variant='secondary'>Unknown</Badge>
+    }
+  }
+
+  const handleExportInvoices = async () => {
+    if (!customer || !customerId) return
+    try {
+      setExportingInvoices(true)
+      const count = await exportCustomerInvoicesCsv({
+        customerId,
+        customerName: customer.name,
+        customerNumber: customer.customer_number,
+      })
+      if (count === 0) {
+        toast.message('No invoices found to export')
+      } else {
+        toast.success(`Exported ${count} invoices`)
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to export customer invoices')
+    } finally {
+      setExportingInvoices(false)
     }
   }
 
@@ -484,11 +506,29 @@ export function CustomerDetailModal({
             <TabsContent value='invoices' className='space-y-4'>
               <Card>
                 <CardHeader>
-                  <CardTitle>Customer Invoices</CardTitle>
-                  <CardDescription>
-                    {pagination.total > 0 &&
-                      `Showing ${pagination.from} to ${pagination.to} of ${pagination.total} invoices`}
-                  </CardDescription>
+                  <div className='flex items-start justify-between gap-3'>
+                    <div>
+                      <CardTitle>Customer Invoices</CardTitle>
+                      <CardDescription>
+                        {pagination.total > 0 &&
+                          `Showing ${pagination.from} to ${pagination.to} of ${pagination.total} invoices`}
+                      </CardDescription>
+                    </div>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      onClick={() => void handleExportInvoices()}
+                      disabled={exportingInvoices || invoicesLoading}
+                    >
+                      {exportingInvoices ? (
+                        <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                      ) : (
+                        <Download className='mr-2 h-4 w-4' />
+                      )}
+                      Export
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {invoicesLoading ? (
@@ -508,7 +548,6 @@ export function CustomerDetailModal({
                             <TableHead>Container#</TableHead>
                             <TableHead>Issue Date</TableHead>
                             <TableHead>Due Date</TableHead>
-                            <TableHead className='text-right'>Total Tax</TableHead>
                             <TableHead className='text-right'>Amount</TableHead>
                             <TableHead className='text-right'>Paid Amount</TableHead>
                             <TableHead className='text-right'>Due Amount</TableHead>
@@ -538,9 +577,6 @@ export function CustomerDetailModal({
                                 ) : (
                                   invoice.due_date
                                 )}
-                              </TableCell>
-                              <TableCell className='text-right'>
-                                {invoice.total_tax_formatted}
                               </TableCell>
                               <TableCell className='text-right'>{invoice.amount_formatted}</TableCell>
                               <TableCell className='text-right'>
