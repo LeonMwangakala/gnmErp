@@ -2316,7 +2316,14 @@ export const customsJobApi = {
     formData.append('file', payload.file)
 
     const response = await api.post(`/customs/jobs/${jobId}/documents`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      transformRequest: [
+        (data, headers) => {
+          if (data instanceof FormData) {
+            delete headers['Content-Type']
+          }
+          return data
+        },
+      ],
     })
     return response.data
   },

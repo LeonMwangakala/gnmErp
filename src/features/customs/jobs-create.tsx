@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { getRouteApi } from '@tanstack/react-router'
 import AsyncSelect from 'react-select/async'
 import { ChevronDown, ChevronRight, Download, Eye, Plus } from 'lucide-react'
@@ -48,6 +48,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   customerApi,
   CUSTOMS_DOCUMENT_STAGE_CODES,
@@ -302,6 +303,108 @@ const initialForm: JobForm = {
   shipperId: '',
 }
 
+type JobNote = {
+  id: number
+  user: string
+  subject: string
+  body: string
+  date: string
+}
+
+type JobEditableSnapshotInput = {
+  form: JobForm
+  commoditySearch: string
+  commodityRows: CommodityRow[]
+  uploadedCommodityFiles: string[]
+  authorizationLetters: string[]
+  notes: JobNote[]
+  uploadedDocuments: Array<{
+    id: number
+    name: string
+    fileName: string
+    filePath?: string
+    fileUrl?: string
+    pendingFile: boolean
+  }>
+  pendingUploads: Array<{ id: number; name: string; fileName: string }>
+}
+
+function serializeJobEditableState(input: JobEditableSnapshotInput): string {
+  return JSON.stringify(input)
+}
+
+type UploadedJobDocumentRow = {
+  id: number
+  name: string
+  fileName: string
+  fileSize: string
+  date: string
+  file?: File
+  filePath?: string
+  fileUrl?: string
+  mimeType?: string
+}
+
+function mapJobDocumentRow(row: Record<string, unknown>): UploadedJobDocumentRow {
+  const fileSizeBytes = Number(row.file_size_bytes || 0)
+  return {
+    id: Number(row.id) || Date.now(),
+    name: String(row.name || row.document_name || '-'),
+    fileName: String(row.file_name || row.original_file_name || '-'),
+    fileSize: fileSizeBytes
+      ? `${Math.max(1, Math.round(fileSizeBytes / 1024))} KB`
+      : '-',
+    date: row.created_at ? new Date(String(row.created_at)).toLocaleDateString() : '-',
+    filePath: row.file_path ? String(row.file_path) : undefined,
+    fileUrl: row.file_url ? String(row.file_url) : undefined,
+    mimeType: row.mime_type ? String(row.mime_type) : undefined,
+  }
+}
+
+function mapUploadedDocumentSnapshot(docs: UploadedJobDocumentRow[]) {
+  return docs.map((doc) => ({
+    id: doc.id,
+    name: doc.name,
+    fileName: doc.fileName,
+    filePath: doc.filePath,
+    fileUrl: doc.fileUrl,
+    pendingFile: doc.file instanceof File,
+  }))
+}
+
+function JobFormSkeleton() {
+  return (
+    <div className='space-y-6' aria-busy='true' aria-label='Loading job details'>
+      <div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div key={`header-${i}`} className='space-y-2'>
+            <Skeleton className='h-4 w-24' />
+            <Skeleton className='h-9 w-full' />
+          </div>
+        ))}
+      </div>
+      <div className='flex flex-wrap gap-2'>
+        {Array.from({ length: 7 }).map((_, i) => (
+          <Skeleton key={`tab-${i}`} className='h-9 w-28' />
+        ))}
+      </div>
+      <div className='space-y-4 rounded-md border p-4'>
+        {Array.from({ length: 5 }).map((_, rowIdx) => (
+          <div key={`row-${rowIdx}`} className='grid grid-cols-1 gap-3 md:grid-cols-3'>
+            <Skeleton className='h-9 w-full' />
+            <Skeleton className='h-9 w-full' />
+            <Skeleton className='h-9 w-full' />
+          </div>
+        ))}
+      </div>
+      <div className='flex items-center justify-end gap-2'>
+        <Skeleton className='h-9 w-24' />
+        <Skeleton className='h-9 w-28' />
+      </div>
+    </div>
+  )
+}
+
 export function CustomsCreateJob() {
   const loggedInUser = useAuthStore((s) => s.auth.user)
   const routerSearch = jobsCreateRoute.useSearch()
@@ -320,6 +423,8 @@ export function CustomsCreateJob() {
     return null
   }, [routerSearch.id, routerSearch.jobId, routerSearch.job_id])
   const isViewMode = pageMode === 'view'
+  const shouldLoadExistingJob =
+    (pageMode === 'view' || pageMode === 'update') && editingJobId != null
   const [currentJobId, setCurrentJobId] = useState<number | null>(null)
   const [form, setForm] = useState<JobForm>(initialForm)
   const [shipmentTypeOptions, setShipmentTypeOptions] = useState<string[]>([
@@ -365,6 +470,7 @@ export function CustomsCreateJob() {
     }>
   >([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
+  const [documentsUploading, setDocumentsUploading] = useState(false)
   const [jobDocumentTypes, setJobDocumentTypes] = useState<CustomsDocumentType[]>([])
   const [jobDocumentTypesLoadFailed, setJobDocumentTypesLoadFailed] = useState(false)
   const [isDocumentPreviewOpen, setIsDocumentPreviewOpen] = useState(false)
@@ -403,7 +509,20 @@ export function CustomsCreateJob() {
   const [portsOrigin, setPortsOrigin] = useState<CustomsPort[]>([])
   const [portsDestination, setPortsDestination] = useState<CustomsPort[]>([])
   const [isSaving, setIsSaving] = useState(false)
-  const [loadingJob, setLoadingJob] = useState(false)
+  const [loadingJob, setLoadingJob] = useState(shouldLoadExistingJob)
+  const [savedSnapshot, setSavedSnapshot] = useState(() =>
+    serializeJobEditableState({
+      form: initialForm,
+      commoditySearch: '',
+      commodityRows: [],
+      uploadedCommodityFiles: [],
+      authorizationLetters: [],
+      notes: [],
+      uploadedDocuments: [],
+      pendingUploads: [],
+    })
+  )
+  const captureBaselineAfterLoad = useRef(false)
   /** Lock form fields in view mode; keep tab triggers & non-field actions (e.g. collapse, preview) usable */
   const formDisabled = isViewMode || isSaving || loadingJob
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null)
@@ -411,6 +530,45 @@ export function CustomsCreateJob() {
   const [fileManagerSeedOptions, setFileManagerSeedOptions] = useState<FileManagerOption[]>([])
 
   const updateField = <K extends keyof JobForm>(key: K, value: JobForm[K]) => setForm((p) => ({ ...p, [key]: value }))
+
+  const buildCurrentSnapshot = useCallback(
+    (): string =>
+      serializeJobEditableState({
+        form,
+        commoditySearch,
+        commodityRows,
+        uploadedCommodityFiles,
+        authorizationLetters,
+        notes,
+        uploadedDocuments: mapUploadedDocumentSnapshot(uploadedDocuments),
+        pendingUploads: pendingUploads.map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          fileName: doc.fileName,
+        })),
+      }),
+    [
+      form,
+      commoditySearch,
+      commodityRows,
+      uploadedCommodityFiles,
+      authorizationLetters,
+      notes,
+      uploadedDocuments,
+      pendingUploads,
+    ]
+  )
+
+  const isDirty = useMemo(() => {
+    if (isViewMode || loadingJob) return false
+    return buildCurrentSnapshot() !== savedSnapshot
+  }, [isViewMode, loadingJob, buildCurrentSnapshot, savedSnapshot])
+
+  useEffect(() => {
+    if (!captureBaselineAfterLoad.current || loadingJob) return
+    captureBaselineAfterLoad.current = false
+    setSavedSnapshot(buildCurrentSnapshot())
+  }, [loadingJob, buildCurrentSnapshot])
 
   const loadCustomerOptions = async (inputValue: string): Promise<CustomerOption[]> => {
     const search = inputValue.trim()
@@ -762,11 +920,6 @@ export function CustomsCreateJob() {
   }, [jobDocumentTypes, jobDocumentTypesLoadFailed])
 
   useEffect(() => {
-    if (!currentJobId) return
-    fetchJobDocuments(currentJobId)
-  }, [currentJobId])
-
-  useEffect(() => {
     if (!editingJobId || pageMode === 'create') return
     let cancelled = false
     setLoadingJob(true)
@@ -775,7 +928,7 @@ export function CustomsCreateJob() {
     setSelectedFileManager(null)
     customsJobApi
       .getJob(editingJobId)
-      .then((job) => {
+      .then(async (job) => {
         if (!job || cancelled) return
         const meta = (job.meta || {}) as Record<string, any>
         const jobDetails = (meta.job_details ?? job.job_details ?? {}) as Record<string, any>
@@ -924,6 +1077,17 @@ export function CustomsCreateJob() {
           Array.isArray(meta.letters) ? meta.letters : Array.isArray(job.letters) ? job.letters : []
         )
         setNotes(Array.isArray(meta.notes) ? meta.notes : Array.isArray(job.notes) ? job.notes : [])
+        const loadedJobId = Number(job.id) || editingJobId
+        try {
+          const docsResponse = await customsJobApi.getJobDocuments(loadedJobId, { per_page: 200 })
+          const rows = Array.isArray(docsResponse?.data) ? docsResponse.data : []
+          if (!cancelled) {
+            setUploadedDocuments(rows.map((row: Record<string, unknown>) => mapJobDocumentRow(row)))
+          }
+        } catch {
+          if (!cancelled) setUploadedDocuments([])
+        }
+        if (!cancelled) captureBaselineAfterLoad.current = true
       })
       .catch(() => {
         toast.error('Failed to load job details')
@@ -1068,16 +1232,65 @@ export function CustomsCreateJob() {
     setSelectedFile(null)
   }
 
-  const handleUploadDocuments = () => {
+  const resolveJobId = () => currentJobId ?? editingJobId
+
+  const syncSavedDocumentSnapshot = (docs: UploadedJobDocumentRow[]) => {
+    setSavedSnapshot((prev) => {
+      const saved = JSON.parse(prev) as JobEditableSnapshotInput
+      return serializeJobEditableState({
+        ...saved,
+        uploadedDocuments: mapUploadedDocumentSnapshot(docs),
+        pendingUploads: [],
+      })
+    })
+  }
+
+  const handleUploadDocuments = async () => {
     if (pendingUploads.length === 0) {
       toast.error('Add at least one document before uploading')
       return
     }
 
-    setUploadedDocuments((prev) => [...prev, ...pendingUploads])
-    toast.success(`${pendingUploads.length} document(s) uploaded`)
-    setIsUploadModalOpen(false)
-    resetUploadModalForm()
+    const jobId = resolveJobId()
+    if (!jobId) {
+      setUploadedDocuments((prev) => [...prev, ...pendingUploads])
+      toast.success(`${pendingUploads.length} document(s) queued — save the job to upload to the server`)
+      setIsUploadModalOpen(false)
+      resetUploadModalForm()
+      return
+    }
+
+    setDocumentsUploading(true)
+    try {
+      const uploadResults: UploadedJobDocumentRow[] = []
+      for (const doc of pendingUploads) {
+        if (!(doc.file instanceof File)) continue
+        const response = await customsJobApi.uploadJobDocument(jobId, {
+          document_name: doc.name,
+          file: doc.file,
+        })
+        const uploaded = response?.data
+        if (!uploaded) {
+          throw new Error('invalid_upload_response')
+        }
+        uploadResults.push(mapJobDocumentRow(uploaded as Record<string, unknown>))
+      }
+
+      const mergedDocuments = [...uploadedDocuments, ...uploadResults]
+      setUploadedDocuments(mergedDocuments)
+      setPendingUploads([])
+      syncSavedDocumentSnapshot(mergedDocuments)
+      toast.success(`${uploadResults.length} document(s) uploaded successfully`)
+      setIsUploadModalOpen(false)
+      setDocumentName('')
+      setDocumentNameOther('')
+      setSelectedFile(null)
+      setDocumentsSearch('')
+    } catch {
+      toast.error('Failed to upload document(s). Please try again.')
+    } finally {
+      setDocumentsUploading(false)
+    }
   }
 
   const safeOpenUrl = (url: string) => {
@@ -1171,25 +1384,17 @@ export function CustomsCreateJob() {
     toast.error('No document source found')
   }
 
-  const fetchJobDocuments = async (jobId: number) => {
+  const fetchJobDocuments = async (jobId: number): Promise<UploadedJobDocumentRow[]> => {
     setDocumentsLoading(true)
     try {
       const response = await customsJobApi.getJobDocuments(jobId, { per_page: 200 })
       const rows = Array.isArray(response?.data) ? response.data : []
-      setUploadedDocuments(
-        rows.map((row: any) => ({
-          id: Number(row.id) || Date.now(),
-          name: row.name || '-',
-          fileName: row.file_name || '-',
-          fileSize: row.file_size_bytes ? `${Math.max(1, Math.round(Number(row.file_size_bytes) / 1024))} KB` : '-',
-          date: row.created_at ? new Date(row.created_at).toLocaleDateString() : '-',
-          filePath: row.file_path || undefined,
-          fileUrl: row.file_url || undefined,
-          mimeType: row.mime_type || undefined,
-        }))
-      )
+      const mapped = rows.map((row: Record<string, unknown>) => mapJobDocumentRow(row))
+      setUploadedDocuments(mapped)
+      return mapped
     } catch {
       toast.error('Failed to load uploaded documents')
+      return []
     } finally {
       setDocumentsLoading(false)
     }
@@ -1472,43 +1677,22 @@ export function CustomsCreateJob() {
       }
 
       setCurrentJobId(serverJob.id)
-      let uploadedServerDocs: Array<{
-        id: number
-        name: string
-        fileName: string
-        fileSize: string
-        date: string
-        filePath?: string
-        fileUrl?: string
-        mimeType?: string
-      }> = []
 
       const docsToUpload = uploadedDocuments.filter((doc) => doc.file instanceof File)
       if (docsToUpload.length > 0) {
-        const uploadResults = await Promise.all(
+        await Promise.all(
           docsToUpload.map(async (doc) => {
-            const response = await customsJobApi.uploadJobDocument(serverJob.id, {
+            await customsJobApi.uploadJobDocument(serverJob.id, {
               document_name: doc.name,
               file: doc.file as File,
             })
-            const uploaded = response?.data
-            return {
-              id: uploaded?.id || doc.id,
-              name: uploaded?.name || doc.name,
-              fileName: uploaded?.file_name || doc.fileName,
-              fileSize: doc.fileSize,
-              date: doc.date,
-              filePath: uploaded?.file_path,
-              fileUrl: uploaded?.file_url,
-              mimeType: uploaded?.mime_type,
-            }
           })
         )
-        uploadedServerDocs = uploadResults
-        setUploadedDocuments(uploadResults)
-      } else {
-        await fetchJobDocuments(serverJob.id)
       }
+
+      const savedDocsForSnapshot = await fetchJobDocuments(serverJob.id)
+
+      setPendingUploads([])
 
       const job: Job = {
         id: serverJob.id,
@@ -1530,7 +1714,15 @@ export function CustomsCreateJob() {
           container_shipment: containerShipment,
           vehicle_shipment: vehicleShipment,
           loose_cargo_shipment: looseCargoShipment,
-          documents: uploadedServerDocs,
+          documents: savedDocsForSnapshot.map((doc) => ({
+            id: doc.id,
+            name: doc.name,
+            fileName: doc.fileName,
+            fileSize: doc.fileSize,
+            date: doc.date,
+            filePath: doc.filePath || null,
+            fileUrl: doc.fileUrl || null,
+          })),
           upload_csv: {
             search: commoditySearch,
             rows: commodityRows,
@@ -1544,8 +1736,22 @@ export function CustomsCreateJob() {
       }
 
       prependStoredJob(job)
-      toast.success(pageMode === 'update' ? 'Job updated successfully' : 'Job created successfully')
-      goToJobs()
+      toast.success(pageMode === 'update' ? 'Job saved successfully' : 'Job created successfully')
+      setSavedSnapshot(
+        serializeJobEditableState({
+          form,
+          commoditySearch,
+          commodityRows,
+          uploadedCommodityFiles,
+          authorizationLetters,
+          notes,
+          uploadedDocuments: mapUploadedDocumentSnapshot(savedDocsForSnapshot),
+          pendingUploads: [],
+        })
+      )
+      if (pageMode !== 'update') {
+        goToJobs()
+      }
     } catch {
       toast.error(
         pageMode === 'update'
@@ -1615,10 +1821,16 @@ export function CustomsCreateJob() {
     >
       <Card>
         <CardHeader>
-          <CardTitle>{loadingJob ? 'Loading Job Details...' : 'Job Details'}</CardTitle>
-          <CardDescription>Use tabs to complete the shipment information.</CardDescription>
+          <CardTitle>Job Details</CardTitle>
+          <CardDescription>
+            {loadingJob ? 'Fetching job data…' : 'Use tabs to complete the shipment information.'}
+          </CardDescription>
         </CardHeader>
         <CardContent className='space-y-4'>
+          {loadingJob ? (
+            <JobFormSkeleton />
+          ) : (
+          <>
           {/* Header fields: disabled in view mode; separate from tabs so tab triggers stay clickable */}
           <fieldset
             disabled={isSaving || isViewMode || loadingJob}
@@ -2569,7 +2781,12 @@ export function CustomsCreateJob() {
                     </div>
 
                     <div className='flex justify-center'>
-                      <Button onClick={handleUploadDocuments}>Upload</Button>
+                      <Button
+                        onClick={() => void handleUploadDocuments()}
+                        disabled={documentsUploading || pendingUploads.length === 0}
+                      >
+                        {documentsUploading ? 'Uploading...' : 'Upload'}
+                      </Button>
                     </div>
                   </div>
                 </DialogContent>
@@ -2905,14 +3122,16 @@ export function CustomsCreateJob() {
               onClick={goToJobs}
               disabled={isSaving}
             >
-              Cancel
+              {pageMode === 'create' ? 'Cancel' : 'Close'}
             </Button>
-            {!isViewMode ? (
+            {!isViewMode && isDirty ? (
               <Button onClick={handleSave} disabled={isSaving || loadingJob}>
-                {isSaving ? 'Saving...' : pageMode === 'update' ? 'Update Job' : 'Save Job'}
+                {isSaving ? 'Saving...' : pageMode === 'update' ? 'Save' : 'Save Job'}
               </Button>
             ) : null}
           </div>
+          </>
+          )}
         </CardContent>
       </Card>
     </CustomsPage>

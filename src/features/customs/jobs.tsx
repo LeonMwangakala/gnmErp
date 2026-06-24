@@ -38,6 +38,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { customsJobApi } from '@/lib/api'
 import {
   createInitialJobStageAssignments,
@@ -107,11 +108,61 @@ function normalizeJob(job: Job): Job {
   }
 }
 
+const JOBS_SKELETON_ROW_COUNT = 8
+const JOBS_SKELETON_COLUMN_WIDTHS = [
+  'w-6',
+  'w-20',
+  'w-32',
+  'w-24',
+  'w-24',
+  'w-16',
+  'w-20',
+  'w-14',
+  'w-14',
+  'w-16',
+  'w-20',
+]
+
+function JobsTableSkeleton() {
+  return (
+    <div className='rounded-md border'>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>S/N</TableHead>
+            <TableHead>Job No</TableHead>
+            <TableHead>Customer</TableHead>
+            <TableHead>Shipment Type</TableHead>
+            <TableHead>Date of Receipt</TableHead>
+            <TableHead>Shipping</TableHead>
+            <TableHead>Declaration</TableHead>
+            <TableHead>Port</TableHead>
+            <TableHead>TBS</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className='text-right'>Action</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: JOBS_SKELETON_ROW_COUNT }).map((_, rowIdx) => (
+            <TableRow key={rowIdx}>
+              {JOBS_SKELETON_COLUMN_WIDTHS.map((width, colIdx) => (
+                <TableCell key={`${rowIdx}-${colIdx}`} className={colIdx === 10 ? 'text-right' : undefined}>
+                  <Skeleton className={`h-4 ${width}${colIdx === 10 ? ' ml-auto' : ''}`} />
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
 export function CustomsJobs() {
   const navigate = useNavigate()
   const [jobs, setJobs] = useState<Job[]>([])
   const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
@@ -197,9 +248,13 @@ export function CustomsJobs() {
               placeholder='Search by Job No, customer, MBL, HBL'
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              disabled={loading}
             />
           </div>
 
+          {loading ? (
+            <JobsTableSkeleton />
+          ) : (
           <div className='rounded-md border'>
             <Table>
               <TableHeader>
@@ -296,7 +351,7 @@ export function CustomsJobs() {
               </TableBody>
             </Table>
           </div>
-          {loading ? <p className='mt-3 text-xs text-muted-foreground'>Loading jobs...</p> : null}
+          )}
         </CardContent>
       </Card>
 
