@@ -40,9 +40,11 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { customsJobApi } from '@/lib/api'
+import { JobStageProgressIndicator } from './job-stage-progress'
 import {
   createInitialJobStageAssignments,
   createInitialJobStageProgress,
+  getJobFileStatus,
   getStoredJobs,
   saveStoredJobs,
   JOB_STAGE_ORDER,
@@ -102,6 +104,7 @@ function normalizeJob(job: Job): Job {
     hblNo: String(job.hblNo || raw.hbl_no || ''),
     invoiceNo: String(job.invoiceNo || raw.invoice_no || ''),
     dateOfReceipt: String(job.dateOfReceipt || raw.date_of_receipt || '-'),
+    status: String(job.status || raw.status || 'Opened'),
     createdAt: String(job.createdAt || raw.created_at || new Date().toISOString()),
     stageProgress: migratedProgress,
     stageAssignments: migratedAssignments,
@@ -115,10 +118,7 @@ const JOBS_SKELETON_COLUMN_WIDTHS = [
   'w-32',
   'w-24',
   'w-24',
-  'w-16',
-  'w-20',
-  'w-14',
-  'w-14',
+  'w-28',
   'w-16',
   'w-20',
 ]
@@ -134,10 +134,7 @@ function JobsTableSkeleton() {
             <TableHead>Customer</TableHead>
             <TableHead>Shipment Type</TableHead>
             <TableHead>Date of Receipt</TableHead>
-            <TableHead>Shipping</TableHead>
-            <TableHead>Declaration</TableHead>
-            <TableHead>Port</TableHead>
-            <TableHead>TBS</TableHead>
+            <TableHead>Clearance</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className='text-right'>Action</TableHead>
           </TableRow>
@@ -146,8 +143,8 @@ function JobsTableSkeleton() {
           {Array.from({ length: JOBS_SKELETON_ROW_COUNT }).map((_, rowIdx) => (
             <TableRow key={rowIdx}>
               {JOBS_SKELETON_COLUMN_WIDTHS.map((width, colIdx) => (
-                <TableCell key={`${rowIdx}-${colIdx}`} className={colIdx === 10 ? 'text-right' : undefined}>
-                  <Skeleton className={`h-4 ${width}${colIdx === 10 ? ' ml-auto' : ''}`} />
+                <TableCell key={`${rowIdx}-${colIdx}`} className={colIdx === 7 ? 'text-right' : undefined}>
+                  <Skeleton className={`h-4 ${width}${colIdx === 7 ? ' ml-auto' : ''}`} />
                 </TableCell>
               ))}
             </TableRow>
@@ -264,10 +261,7 @@ export function CustomsJobs() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Shipment Type</TableHead>
                   <TableHead>Date of Receipt</TableHead>
-                  <TableHead>Shipping</TableHead>
-                  <TableHead>Declaration</TableHead>
-                  <TableHead>Port</TableHead>
-                  <TableHead>TBS</TableHead>
+                  <TableHead>Clearance</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className='text-right'>Action</TableHead>
                 </TableRow>
@@ -275,12 +269,14 @@ export function CustomsJobs() {
               <TableBody>
                 {filteredJobs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className='py-8 text-center text-muted-foreground'>
+                    <TableCell colSpan={8} className='py-8 text-center text-muted-foreground'>
                       No jobs yet. Click "Create Job" to add your first record.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredJobs.map((job, index) => (
+                  filteredJobs.map((job, index) => {
+                    const fileStatus = getJobFileStatus(job)
+                    return (
                     <TableRow key={job.id}>
                       <TableCell>{index + 1}</TableCell>
                       <TableCell className='font-medium'>{job.jobNo}</TableCell>
@@ -288,19 +284,12 @@ export function CustomsJobs() {
                       <TableCell>{job.shipmentType}</TableCell>
                       <TableCell>{job.dateOfReceipt}</TableCell>
                       <TableCell>
-                        <Badge variant='outline'>{job.stageProgress.SHIPPING_LINE}</Badge>
+                        <JobStageProgressIndicator progress={job.stageProgress} />
                       </TableCell>
                       <TableCell>
-                        <Badge variant='outline'>{job.stageProgress.DECLARATION_TRA}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant='outline'>{job.stageProgress.PORT}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant='outline'>{job.stageProgress.TBS}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant='outline'>{job.status}</Badge>
+                        <Badge variant={fileStatus === 'Closed' ? 'secondary' : 'default'}>
+                          {fileStatus}
+                        </Badge>
                       </TableCell>
                       <TableCell className='text-right'>
                         <DropdownMenu>
@@ -346,7 +335,8 @@ export function CustomsJobs() {
                         </DropdownMenu>
                       </TableCell>
                     </TableRow>
-                  ))
+                    )
+                  })
                 )}
               </TableBody>
             </Table>

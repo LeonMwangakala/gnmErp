@@ -64,6 +64,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
 const STATUS_LABEL: Record<CustomsPayableStatus, string> = {
   draft: 'Draft',
@@ -119,6 +121,42 @@ const emptyForm: PayableForm = {
   vender_id: '',
   category_id: '',
   product_service_id: '',
+}
+
+function PayableFormFieldSkeleton({
+  labelWidth = 'w-24',
+  className,
+}: {
+  labelWidth?: string
+  className?: string
+}) {
+  return (
+    <div className={cn('space-y-2', className)}>
+      <Skeleton className={cn('h-4', labelWidth)} />
+      <Skeleton className='h-10 w-full' />
+    </div>
+  )
+}
+
+function PayableFormSkeleton() {
+  return (
+    <div className='grid grid-cols-1 gap-4 py-2 sm:grid-cols-2'>
+      <PayableFormFieldSkeleton labelWidth='w-10' />
+      <PayableFormFieldSkeleton labelWidth='w-32' />
+      <PayableFormFieldSkeleton labelWidth='w-28' />
+      <PayableFormFieldSkeleton labelWidth='w-24' />
+      <PayableFormFieldSkeleton labelWidth='w-16' />
+      <PayableFormFieldSkeleton labelWidth='w-16' />
+      <PayableFormFieldSkeleton labelWidth='w-44' />
+      <PayableFormFieldSkeleton labelWidth='w-36' />
+      <PayableFormFieldSkeleton labelWidth='w-40' />
+      <PayableFormFieldSkeleton labelWidth='w-44' />
+      <div className='space-y-2 sm:col-span-2'>
+        <Skeleton className='h-4 w-24' />
+        <Skeleton className='h-20 w-full' />
+      </div>
+    </div>
+  )
 }
 
 export function CustomsPayables() {
@@ -790,6 +828,9 @@ export function CustomsPayables() {
               edited freely.
             </DialogDescription>
           </DialogHeader>
+          {staticOptionsLoading ? (
+            <PayableFormSkeleton />
+          ) : (
           <div className='grid grid-cols-1 gap-4 py-2 sm:grid-cols-2'>
             <div className='space-y-2'>
               <Label>Job *</Label>
@@ -842,22 +883,6 @@ export function CustomsPayables() {
                 </SelectContent>
               </Select>
             </div>
-            {(staticOptionsLoading || documentsLoading) ? (
-              <div className='text-muted-foreground col-span-full flex flex-wrap items-center gap-x-4 gap-y-1 text-sm'>
-                {staticOptionsLoading ? (
-                  <span className='inline-flex items-center gap-2'>
-                    <Loader2 className='h-4 w-4 animate-spin' />
-                    Loading vendors and accounting lists…
-                  </span>
-                ) : null}
-                {documentsLoading ? (
-                  <span className='inline-flex items-center gap-2'>
-                    <Loader2 className='h-4 w-4 animate-spin' />
-                    Loading job documents…
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
             <div className='space-y-2'>
               <Label>Invoice number</Label>
               <Input
@@ -899,11 +924,14 @@ export function CustomsPayables() {
               </Select>
             </div>
             <div className='space-y-2'>
-              <Label>Job document (required to submit)</Label>
+              <Label>Job document *</Label>
+              {documentsLoading && form.customs_job_id ? (
+                <Skeleton className='h-10 w-full' />
+              ) : (
               <Select
                 key={`job-doc-${form.customs_job_id}-${docOptions.length}`}
                 value={form.customs_job_document_id || 'none'}
-                disabled={!form.customs_job_id || documentsLoading}
+                disabled={!form.customs_job_id}
                 onValueChange={(v) =>
                   setForm((f) => ({ ...f, customs_job_document_id: v === 'none' ? '' : v }))
                 }
@@ -911,11 +939,7 @@ export function CustomsPayables() {
                 <SelectTrigger className='w-full min-w-0'>
                   <SelectValue
                     placeholder={
-                      !form.customs_job_id
-                        ? 'Select a job first'
-                        : documentsLoading
-                          ? 'Loading documents…'
-                          : 'Select document'
+                      !form.customs_job_id ? 'Select a job first' : 'Select document'
                     }
                   />
                 </SelectTrigger>
@@ -928,18 +952,16 @@ export function CustomsPayables() {
                   ))}
                 </SelectContent>
               </Select>
+              )}
             </div>
             <div key={`payable-vendor-${accountingOptionsNonce}`} className='space-y-2'>
-              <Label>Vendor (required to submit)</Label>
+              <Label>Vendor *</Label>
               <Select
                 value={form.vender_id || 'none'}
-                disabled={staticOptionsLoading && vendorOptions.length === 0}
                 onValueChange={(v) => setForm((f) => ({ ...f, vender_id: v === 'none' ? '' : v }))}
               >
                 <SelectTrigger className='w-full min-w-0'>
-                  <SelectValue
-                    placeholder={staticOptionsLoading ? 'Loading vendors…' : 'Select vendor'}
-                  />
+                  <SelectValue placeholder='Select vendor' />
                 </SelectTrigger>
                 <SelectContent className='z-[300]'>
                   <SelectItem value='none'>None</SelectItem>
@@ -952,7 +974,7 @@ export function CustomsPayables() {
               </Select>
             </div>
             <div key={`payable-expense-cat-${accountingOptionsNonce}`} className='space-y-2'>
-              <Label>Expense category (required to submit)</Label>
+              <Label>Expense category *</Label>
               <Select
                 value={form.category_id || 'none'}
                 onValueChange={(v) => setForm((f) => ({ ...f, category_id: v === 'none' ? '' : v }))}
@@ -971,7 +993,7 @@ export function CustomsPayables() {
               </Select>
             </div>
             <div key={`payable-product-${accountingOptionsNonce}`} className='space-y-2'>
-              <Label>Product / service (required to submit)</Label>
+              <Label>Product / service *</Label>
               <Select
                 value={form.product_service_id || 'none'}
                 onValueChange={(v) =>
@@ -1001,11 +1023,16 @@ export function CustomsPayables() {
               />
             </div>
           </div>
+          )}
           <DialogFooter>
             <Button type='button' variant='outline' onClick={() => setFormOpen(false)}>
               Cancel
             </Button>
-            <Button type='button' disabled={formSubmitting} onClick={() => void saveDraft()}>
+            <Button
+              type='button'
+              disabled={formSubmitting || staticOptionsLoading}
+              onClick={() => void saveDraft()}
+            >
               {formSubmitting ? <Loader2 className='h-4 w-4 animate-spin' /> : 'Save draft'}
             </Button>
           </DialogFooter>

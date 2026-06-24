@@ -33,6 +33,27 @@ export type Job = {
   createdAt: string
 }
 
+export type JobFileStatus = 'Opened' | 'Closed'
+
+export function isJobFileClosed(
+  job: Pick<Job, 'status' | 'stageProgress'>
+): boolean {
+  const normalizedStatus = (job.status || '').trim().toLowerCase()
+  if (normalizedStatus === 'closed') {
+    return true
+  }
+  if (normalizedStatus === 'opened') {
+    return false
+  }
+  return JOB_STAGE_ORDER.every((stage) => job.stageProgress[stage] === 'COMPLETED')
+}
+
+export function getJobFileStatus(
+  job: Pick<Job, 'status' | 'stageProgress'>
+): JobFileStatus {
+  return isJobFileClosed(job) ? 'Closed' : 'Opened'
+}
+
 const STORAGE_KEY = 'customs_jobs_v1'
 
 export function getStoredJobs(): Job[] {
