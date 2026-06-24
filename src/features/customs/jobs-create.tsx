@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Download, Eye, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import { CustomsPage } from './customs-page'
+import { validateCustomsDocumentFile } from './document-upload'
 import {
   createInitialJobStageAssignments,
   createInitialJobStageProgress,
@@ -1201,6 +1202,22 @@ export function CustomsCreateJob() {
     setDocumentsSearch('')
   }
 
+  const handleDocumentFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null
+    event.target.value = ''
+    if (!file) {
+      setSelectedFile(null)
+      return
+    }
+    const fileError = validateCustomsDocumentFile(file)
+    if (fileError) {
+      toast.error(fileError)
+      setSelectedFile(null)
+      return
+    }
+    setSelectedFile(file)
+  }
+
   const handleAddPendingUpload = () => {
     const resolvedName = documentName || documentNameOther.trim()
     if (!resolvedName) {
@@ -1209,6 +1226,12 @@ export function CustomsCreateJob() {
     }
     if (!selectedFile) {
       toast.error('Please choose a file')
+      return
+    }
+
+    const fileError = validateCustomsDocumentFile(selectedFile)
+    if (fileError) {
+      toast.error(fileError)
       return
     }
 
@@ -1265,6 +1288,11 @@ export function CustomsCreateJob() {
       const uploadResults: UploadedJobDocumentRow[] = []
       for (const doc of pendingUploads) {
         if (!(doc.file instanceof File)) continue
+        const fileError = validateCustomsDocumentFile(doc.file)
+        if (fileError) {
+          toast.error(fileError)
+          return
+        }
         const response = await customsJobApi.uploadJobDocument(jobId, {
           document_name: doc.name,
           file: doc.file,
@@ -1680,6 +1708,13 @@ export function CustomsCreateJob() {
 
       const docsToUpload = uploadedDocuments.filter((doc) => doc.file instanceof File)
       if (docsToUpload.length > 0) {
+        for (const doc of docsToUpload) {
+          const fileError = validateCustomsDocumentFile(doc.file as File)
+          if (fileError) {
+            toast.error(fileError)
+            return
+          }
+        }
         await Promise.all(
           docsToUpload.map(async (doc) => {
             await customsJobApi.uploadJobDocument(serverJob.id, {
@@ -2701,10 +2736,9 @@ export function CustomsCreateJob() {
                       <div className='space-y-1'>
                         <Input
                           type='file'
-                          onChange={(e) =>
-                            setSelectedFile(e.target.files?.[0] || null)
-                          }
+                          onChange={handleDocumentFileSelect}
                         />
+                        <p className='text-xs text-muted-foreground'>Maximum file size: 2 MB</p>
                       </div>
                     </div>
 
