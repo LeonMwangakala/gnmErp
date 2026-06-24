@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import AsyncSelect from 'react-select/async'
 import axios from 'axios'
 import {
   Check,
@@ -93,7 +94,86 @@ function statusBadgeVariant(
   return 'outline'
 }
 
-type JobOption = { id: number; job_no: string }
+type JobSelectOption = {
+  value: string
+  label: string
+  id: number
+  job_no: string
+  customer_name?: string
+}
+
+function mapJobRowToOption(row: Record<string, unknown>): JobSelectOption | null {
+  const id = Number(row.id)
+  if (!Number.isFinite(id) || id <= 0) return null
+  const jobNo = String(row.job_no || row.jobNo || '').trim()
+  const customerName = String(row.customer_name || row.customerName || '').trim()
+  const label = jobNo
+    ? customerName
+      ? `${jobNo} · ${customerName}`
+      : jobNo
+    : `Job #${id}`
+  return {
+    value: String(id),
+    label,
+    id,
+    job_no: jobNo,
+    customer_name: customerName || undefined,
+  }
+}
+
+const payableJobSelectStyles = {
+  control: (base: Record<string, unknown>, state: { isFocused: boolean }) => ({
+    ...base,
+    minHeight: '36px',
+    height: '36px',
+    borderColor: state.isFocused ? 'hsl(var(--ring))' : '#E2E8F1',
+    backgroundColor: 'transparent',
+    borderRadius: 'calc(var(--radius) - 2px)',
+    borderWidth: '1px',
+    boxShadow: state.isFocused
+      ? '0 0 0 3px hsl(var(--ring) / 0.5)'
+      : '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+    '&:hover': {
+      borderColor: state.isFocused ? 'hsl(var(--ring))' : '#E2E8F1',
+    },
+  }),
+  placeholder: (base: Record<string, unknown>) => ({
+    ...base,
+    color: 'hsl(var(--muted-foreground))',
+    fontSize: '0.875rem',
+  }),
+  input: (base: Record<string, unknown>) => ({
+    ...base,
+    color: 'hsl(var(--foreground))',
+    fontSize: '0.875rem',
+    margin: 0,
+    padding: 0,
+  }),
+  singleValue: (base: Record<string, unknown>) => ({
+    ...base,
+    color: 'hsl(var(--foreground))',
+    fontSize: '0.875rem',
+  }),
+  menu: (base: Record<string, unknown>) => ({
+    ...base,
+    backgroundColor: '#ffffff',
+    border: '1px solid #e5e7eb',
+    borderRadius: 'calc(var(--radius) - 2px)',
+    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+    zIndex: 400,
+  }),
+  menuList: (base: Record<string, unknown>) => ({
+    ...base,
+    padding: '0.25rem',
+  }),
+  option: (base: Record<string, unknown>, state: { isFocused: boolean; isSelected: boolean }) => ({
+    ...base,
+    backgroundColor: state.isFocused || state.isSelected ? '#f3f4f6' : '#ffffff',
+    color: '#111827',
+    fontSize: '0.875rem',
+    cursor: 'pointer',
+  }),
+} as const
 
 type PayableForm = {
   customs_job_id: string
@@ -169,7 +249,7 @@ export function CustomsPayables() {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [search, setSearch] = useState('')
 
-  const [jobs, setJobs] = useState<JobOption[]>([])
+  const [selectedJob, setSelectedJob] = useState<JobSelectOption | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -189,6 +269,7 @@ export function CustomsPayables() {
   const [accountingOptionsNonce, setAccountingOptionsNonce] = useState(0)
   const payableStaticAbortRef = useRef<AbortController | null>(null)
   const payableDocsAbortRef = useRef<AbortController | null>(null)
+  const jobSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectRole, setRejectRole] = useState<'manager' | 'chief'>('manager')
@@ -230,35 +311,34 @@ export function CustomsPayables() {
     void loadList()
   }, [loadList])
 
-  useEffect(() => {
-    let cancelled = false
-    const mapRow = (j: Record<string, unknown>): JobOption => ({
-      id: Number(j.id),
-      job_no: String(j.job_no || j.jobNo || ''),
-    })
-
-    ;(async () => {
-      const perPage = 200 // API max: CustomsController validates per_page <= 200
-      try {
-        const first = await customsJobApi.listJobs({ per_page: perPage, page: 1 })
-        if (cancelled) return
-        let combined = (first.data || []).map(mapRow)
-        const lastPage = first.pagination?.last_page ?? 1
-        for (let p = 2; p <= lastPage; p++) {
-          const r = await customsJobApi.listJobs({ per_page: perPage, page: p })
-          if (cancelled) return
-          combined = combined.concat((r.data || []).map(mapRow))
-        }
-        setJobs(combined.filter((o) => o.id && o.job_no))
-      } catch {
-        if (!cancelled) setJobs([])
-      }
-    })()
-
-    return () => {
-      cancelled = true
+  const loadJobOptions = useCallback(async (inputValue: string): Promise<JobSelectOption[]> => {
+    const searchTerm = inputValue.trim()
+    try {
+      const res = await customsJobApi.listJobs({
+        ...(searchTerm ? { search: searchTerm } : {}),
+        per_page: 25,
+        page: 1,
+      })
+      return (res.data || [])
+        .map((row) => mapJobRowToOption(row as Record<string, unknown>))
+        .filter((option): option is JobSelectOption => option !== null)
+    } catch {
+      return []
     }
   }, [])
+
+  const loadJobOptionsDebounced = useCallback(
+    (inputValue: string) =>
+      new Promise<JobSelectOption[]>((resolve) => {
+        if (jobSearchDebounceRef.current) {
+          clearTimeout(jobSearchDebounceRef.current)
+        }
+        jobSearchDebounceRef.current = setTimeout(async () => {
+          resolve(await loadJobOptions(inputValue))
+        }, 300)
+      }),
+    [loadJobOptions]
+  )
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -356,6 +436,7 @@ export function CustomsPayables() {
     setFormMode('create')
     setEditingId(null)
     setForm(emptyForm)
+    setSelectedJob(null)
     setFormOpen(true)
   }
 
@@ -366,6 +447,16 @@ export function CustomsPayables() {
     }
     setFormMode('edit')
     setEditingId(row.id)
+    setSelectedJob(
+      row.customs_job_id
+        ? {
+            value: String(row.customs_job_id),
+            label: row.job_no || `Job #${row.customs_job_id}`,
+            id: row.customs_job_id,
+            job_no: row.job_no || '',
+          }
+        : null
+    )
     setForm({
       customs_job_id: String(row.customs_job_id),
       payable_category: row.payable_category,
@@ -426,6 +517,9 @@ export function CustomsPayables() {
     return () => {
       payableStaticAbortRef.current?.abort()
       payableDocsAbortRef.current?.abort()
+      if (jobSearchDebounceRef.current) {
+        clearTimeout(jobSearchDebounceRef.current)
+      }
     }
   }, [])
 
@@ -818,6 +912,9 @@ export function CustomsPayables() {
         open={formOpen}
         onOpenChange={(open) => {
           setFormOpen(open)
+          if (!open) {
+            setSelectedJob(null)
+          }
         }}
       >
         <DialogContent className='max-h-[90vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-4xl'>
@@ -834,28 +931,32 @@ export function CustomsPayables() {
           <div className='grid grid-cols-1 gap-4 py-2 sm:grid-cols-2'>
             <div className='space-y-2'>
               <Label>Job *</Label>
-              <Select
-                value={form.customs_job_id}
-                disabled={formMode === 'edit'}
-                onValueChange={(v) =>
+              <AsyncSelect<JobSelectOption>
+                value={selectedJob}
+                loadOptions={loadJobOptionsDebounced}
+                defaultOptions
+                onChange={(option) => {
+                  const selected = option || null
+                  setSelectedJob(selected)
                   setForm((f) => ({
                     ...f,
-                    customs_job_id: v,
+                    customs_job_id: selected ? String(selected.id) : '',
                     customs_job_document_id: '',
                   }))
+                }}
+                placeholder='Search job no, customer, MBL, HBL…'
+                isDisabled={formMode === 'edit'}
+                isClearable={formMode !== 'edit'}
+                noOptionsMessage={({ inputValue }) =>
+                  inputValue.trim() ? 'No jobs found' : 'Type to search jobs'
                 }
-              >
-                <SelectTrigger className='w-full min-w-0'>
-                  <SelectValue placeholder='Select job' />
-                </SelectTrigger>
-                <SelectContent className='z-[300]'>
-                  {jobs.map((j) => (
-                    <SelectItem key={j.id} value={String(j.id)}>
-                      {j.job_no}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                loadingMessage={() => 'Searching jobs…'}
+                className='react-select-container'
+                classNamePrefix='react-select'
+                styles={payableJobSelectStyles}
+                menuPortalTarget={typeof document !== 'undefined' ? document.body : undefined}
+                menuPosition='fixed'
+              />
             </div>
             <div className='space-y-2'>
               <Label>Payable category *</Label>
