@@ -39,6 +39,7 @@ export function downloadCustomerShippingReportCsv(data: CustomerShippingReportDa
     csvHeadingWithDates('Customer Shipping Activity Report', data.date_from, data.date_to),
     '',
     [
+      'S/N',
       'Section',
       'Customer',
       'Phone',
@@ -59,9 +60,12 @@ export function downloadCustomerShippingReportCsv(data: CustomerShippingReportDa
   ]
 
   for (const section of sections) {
+    let sn = 0
     for (const row of section.rows) {
+      sn += 1
       lines.push(
         [
+          escapeCsvCell(sn),
           escapeCsvCell(section.label),
           escapeCsvCell(row.full_name),
           escapeCsvCell(row.cellphone),
@@ -203,6 +207,7 @@ function CustomerShippingTable({ rows }: { rows: CustomerShippingReportRow[] }) 
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead className='w-12'>S/N</TableHead>
           <TableHead>Customer</TableHead>
           <TableHead>Phone</TableHead>
           <TableHead>Registered</TableHead>
@@ -214,8 +219,9 @@ function CustomerShippingTable({ rows }: { rows: CustomerShippingReportRow[] }) 
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((r) => (
+        {rows.map((r, index) => (
           <TableRow key={`${r.customer_id}-${r.full_name}`}>
+            <TableCell>{index + 1}</TableCell>
             <TableCell>{r.full_name || '—'}</TableCell>
             <TableCell>{r.cellphone || '—'}</TableCell>
             <TableCell className='tabular-nums'>{r.registered_at || '—'}</TableCell>
