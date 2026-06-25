@@ -360,6 +360,24 @@ export const invoiceApi = {
     | { ok: false; message: string }
   > => fetchDispatchReleaseReport('authorized-pending-dispatch-report', params),
 
+  /** CMTS: customer China shipping activity (new / active / exited). */
+  getCustomerShippingActivityReport: async (params: {
+    date_from: string
+    date_to: string
+  }): Promise<
+    | { ok: true; data: CustomerShippingReportData }
+    | { ok: false; message: string }
+  > => fetchCmtsCustomerShippingReport(params),
+
+  /** CMTS: fleet vehicle / driver collection, trips, and expenses. */
+  getVehicleCollectionReport: async (params: {
+    date_from: string
+    date_to: string
+  }): Promise<
+    | { ok: true; data: VehicleCollectionReportData }
+    | { ok: false; message: string }
+  > => fetchCmtsVehicleCollectionReport(params),
+
   /** CMTS customers for loan / loan-balance report filter (same names as dispatch report rows). */
   searchReportCustomers: async (
     search: string,
@@ -712,6 +730,91 @@ export interface GoodsDispatchedReportData {
   }
 }
 
+export interface CustomerShippingReportRow {
+  customer_id: number
+  full_name: string
+  cellphone: string | null
+  registered_at: string
+  goods_in_period: number
+  consignments_in_period: number
+  total_goods: number
+  last_shipment_date: string | null
+  days_since_last_shipment: number | null
+  observation: string
+}
+
+export interface CustomerShippingReportData {
+  date_from: string
+  date_to: string
+  summary: {
+    new_count: number
+    active_count: number
+    exited_count: number
+    goods_receipts_in_period: number
+  }
+  observations: string[]
+  new_customers: CustomerShippingReportRow[]
+  active_customers: CustomerShippingReportRow[]
+  exited_customers: CustomerShippingReportRow[]
+}
+
+export interface VehicleCollectionRow {
+  vehicle_id: string
+  plate_number: string
+  trip_count: number
+  total_collected: number
+  total_expenses: number
+}
+
+export interface DriverCollectionRow {
+  driver_id: string
+  driver_name: string
+  driver_code: string
+  phone_number: string
+  trip_count: number
+  total_collected: number
+  total_expenses: number
+}
+
+export interface VehicleCollectionTripRow {
+  trip_id: string
+  trip_number: string
+  plate_number: string
+  driver_name: string
+  route_label: string | null
+  dispatch_date: string | null
+  trip_status: string
+  transportation_charge: number
+  total_expenses: number
+}
+
+export interface VehicleCollectionExpenseRow {
+  expense_id: string
+  plate_number: string
+  trip_number: string
+  expense_type: string
+  amount: number
+  expense_date: string | null
+  vendor: string
+  notes: string
+}
+
+export interface VehicleCollectionReportData {
+  date_from: string
+  date_to: string
+  summary: {
+    vehicle_count: number
+    driver_count: number
+    total_trips: number
+    total_collected: number
+    total_expenses: number
+  }
+  collection: VehicleCollectionRow[]
+  driver_collection: DriverCollectionRow[]
+  trips: VehicleCollectionTripRow[]
+  expenses: VehicleCollectionExpenseRow[]
+}
+
 export interface CompanyCurrencyRow {
   currencyId: number
   currencyNumber: string
@@ -1045,6 +1148,173 @@ async function fetchDispatchReleaseReport(
     const body = response.data as Record<string, unknown>
     if (body?.status === true && body.rows != null) {
       return { ok: true, data: normalizeGoodsDispatchedReportData(body) }
+    }
+    return { ok: false, message: String(body?.message || 'Failed to load report') }
+  } catch (err: unknown) {
+    const ax = err as AxiosError<{ message?: string }>
+    const msg =
+      ax.response?.data && typeof ax.response.data === 'object' && 'message' in ax.response.data
+        ? String((ax.response.data as { message?: string }).message)
+        : ax.message
+    return { ok: false, message: msg || 'Failed to load report' }
+  }
+}
+
+function normalizeCustomerShippingReportData(body: Record<string, unknown>): CustomerShippingReportData {
+  const mapRow = (item: unknown, index: number): CustomerShippingReportRow => {
+    const r = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+    const id = Number(r.customer_id)
+    return {
+      customer_id: Number.isFinite(id) ? id : index + 1,
+      full_name: String(r.full_name ?? '').trim(),
+      cellphone: r.cellphone == null ? null : String(r.cellphone).trim(),
+      registered_at: String(r.registered_at ?? '').trim(),
+      goods_in_period: Number(r.goods_in_period) || 0,
+      consignments_in_period: Number(r.consignments_in_period) || 0,
+      total_goods: Number(r.total_goods) || 0,
+      last_shipment_date:
+        r.last_shipment_date == null ? null : String(r.last_shipment_date).trim(),
+      days_since_last_shipment:
+        r.days_since_last_shipment == null ? null : Number(r.days_since_last_shipment),
+      observation: String(r.observation ?? '').trim(),
+    }
+  }
+  const summaryRaw =
+    body.summary && typeof body.summary === 'object'
+      ? (body.summary as Record<string, unknown>)
+      : {}
+  return {
+    date_from: String(body.date_from ?? ''),
+    date_to: String(body.date_to ?? ''),
+    summary: {
+      new_count: Number(summaryRaw.new_count) || 0,
+      active_count: Number(summaryRaw.active_count) || 0,
+      exited_count: Number(summaryRaw.exited_count) || 0,
+      goods_receipts_in_period: Number(summaryRaw.goods_receipts_in_period) || 0,
+    },
+    observations: Array.isArray(body.observations)
+      ? body.observations.map((o) => String(o ?? ''))
+      : [],
+    new_customers: Array.isArray(body.new_customers) ? body.new_customers.map(mapRow) : [],
+    active_customers: Array.isArray(body.active_customers)
+      ? body.active_customers.map(mapRow)
+      : [],
+    exited_customers: Array.isArray(body.exited_customers)
+      ? body.exited_customers.map(mapRow)
+      : [],
+  }
+}
+
+function normalizeVehicleCollectionReportData(
+  body: Record<string, unknown>
+): VehicleCollectionReportData {
+  const summaryRaw =
+    body.summary && typeof body.summary === 'object'
+      ? (body.summary as Record<string, unknown>)
+      : {}
+  const mapCollection = (item: unknown): VehicleCollectionRow => {
+    const r = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+    return {
+      vehicle_id: String(r.vehicle_id ?? ''),
+      plate_number: String(r.plate_number ?? '').trim(),
+      trip_count: Number(r.trip_count) || 0,
+      total_collected: Number(r.total_collected) || 0,
+      total_expenses: Number(r.total_expenses) || 0,
+    }
+  }
+  const mapDriver = (item: unknown): DriverCollectionRow => {
+    const r = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+    return {
+      driver_id: String(r.driver_id ?? ''),
+      driver_name: String(r.driver_name ?? '').trim(),
+      driver_code: String(r.driver_code ?? '').trim(),
+      phone_number: String(r.phone_number ?? '').trim(),
+      trip_count: Number(r.trip_count) || 0,
+      total_collected: Number(r.total_collected) || 0,
+      total_expenses: Number(r.total_expenses) || 0,
+    }
+  }
+  const mapTrip = (item: unknown): VehicleCollectionTripRow => {
+    const r = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+    return {
+      trip_id: String(r.trip_id ?? ''),
+      trip_number: String(r.trip_number ?? '').trim(),
+      plate_number: String(r.plate_number ?? '').trim(),
+      driver_name: String(r.driver_name ?? '').trim(),
+      route_label: r.route_label == null ? null : String(r.route_label).trim(),
+      dispatch_date: r.dispatch_date == null ? null : String(r.dispatch_date).trim(),
+      trip_status: String(r.trip_status ?? '').trim(),
+      transportation_charge: Number(r.transportation_charge) || 0,
+      total_expenses: Number(r.total_expenses) || 0,
+    }
+  }
+  const mapExpense = (item: unknown): VehicleCollectionExpenseRow => {
+    const r = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+    return {
+      expense_id: String(r.expense_id ?? ''),
+      plate_number: String(r.plate_number ?? '').trim(),
+      trip_number: String(r.trip_number ?? '').trim(),
+      expense_type: String(r.expense_type ?? '').trim(),
+      amount: Number(r.amount) || 0,
+      expense_date: r.expense_date == null ? null : String(r.expense_date).trim(),
+      vendor: String(r.vendor ?? '').trim(),
+      notes: String(r.notes ?? '').trim(),
+    }
+  }
+  return {
+    date_from: String(body.date_from ?? ''),
+    date_to: String(body.date_to ?? ''),
+    summary: {
+      vehicle_count: Number(summaryRaw.vehicle_count) || 0,
+      driver_count: Number(summaryRaw.driver_count) || 0,
+      total_trips: Number(summaryRaw.total_trips) || 0,
+      total_collected: Number(summaryRaw.total_collected) || 0,
+      total_expenses: Number(summaryRaw.total_expenses) || 0,
+    },
+    collection: Array.isArray(body.collection) ? body.collection.map(mapCollection) : [],
+    driver_collection: Array.isArray(body.driver_collection)
+      ? body.driver_collection.map(mapDriver)
+      : [],
+    trips: Array.isArray(body.trips) ? body.trips.map(mapTrip) : [],
+    expenses: Array.isArray(body.expenses) ? body.expenses.map(mapExpense) : [],
+  }
+}
+
+async function fetchCmtsCustomerShippingReport(params: {
+  date_from: string
+  date_to: string
+}): Promise<{ ok: true; data: CustomerShippingReportData } | { ok: false; message: string }> {
+  try {
+    const response = await externalApi.get(
+      `${CMTS_BILLING_API_BASE}/customer-shipping-activity-report`,
+      { params }
+    )
+    const body = response.data as Record<string, unknown>
+    if (body?.status === true) {
+      return { ok: true, data: normalizeCustomerShippingReportData(body) }
+    }
+    return { ok: false, message: String(body?.message || 'Failed to load report') }
+  } catch (err: unknown) {
+    const ax = err as AxiosError<{ message?: string }>
+    const msg =
+      ax.response?.data && typeof ax.response.data === 'object' && 'message' in ax.response.data
+        ? String((ax.response.data as { message?: string }).message)
+        : ax.message
+    return { ok: false, message: msg || 'Failed to load report' }
+  }
+}
+
+async function fetchCmtsVehicleCollectionReport(params: {
+  date_from: string
+  date_to: string
+}): Promise<{ ok: true; data: VehicleCollectionReportData } | { ok: false; message: string }> {
+  try {
+    const response = await externalApi.get(`${CMTS_BILLING_API_BASE}/vehicle-collection-report`, {
+      params,
+    })
+    const body = response.data as Record<string, unknown>
+    if (body?.status === true) {
+      return { ok: true, data: normalizeVehicleCollectionReportData(body) }
     }
     return { ok: false, message: String(body?.message || 'Failed to load report') }
   } catch (err: unknown) {

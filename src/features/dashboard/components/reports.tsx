@@ -47,6 +47,8 @@ import {
   type InvoiceReportData,
   type PostedContainersReportData,
   type GoodsDispatchedReportData,
+  type CustomerShippingReportData,
+  type VehicleCollectionReportData,
 } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import {
@@ -58,6 +60,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ContainerPaymentReportPanel } from './container-payment-report'
+import {
+  CustomerShippingReportDialog,
+  VehicleCollectionReportDialog,
+} from './cmts-operational-reports'
 
 function escapeCsvCell(value: string): string {
   if (/[",\n\r]/.test(value)) {
@@ -901,6 +907,8 @@ type ReportType =
   | 'petty-cash'
   | 'expense-payments'
   | 'container-payments'
+  | 'customer-shipping'
+  | 'vehicle-collection'
 
 const CMTS_DISPATCH_REPORT_KEYS = new Set<ReportType>([
   'goods-dispatched-cash',
@@ -976,6 +984,18 @@ const REPORTS: ReportDefinition[] = [
     title: 'Container Payment Report',
     description:
       'Enter a container number to list invoice payments for that container, then export to Excel.',
+  },
+  {
+    key: 'customer-shipping',
+    title: 'Customer Shipping Activity Report',
+    description:
+      'CMTS customers by China shipping activity: new registrations, active shippers, and exited customers.',
+  },
+  {
+    key: 'vehicle-collection',
+    title: 'Vehicle Collection Report',
+    description:
+      'CMTS fleet collections by vehicle and driver: trips, amounts collected, and vehicle expenses.',
   },
 ]
 
@@ -1078,6 +1098,12 @@ type ExpensePaymentFilters = CommonFilters & {
   categoryId: string
 }
 
+type CmtsSimpleDateFilters = {
+  dateFrom: string
+  dateTo: string
+  datePreset: InvoicePaymentDatePreset
+}
+
 type ReportFilters =
   | InvoiceFilters
   | InvoicePaymentFilters
@@ -1085,6 +1111,7 @@ type ReportFilters =
   | GoodsDispatchedFilters
   | PettyCashFilters
   | ExpensePaymentFilters
+  | CmtsSimpleDateFilters
   | CommonFilters
 
 function isInvoicePaymentFilters(
@@ -1100,8 +1127,19 @@ function isDateRangedReportFilters(
   | InvoicePaymentFilters
   | InvoiceFilters
   | PostedContainersFilters
-  | GoodsDispatchedFilters {
+  | GoodsDispatchedFilters
+  | CmtsSimpleDateFilters {
   return f != null && 'dateFrom' in f && 'dateTo' in f && 'datePreset' in f
+}
+
+function isCmtsSimpleDateFilters(f: ReportFilters | null | undefined): f is CmtsSimpleDateFilters {
+  return (
+    isDateRangedReportFilters(f) &&
+    !('releaseFilter' in f) &&
+    !('containerNo' in f) &&
+    !('status' in f) &&
+    !('userId' in f)
+  )
 }
 
 function isInvoiceFilters(f: ReportFilters | null | undefined): f is InvoiceFilters {
@@ -1191,6 +1229,14 @@ export function Reports() {
   const [goodsDispatchedReportSubmitting, setGoodsDispatchedReportSubmitting] = useState(false)
   const [goodsDispatchedReportPaging, setGoodsDispatchedReportPaging] = useState(false)
   const [goodsDispatchedReportExporting, setGoodsDispatchedReportExporting] = useState(false)
+  const [customerShippingReportOpen, setCustomerShippingReportOpen] = useState(false)
+  const [customerShippingReportData, setCustomerShippingReportData] =
+    useState<CustomerShippingReportData | null>(null)
+  const [customerShippingReportSubmitting, setCustomerShippingReportSubmitting] = useState(false)
+  const [vehicleCollectionReportOpen, setVehicleCollectionReportOpen] = useState(false)
+  const [vehicleCollectionReportData, setVehicleCollectionReportData] =
+    useState<VehicleCollectionReportData | null>(null)
+  const [vehicleCollectionReportSubmitting, setVehicleCollectionReportSubmitting] = useState(false)
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const cmtsDebounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -1310,6 +1356,10 @@ export function Reports() {
     setPostedContainersReportData(null)
     setGoodsDispatchedReportOpen(false)
     setGoodsDispatchedReportData(null)
+    setCustomerShippingReportOpen(false)
+    setCustomerShippingReportData(null)
+    setVehicleCollectionReportOpen(false)
+    setVehicleCollectionReportData(null)
     setOpen(true)
   }
 
@@ -1418,6 +1468,54 @@ export function Reports() {
       setGoodsDispatchedReportOpen(true)
     } finally {
       setGoodsDispatchedReportSubmitting(false)
+    }
+  }
+
+  const submitCustomerShippingReport = async () => {
+    if (!filters || !isCmtsSimpleDateFilters(filters)) return
+    if (!filters.dateFrom || !filters.dateTo) {
+      toast.error('Choose a report date range.')
+      return
+    }
+    setCustomerShippingReportSubmitting(true)
+    try {
+      const result = await invoiceApi.getCustomerShippingActivityReport({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      setCustomerShippingReportData(result.data)
+      setOpen(false)
+      setCustomerShippingReportOpen(true)
+    } finally {
+      setCustomerShippingReportSubmitting(false)
+    }
+  }
+
+  const submitVehicleCollectionReport = async () => {
+    if (!filters || !isCmtsSimpleDateFilters(filters)) return
+    if (!filters.dateFrom || !filters.dateTo) {
+      toast.error('Choose a report date range.')
+      return
+    }
+    setVehicleCollectionReportSubmitting(true)
+    try {
+      const result = await invoiceApi.getVehicleCollectionReport({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      setVehicleCollectionReportData(result.data)
+      setOpen(false)
+      setVehicleCollectionReportOpen(true)
+    } finally {
+      setVehicleCollectionReportSubmitting(false)
     }
   }
 
@@ -1577,6 +1675,15 @@ export function Reports() {
         }
       case 'container-payments':
         return base
+      case 'customer-shipping':
+      case 'vehicle-collection': {
+        const { dateFrom, dateTo } = getInvoicePaymentRangeForPreset('month')
+        return {
+          datePreset: 'month' as const,
+          dateFrom,
+          dateTo,
+        }
+      }
     }
   }
 
@@ -1675,6 +1782,8 @@ export function Reports() {
                 selectedReport?.key !== 'goods-dispatched-loan' &&
                 selectedReport?.key !== 'loan-balance' &&
                 selectedReport?.key !== 'authorized-pending-dispatch' &&
+                selectedReport?.key !== 'customer-shipping' &&
+                selectedReport?.key !== 'vehicle-collection' &&
                 'dateRange' in filters && (
               <div className='space-y-2'>
                 <Label htmlFor='dateRange'>Date range</Label>
@@ -1693,7 +1802,9 @@ export function Reports() {
                 selectedReport?.key === 'goods-dispatched-cash' ||
                 selectedReport?.key === 'goods-dispatched-loan' ||
                 selectedReport?.key === 'loan-balance' ||
-                selectedReport?.key === 'authorized-pending-dispatch') &&
+                selectedReport?.key === 'authorized-pending-dispatch' ||
+                selectedReport?.key === 'customer-shipping' ||
+                selectedReport?.key === 'vehicle-collection') &&
                 isDateRangedReportFilters(filters) && (
                   <div className='space-y-3'>
                     <Label>
@@ -1707,7 +1818,11 @@ export function Reports() {
                             ? 'Dispatch date range'
                             : selectedReport.key === 'authorized-pending-dispatch'
                               ? 'Authorization date range'
-                              : 'Invoice date range'}
+                              : selectedReport.key === 'customer-shipping'
+                                ? 'Report period'
+                                : selectedReport.key === 'vehicle-collection'
+                                  ? 'Dispatch date range'
+                                  : 'Invoice date range'}
                     </Label>
                     <div className='flex flex-wrap gap-2'>
                       {(
@@ -2050,6 +2165,10 @@ export function Reports() {
                     setPostedContainersReportOpen(false)
                     setGoodsDispatchedReportData(null)
                     setGoodsDispatchedReportOpen(false)
+                    setCustomerShippingReportData(null)
+                    setCustomerShippingReportOpen(false)
+                    setVehicleCollectionReportData(null)
+                    setVehicleCollectionReportOpen(false)
                 }
               }}
             >
@@ -2131,6 +2250,36 @@ export function Reports() {
                   onClick={() => void submitDispatchReleaseReport('authorized_pending')}
                 >
                   {goodsDispatchedReportSubmitting ? 'Loading…' : 'Submit'}
+                </Button>
+              ) : selectedReport?.key === 'customer-shipping' ? (
+                <Button
+                  type='button'
+                  size='sm'
+                  disabled={
+                    customerShippingReportSubmitting ||
+                    !filters ||
+                    !isCmtsSimpleDateFilters(filters) ||
+                    !filters.dateFrom ||
+                    !filters.dateTo
+                  }
+                  onClick={() => void submitCustomerShippingReport()}
+                >
+                  {customerShippingReportSubmitting ? 'Loading…' : 'Submit'}
+                </Button>
+              ) : selectedReport?.key === 'vehicle-collection' ? (
+                <Button
+                  type='button'
+                  size='sm'
+                  disabled={
+                    vehicleCollectionReportSubmitting ||
+                    !filters ||
+                    !isCmtsSimpleDateFilters(filters) ||
+                    !filters.dateFrom ||
+                    !filters.dateTo
+                  }
+                  onClick={() => void submitVehicleCollectionReport()}
+                >
+                  {vehicleCollectionReportSubmitting ? 'Loading…' : 'Submit'}
                 </Button>
               ) : (
             <div className='flex items-center gap-2'>
@@ -2867,6 +3016,24 @@ export function Reports() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <CustomerShippingReportDialog
+        open={customerShippingReportOpen}
+        onOpenChange={(next) => {
+          setCustomerShippingReportOpen(next)
+          if (!next) setCustomerShippingReportData(null)
+        }}
+        data={customerShippingReportData}
+      />
+
+      <VehicleCollectionReportDialog
+        open={vehicleCollectionReportOpen}
+        onOpenChange={(next) => {
+          setVehicleCollectionReportOpen(next)
+          if (!next) setVehicleCollectionReportData(null)
+        }}
+        data={vehicleCollectionReportData}
+      />
     </>
   )
 }
