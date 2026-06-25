@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { CustomsPage } from './customs-page'
+import { JobViewDialog } from './job-view-dialog'
 import {
   customsJobApi,
   customsPayableApi,
@@ -107,14 +108,17 @@ function mapJobRowToOption(row: Record<string, unknown>): JobSelectOption | null
   if (!Number.isFinite(id) || id <= 0) return null
   const jobNo = String(row.job_no || row.jobNo || '').trim()
   const customerName = String(row.customer_name || row.customerName || '').trim()
-  const label = jobNo
-    ? customerName
-      ? `${jobNo} · ${customerName}`
-      : jobNo
-    : `Job #${id}`
+  const mblNo = String(row.mbl_no || row.mblNo || '').trim()
+  const hblNo = String(row.hbl_no || row.hblNo || '').trim()
+  const labelParts = [
+    jobNo || `Job #${id}`,
+    customerName || null,
+    mblNo ? `MBL ${mblNo}` : null,
+    hblNo ? `HBL ${hblNo}` : null,
+  ].filter(Boolean)
   return {
     value: String(id),
-    label,
+    label: labelParts.join(' · '),
     id,
     job_no: jobNo,
     customer_name: customerName || undefined,
@@ -160,7 +164,11 @@ const payableJobSelectStyles = {
     border: '1px solid #e5e7eb',
     borderRadius: 'calc(var(--radius) - 2px)',
     boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-    zIndex: 400,
+    zIndex: 9999,
+  }),
+  menuPortal: (base: Record<string, unknown>) => ({
+    ...base,
+    zIndex: 9999,
   }),
   menuList: (base: Record<string, unknown>) => ({
     ...base,
@@ -269,7 +277,6 @@ export function CustomsPayables() {
   const [accountingOptionsNonce, setAccountingOptionsNonce] = useState(0)
   const payableStaticAbortRef = useRef<AbortController | null>(null)
   const payableDocsAbortRef = useRef<AbortController | null>(null)
-  const jobSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectRole, setRejectRole] = useState<'manager' | 'chief'>('manager')
@@ -288,6 +295,9 @@ export function CustomsPayables() {
     description: '',
   })
   const [paySubmitting, setPaySubmitting] = useState(false)
+
+  const [jobViewOpen, setJobViewOpen] = useState(false)
+  const [jobViewTarget, setJobViewTarget] = useState<{ id: number; label: string } | null>(null)
 
   const loadList = useCallback(async () => {
     setLoading(true)
@@ -326,19 +336,6 @@ export function CustomsPayables() {
       return []
     }
   }, [])
-
-  const loadJobOptionsDebounced = useCallback(
-    (inputValue: string) =>
-      new Promise<JobSelectOption[]>((resolve) => {
-        if (jobSearchDebounceRef.current) {
-          clearTimeout(jobSearchDebounceRef.current)
-        }
-        jobSearchDebounceRef.current = setTimeout(async () => {
-          resolve(await loadJobOptions(inputValue))
-        }, 300)
-      }),
-    [loadJobOptions]
-  )
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -517,9 +514,6 @@ export function CustomsPayables() {
     return () => {
       payableStaticAbortRef.current?.abort()
       payableDocsAbortRef.current?.abort()
-      if (jobSearchDebounceRef.current) {
-        clearTimeout(jobSearchDebounceRef.current)
-      }
     }
   }, [])
 
@@ -712,6 +706,15 @@ export function CustomsPayables() {
     }
   }
 
+  const openJobView = (row: CustomsPayableRecord) => {
+    if (!row.customs_job_id) return
+    setJobViewTarget({
+      id: row.customs_job_id,
+      label: row.job_no || `Job #${row.customs_job_id}`,
+    })
+    setJobViewOpen(true)
+  }
+
   return (
     <CustomsPage
       title='Payables'
@@ -796,7 +799,19 @@ export function CustomsPayables() {
                     filteredRows.map((r) => (
                       <TableRow key={r.id}>
                         <TableCell className='font-medium'>{r.id}</TableCell>
-                        <TableCell>{r.job_no || r.customs_job_id}</TableCell>
+                        <TableCell>
+                          {r.customs_job_id ? (
+                            <button
+                              type='button'
+                              className='text-primary font-medium hover:underline'
+                              onClick={() => openJobView(r)}
+                            >
+                              {r.job_no || r.customs_job_id}
+                            </button>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
                         <TableCell>{CATEGORY_LABEL[r.payable_category]}</TableCell>
                         <TableCell>{r.invoice_number || '—'}</TableCell>
                         <TableCell>
@@ -932,9 +947,11 @@ export function CustomsPayables() {
             <div className='space-y-2'>
               <Label>Job *</Label>
               <AsyncSelect<JobSelectOption>
+                instanceId='payable-job-select'
                 value={selectedJob}
-                loadOptions={loadJobOptionsDebounced}
+                loadOptions={loadJobOptions}
                 defaultOptions
+                filterOption={null}
                 onChange={(option) => {
                   const selected = option || null
                   setSelectedJob(selected)
@@ -947,8 +964,9 @@ export function CustomsPayables() {
                 placeholder='Search job no, customer, MBL, HBL…'
                 isDisabled={formMode === 'edit'}
                 isClearable={formMode !== 'edit'}
+                openMenuOnFocus
                 noOptionsMessage={({ inputValue }) =>
-                  inputValue.trim() ? 'No jobs found' : 'Type to search jobs'
+                  inputValue.trim() ? 'No jobs found' : 'No recent jobs'
                 }
                 loadingMessage={() => 'Searching jobs…'}
                 className='react-select-container'
@@ -1252,6 +1270,16 @@ export function CustomsPayables() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <JobViewDialog
+        jobId={jobViewTarget?.id ?? null}
+        jobLabel={jobViewTarget?.label ?? null}
+        open={jobViewOpen}
+        onOpenChange={(open) => {
+          setJobViewOpen(open)
+          if (!open) setJobViewTarget(null)
+        }}
+      />
     </CustomsPage>
   )
 }

@@ -406,23 +406,35 @@ function JobFormSkeleton() {
   )
 }
 
-export function CustomsCreateJob() {
+export type CustomsCreateJobEmbeddedProps = {
+  mode: 'view' | 'update' | 'create'
+  jobId: number
+  onClose: () => void
+}
+
+type CustomsCreateJobProps = {
+  embedded?: CustomsCreateJobEmbeddedProps
+}
+
+export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
   const loggedInUser = useAuthStore((s) => s.auth.user)
   const routerSearch = jobsCreateRoute.useSearch()
   const pageMode = useMemo(() => {
+    if (embedded?.mode) return embedded.mode
     const m = (routerSearch.mode || '').toLowerCase()
     if (m === 'view') return 'view'
     if (m === 'update') return 'update'
     return 'create'
-  }, [routerSearch.mode])
+  }, [embedded?.mode, routerSearch.mode])
   const editingJobId = useMemo(() => {
+    if (embedded?.jobId != null && embedded.jobId > 0) return embedded.jobId
     const candidates = [routerSearch.id, routerSearch.jobId, routerSearch.job_id].filter(Boolean) as string[]
     for (const raw of candidates) {
       const n = Number(raw)
       if (Number.isFinite(n) && n > 0) return n
     }
     return null
-  }, [routerSearch.id, routerSearch.jobId, routerSearch.job_id])
+  }, [embedded?.jobId, routerSearch.id, routerSearch.jobId, routerSearch.job_id])
   const isViewMode = pageMode === 'view'
   const shouldLoadExistingJob =
     (pageMode === 'view' || pageMode === 'update') && editingJobId != null
@@ -1158,6 +1170,10 @@ export function CustomsCreateJob() {
   }
 
   const goToJobs = () => {
+    if (embedded?.onClose) {
+      embedded.onClose()
+      return
+    }
     window.location.assign(getJobsPath())
   }
 
@@ -1838,22 +1854,7 @@ export function CustomsCreateJob() {
     }
   }, [])
 
-  return (
-    <CustomsPage
-      title={pageMode === 'view' ? 'View Job' : pageMode === 'update' ? 'Update Job' : 'Create Job'}
-      description={
-        pageMode === 'view'
-          ? 'Review customs job details.'
-          : pageMode === 'update'
-            ? 'Update customs job details.'
-            : 'Enter new customs job details.'
-      }
-      headerActions={
-        <Button variant='outline' onClick={goToJobs}>
-          Back to Jobs
-        </Button>
-      }
-    >
+  const jobDetailsCard = (
       <Card>
         <CardHeader>
           <CardTitle>Job Details</CardTitle>
@@ -3168,6 +3169,29 @@ export function CustomsCreateJob() {
           )}
         </CardContent>
       </Card>
+  )
+
+  if (embedded) {
+    return jobDetailsCard
+  }
+
+  return (
+    <CustomsPage
+      title={pageMode === 'view' ? 'View Job' : pageMode === 'update' ? 'Update Job' : 'Create Job'}
+      description={
+        pageMode === 'view'
+          ? 'Review customs job details.'
+          : pageMode === 'update'
+            ? 'Update customs job details.'
+            : 'Enter new customs job details.'
+      }
+      headerActions={
+        <Button variant='outline' onClick={goToJobs}>
+          Back to Jobs
+        </Button>
+      }
+    >
+      {jobDetailsCard}
     </CustomsPage>
   )
 }
