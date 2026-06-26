@@ -4,6 +4,7 @@ import axios from 'axios'
 import {
   Check,
   ChevronDown,
+  FileUp,
   Loader2,
   Pencil,
   Plus,
@@ -21,8 +22,10 @@ import {
   type CustomsPayableCategory,
   type CustomsPayableLookupRow,
   type CustomsPayableRecord,
+  type CustomsPayableRetirementStatus,
   type CustomsPayableStatus,
 } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth-store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -68,6 +71,21 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+
+const RETIREMENT_LABEL: Record<CustomsPayableRetirementStatus, string> = {
+  pending_retirement: 'Pending retirement',
+  retired: 'Retired — slip needed',
+  pending_slip_approval: 'Slip pending approval',
+  completed: 'Retirement complete',
+}
+
+function formatPaidStatus(row: CustomsPayableRecord): string {
+  if (row.status !== 'paid') return STATUS_LABEL[row.status]
+  if (row.retirement_status && RETIREMENT_LABEL[row.retirement_status]) {
+    return `Paid · ${RETIREMENT_LABEL[row.retirement_status]}`
+  }
+  return STATUS_LABEL.paid
+}
 
 const STATUS_LABEL: Record<CustomsPayableStatus, string> = {
   draft: 'Draft',
@@ -248,6 +266,7 @@ function PayableFormSkeleton() {
 }
 
 export function CustomsPayables() {
+  const currentUser = useAuthStore((s) => s.auth.user)
   const [rows, setRows] = useState<CustomsPayableRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
@@ -287,14 +306,23 @@ export function CustomsPayables() {
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [paymentTarget, setPaymentTarget] = useState<CustomsPayableRecord | null>(null)
   const [bankOptions, setBankOptions] = useState<{ id: number; name: string }[]>([])
+  const [staffOptions, setStaffOptions] = useState<{ id: number; name: string; label: string }[]>([])
+  const [staffLoading, setStaffLoading] = useState(false)
   const [payForm, setPayForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     account_id: '',
-    payee_name: '',
+    payee_user_id: '',
     reference: '',
     description: '',
   })
   const [paySubmitting, setPaySubmitting] = useState(false)
+
+  const [slipOpen, setSlipOpen] = useState(false)
+  const [slipTarget, setSlipTarget] = useState<CustomsPayableRecord | null>(null)
+  const [slipFile, setSlipFile] = useState<File | null>(null)
+  const [slipSubmitting, setSlipSubmitting] = useState(false)
+  const [retireSubmittingId, setRetireSubmittingId] = useState<number | null>(null)
+  const [approveSlipSubmittingId, setApproveSlipSubmittingId] = useState<number | null>(null)
 
   const [jobViewOpen, setJobViewOpen] = useState(false)
   const [jobViewTarget, setJobViewTarget] = useState<{ id: number; label: string } | null>(null)
@@ -658,28 +686,50 @@ export function CustomsPayables() {
     setPayForm({
       date: new Date().toISOString().slice(0, 10),
       account_id: '',
-      payee_name: '',
+      payee_user_id: '',
       reference: `Customs payable #${row.id}`,
       description: row.description || '',
     })
     setPaymentOpen(true)
+    setStaffLoading(true)
     try {
-      const banks = await customsPayableApi.getBankAccounts()
+      const [banks, staff] = await Promise.all([
+        customsPayableApi.getBankAccounts(),
+        customsJobApi.searchFileManagers('', 100),
+      ])
       setBankOptions(banks)
+      setStaffOptions(
+        (staff || [])
+          .map((person: { id?: number; name?: string; label?: string }) => {
+            const id = Number(person.id)
+            if (!Number.isFinite(id) || id <= 0) return null
+            const name = String(person.name || person.label || `User #${id}`).trim()
+            return {
+              id,
+              name,
+              label: String(person.label || name),
+            }
+          })
+          .filter(Boolean) as { id: number; name: string; label: string }[]
+      )
     } catch {
       setBankOptions([])
+      setStaffOptions([])
+    } finally {
+      setStaffLoading(false)
     }
   }
 
   const confirmPayment = async () => {
     if (!paymentTarget) return
     const acc = Number(payForm.account_id)
+    const payeeUserId = Number(payForm.payee_user_id)
     if (!acc) {
       toast.error('Select a bank account.')
       return
     }
-    if (!payForm.payee_name.trim()) {
-      toast.error('Enter payee / receiver name.')
+    if (!payeeUserId) {
+      toast.error('Select a staff receiver.')
       return
     }
     setPaySubmitting(true)
@@ -687,7 +737,7 @@ export function CustomsPayables() {
       const res = await customsPayableApi.recordPayment(paymentTarget.id, {
         date: payForm.date,
         account_id: acc,
-        payee_name: payForm.payee_name.trim(),
+        payee_user_id: payeeUserId,
         reference: payForm.reference || null,
         description: payForm.description || null,
       })
@@ -703,6 +753,71 @@ export function CustomsPayables() {
       toast.error(msg || 'Payment failed.')
     } finally {
       setPaySubmitting(false)
+    }
+  }
+
+  const doRetirePayment = async (row: CustomsPayableRecord) => {
+    setRetireSubmittingId(row.id)
+    try {
+      const res = await customsPayableApi.retirePayment(row.id)
+      if (res.status === 200) {
+        toast.success(res.message || 'Payment retired.')
+        void loadList()
+      } else {
+        toast.error(res.message || 'Retirement failed.')
+      }
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'response' in e ? (e as any).response?.data?.message : null
+      toast.error(msg || 'Retirement failed.')
+    } finally {
+      setRetireSubmittingId(null)
+    }
+  }
+
+  const openSlipUpload = (row: CustomsPayableRecord) => {
+    setSlipTarget(row)
+    setSlipFile(null)
+    setSlipOpen(true)
+  }
+
+  const confirmSlipUpload = async () => {
+    if (!slipTarget || !slipFile) {
+      toast.error('Choose a payment slip file.')
+      return
+    }
+    setSlipSubmitting(true)
+    try {
+      const res = await customsPayableApi.uploadPaymentSlip(slipTarget.id, slipFile)
+      if (res.status === 200) {
+        toast.success(res.message || 'Payment slip uploaded.')
+        setSlipOpen(false)
+        void loadList()
+      } else {
+        toast.error(res.message || 'Upload failed.')
+      }
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'response' in e ? (e as any).response?.data?.message : null
+      toast.error(msg || 'Upload failed.')
+    } finally {
+      setSlipSubmitting(false)
+    }
+  }
+
+  const doApproveSlip = async (row: CustomsPayableRecord) => {
+    setApproveSlipSubmittingId(row.id)
+    try {
+      const res = await customsPayableApi.approvePaymentSlip(row.id)
+      if (res.status === 200) {
+        toast.success(res.message || 'Payment slip approved.')
+        void loadList()
+      } else {
+        toast.error(res.message || 'Approval failed.')
+      }
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'response' in e ? (e as any).response?.data?.message : null
+      toast.error(msg || 'Approval failed.')
+    } finally {
+      setApproveSlipSubmittingId(null)
     }
   }
 
@@ -732,7 +847,8 @@ export function CustomsPayables() {
             <div>
               <CardTitle>Customs payables</CardTitle>
               <CardDescription>
-                Draft → customs manager (creates bill) → chief accountant → accountant pays from bank.
+                Draft → customs manager (creates bill) → chief accountant → accountant pays from bank →
+                staff receiver retires → accountant uploads slip → chief accountant approves slip.
               </CardDescription>
             </div>
             <div className='flex flex-wrap items-center gap-2'>
@@ -784,6 +900,7 @@ export function CustomsPayables() {
                     <TableHead>Invoice</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Receiver</TableHead>
                     <TableHead>Document</TableHead>
                     <TableHead className='text-right'>Actions</TableHead>
                   </TableRow>
@@ -791,7 +908,7 @@ export function CustomsPayables() {
                 <TableBody>
                   {filteredRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className='text-muted-foreground py-10 text-center'>
+                      <TableCell colSpan={9} className='text-muted-foreground py-10 text-center'>
                         No payables found.
                       </TableCell>
                     </TableRow>
@@ -818,7 +935,12 @@ export function CustomsPayables() {
                           {r.amount} {r.currency}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={statusBadgeVariant(r.status)}>{STATUS_LABEL[r.status]}</Badge>
+                          <Badge variant={statusBadgeVariant(r.status)} className='whitespace-normal'>
+                            {formatPaidStatus(r)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className='max-w-[160px] truncate text-sm'>
+                          {r.payee_name || '—'}
                         </TableCell>
                         <TableCell className='max-w-[180px] truncate text-sm'>
                           {r.document_label || '—'}
@@ -880,6 +1002,47 @@ export function CustomsPayables() {
                                 <DropdownMenuItem onClick={() => void openPayment(r)}>
                                   <Wallet className='mr-2 h-4 w-4' />
                                   Record payment
+                                </DropdownMenuItem>
+                              ) : null}
+                              {r.status === 'paid' && r.retirement_status === 'pending_retirement' ? (
+                                <DropdownMenuItem
+                                  disabled={retireSubmittingId === r.id}
+                                  onClick={() => void doRetirePayment(r)}
+                                >
+                                  {retireSubmittingId === r.id ? (
+                                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                  ) : (
+                                    <Check className='mr-2 h-4 w-4' />
+                                  )}
+                                  Retire payment
+                                  {currentUser?.id === r.payee_user_id ? '' : ' (receiver only)'}
+                                </DropdownMenuItem>
+                              ) : null}
+                              {r.status === 'paid' && r.retirement_status === 'retired' ? (
+                                <DropdownMenuItem onClick={() => openSlipUpload(r)}>
+                                  <FileUp className='mr-2 h-4 w-4' />
+                                  Upload payment slip
+                                </DropdownMenuItem>
+                              ) : null}
+                              {r.status === 'paid' && r.retirement_status === 'pending_slip_approval' ? (
+                                <DropdownMenuItem
+                                  disabled={approveSlipSubmittingId === r.id}
+                                  onClick={() => void doApproveSlip(r)}
+                                >
+                                  {approveSlipSubmittingId === r.id ? (
+                                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                  ) : (
+                                    <Check className='mr-2 h-4 w-4' />
+                                  )}
+                                  Approve payment slip
+                                </DropdownMenuItem>
+                              ) : null}
+                              {r.payment_slip_url ? (
+                                <DropdownMenuItem asChild>
+                                  <a href={r.payment_slip_url} target='_blank' rel='noreferrer'>
+                                    <FileUp className='mr-2 h-4 w-4' />
+                                    View payment slip
+                                  </a>
                                 </DropdownMenuItem>
                               ) : null}
                             </DropdownMenuContent>
@@ -1193,8 +1356,8 @@ export function CustomsPayables() {
           <DialogHeader>
             <DialogTitle>Record payment</DialogTitle>
             <DialogDescription>
-              Select the bank account used, record the payee, and post the expense. The linked bill will be
-              marked paid.
+              Select the bank account and staff receiver. After payment, the receiver must retire it,
+              then the accountant uploads the payment slip for chief accountant approval.
             </DialogDescription>
           </DialogHeader>
           {paymentTarget ? (
@@ -1222,7 +1385,7 @@ export function CustomsPayables() {
                     setPayForm((p) => ({ ...p, account_id: v === 'none' ? '' : v }))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className='w-full min-w-0'>
                     <SelectValue placeholder='Select account' />
                   </SelectTrigger>
                   <SelectContent>
@@ -1236,12 +1399,29 @@ export function CustomsPayables() {
                 </Select>
               </div>
               <div className='space-y-2'>
-                <Label>Payee / receiver *</Label>
-                <Input
-                  value={payForm.payee_name}
-                  onChange={(e) => setPayForm((p) => ({ ...p, payee_name: e.target.value }))}
-                  placeholder='Name on payment'
-                />
+                <Label>Payee / receiver (staff) *</Label>
+                <Select
+                  value={payForm.payee_user_id || 'none'}
+                  onValueChange={(v) =>
+                    setPayForm((p) => ({ ...p, payee_user_id: v === 'none' ? '' : v }))
+                  }
+                  disabled={staffLoading}
+                >
+                  <SelectTrigger className='w-full min-w-0'>
+                    <SelectValue placeholder={staffLoading ? 'Loading staff…' : 'Select staff receiver'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='none'>Select…</SelectItem>
+                    {staffOptions.map((person) => (
+                      <SelectItem key={person.id} value={String(person.id)}>
+                        {person.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!staffLoading && staffOptions.length === 0 ? (
+                  <p className='text-muted-foreground text-xs'>No staff with linked user accounts found.</p>
+                ) : null}
               </div>
               <div className='space-y-2'>
                 <Label>Reference</Label>
@@ -1266,6 +1446,46 @@ export function CustomsPayables() {
             </Button>
             <Button type='button' disabled={paySubmitting} onClick={() => void confirmPayment()}>
               {paySubmitting ? <Loader2 className='h-4 w-4 animate-spin' /> : 'Save payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={slipOpen} onOpenChange={setSlipOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload payment slip</DialogTitle>
+            <DialogDescription>
+              Attach proof of payment for payable #{slipTarget?.id ?? '—'}. Chief accountant will review
+              after upload.
+            </DialogDescription>
+          </DialogHeader>
+          {slipTarget ? (
+            <div className='space-y-3 text-sm'>
+              <p>
+                Receiver: <strong>{slipTarget.payee_name || '—'}</strong> · Amount{' '}
+                <strong>
+                  {slipTarget.amount} {slipTarget.currency}
+                </strong>
+              </p>
+              <div className='space-y-2'>
+                <Label htmlFor='payment-slip-file'>Payment slip *</Label>
+                <Input
+                  id='payment-slip-file'
+                  type='file'
+                  accept='.pdf,.jpg,.jpeg,.png,.webp,image/*,application/pdf'
+                  onChange={(e) => setSlipFile(e.target.files?.[0] ?? null)}
+                />
+                <p className='text-muted-foreground text-xs'>PDF or image, up to 10 MB.</p>
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button type='button' variant='outline' onClick={() => setSlipOpen(false)}>
+              Cancel
+            </Button>
+            <Button type='button' disabled={slipSubmitting || !slipFile} onClick={() => void confirmSlipUpload()}>
+              {slipSubmitting ? <Loader2 className='h-4 w-4 animate-spin' /> : 'Upload slip'}
             </Button>
           </DialogFooter>
         </DialogContent>

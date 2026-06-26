@@ -2621,6 +2621,12 @@ export type CustomsPayableStatus =
   | 'ready_for_payment'
   | 'paid'
 
+export type CustomsPayableRetirementStatus =
+  | 'pending_retirement'
+  | 'retired'
+  | 'pending_slip_approval'
+  | 'completed'
+
 export interface CustomsPayableRecord {
   id: number
   customs_job_id: number
@@ -2640,7 +2646,15 @@ export interface CustomsPayableRecord {
   payment_id: number | null
   status: CustomsPayableStatus
   payee_name: string | null
+  payee_user_id: number | null
   payee_notes: string | null
+  retirement_status: CustomsPayableRetirementStatus | null
+  retired_at: string | null
+  payment_slip_path: string | null
+  payment_slip_original_name: string | null
+  payment_slip_url: string | null
+  slip_uploaded_at: string | null
+  slip_approved_at: string | null
   payment_account_id: number | null
   submitted_at: string | null
   manager_approved_at: string | null
@@ -2800,12 +2814,35 @@ export const customsPayableApi = {
     payload: {
       date: string
       account_id: number
-      payee_name: string
+      payee_user_id: number
       reference?: string | null
       description?: string | null
     }
   ): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
     const response = await api.post(`/customs/payables/${id}/record-payment`, payload)
+    return response.data
+  },
+  retirePayment: async (
+    id: number
+  ): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const response = await api.post(`/customs/payables/${id}/retire-payment`)
+    return response.data
+  },
+  uploadPaymentSlip: async (
+    id: number,
+    file: File
+  ): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const formData = new FormData()
+    formData.append('payment_slip', file)
+    const response = await api.post(`/customs/payables/${id}/upload-payment-slip`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+  approvePaymentSlip: async (
+    id: number
+  ): Promise<{ status: number; message?: string; data?: CustomsPayableRecord }> => {
+    const response = await api.post(`/customs/payables/${id}/approve-payment-slip`)
     return response.data
   },
 }
