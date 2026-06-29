@@ -154,6 +154,7 @@ type JobForm = {
   status: string
   shippingLine: string
   carryingDate: string
+  dischargeDate: string
   arrivalDate: string
   berthingDate: string
   loadingVessel: string
@@ -265,6 +266,7 @@ const initialForm: JobForm = {
   status: 'OTHER',
   shippingLine: '',
   carryingDate: '',
+  dischargeDate: '',
   arrivalDate: '',
   berthingDate: '',
   loadingVessel: '',
@@ -995,6 +997,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
           status: String(job.status || prev.status),
           shippingLine: String(lineVesselDetails.shipping_line || ''),
           carryingDate: String(lineVesselDetails.carrying_date || ''),
+          dischargeDate: String(lineVesselDetails.discharge_date || ''),
           arrivalDate: String(lineVesselDetails.arrival_date || ''),
           berthingDate: String(lineVesselDetails.berthing_date || ''),
           loadingVessel: String(lineVesselDetails.loading_vessel || ''),
@@ -1574,6 +1577,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
       arrival_date: form.arrivalDate || null,
       berthing_date: form.berthingDate || null,
       carrying_date: form.carryingDate || null,
+      discharge_date: form.dischargeDate || null,
       loading_vessel: form.loadingVessel || null,
       loading_voyage: form.loadingVoyage || null,
       discharging_vessel: form.dischargingVessel || null,
@@ -1886,7 +1890,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   updateField('customerName', selected?.name ?? '')
                 }}
                 placeholder='Type customer name...'
-                isDisabled={isViewMode}
+                isDisabled={formDisabled}
                 isClearable
                 noOptionsMessage={({ inputValue }) =>
                   inputValue.length < 2 ? 'Type at least 2 characters' : 'No customers found'
@@ -1980,8 +1984,8 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
             <div className='space-y-1'><Label>Reference No.</Label><Input value={form.referenceNo} onChange={(e) => updateField('referenceNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>HBL/FBO No.</Label><Input value={form.hblNo} onChange={(e) => updateField('hblNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>Customer Ref No.</Label><Input value={form.customerRefNo} onChange={(e) => updateField('customerRefNo', e.target.value)} /></div>
-            <div className='space-y-1'><Label>Cargo Type</Label><Select value={form.cargoType} onValueChange={(v) => updateField('cargoType', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{cargoTypeItems.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
-            <div className='space-y-1'><Label>Type of Cargo</Label><Select value={form.typeOfCargo} onValueChange={(v) => updateField('typeOfCargo', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{typeOfCargoItems.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
+            <div className='space-y-1'><Label>Cargo Type</Label><Select disabled={formDisabled} value={form.cargoType} onValueChange={(v) => updateField('cargoType', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{cargoTypeItems.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
+            <div className='space-y-1'><Label>Type of Cargo</Label><Select disabled={formDisabled} value={form.typeOfCargo} onValueChange={(v) => updateField('typeOfCargo', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{typeOfCargoItems.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent></Select></div>
             <div className='space-y-1'><Label>Invoice No.</Label><Input value={form.invoiceNo} onChange={(e) => updateField('invoiceNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>UCR No.</Label><Input value={form.ucrNo} onChange={(e) => updateField('ucrNo', e.target.value)} /></div>
             <div className='space-y-1'><Label>TANSAD No</Label><Input value={form.tansadNo} onChange={(e) => updateField('tansadNo', e.target.value)} /></div>
@@ -2000,7 +2004,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   updateField('fileManager', selected?.name ?? '')
                 }}
                 placeholder='Type staff.'
-                isDisabled={isViewMode}
+                isDisabled={formDisabled}
                 isClearable
                 noOptionsMessage={() => 'No staff found'}
                 loadingMessage={() => 'Searching staff...'}
@@ -2089,7 +2093,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
               />
             </div>
             <div className='space-y-1'><Label>Created By</Label><Input value={form.createdBy} disabled /></div>
-            <div className='space-y-1'><Label>Shipment Type</Label><Select value={form.shipmentType} onValueChange={(v) => updateField('shipmentType', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{shipmentTypeItems.map((v) => <SelectItem key={v} value={v}>{labelForShipmentType(v)}</SelectItem>)}</SelectContent></Select></div>
+            <div className='space-y-1'><Label>Shipment Type</Label><Select disabled={formDisabled} value={form.shipmentType} onValueChange={(v) => updateField('shipmentType', v)}><SelectTrigger className='w-full'><SelectValue /></SelectTrigger><SelectContent>{shipmentTypeItems.map((v) => <SelectItem key={v} value={v}>{labelForShipmentType(v)}</SelectItem>)}</SelectContent></Select></div>
           </div>
           </fieldset>
 
@@ -2110,6 +2114,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                 <div className='space-y-1 md:col-span-2'>
                   <Label>Master shipper (optional)</Label>
                   <Select
+                    disabled={formDisabled}
                     value={form.shipperId || '__none__'}
                     onValueChange={(v) => updateField('shipperId', v === '__none__' ? '' : v)}
                   >
@@ -2143,6 +2148,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                 <div className='space-y-1'>
                   <Label>Shipping Line</Label>
                   <Select
+                    disabled={formDisabled}
                     value={form.shippingLine.trim() ? form.shippingLine : '__none__'}
                     onValueChange={(v) => updateField('shippingLine', v === '__none__' ? '' : v)}
                   >
@@ -2176,17 +2182,17 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label>Carrying Date</Label>
+                  <Label>Discharge Date</Label>
                   <Input
                     type='date'
-                    value={form.carryingDate}
-                    onChange={(e) => updateField('carryingDate', e.target.value)}
+                    value={form.dischargeDate}
+                    onChange={(e) => updateField('dischargeDate', e.target.value)}
                   />
                 </div>
 
                 <div className='space-y-1 md:col-span-2'>
                   <Label>Loading Vessel</Label>
-                  <Select value={form.loadingVessel || '__empty__'} onValueChange={handleLoadingVesselChange}>
+                  <Select disabled={formDisabled} value={form.loadingVessel || '__empty__'} onValueChange={handleLoadingVesselChange}>
                     <SelectTrigger className='w-full'>
                       <SelectValue placeholder='Select loading vessel' />
                     </SelectTrigger>
@@ -2209,6 +2215,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                 <div className='space-y-1 md:col-span-2'>
                   <Label>Discharging Vessel</Label>
                   <Select
+                    disabled={formDisabled}
                     value={form.dischargingVessel || '__empty__'}
                     onValueChange={handleDischargingVesselChange}
                   >
@@ -2241,6 +2248,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                 <div className='space-y-1'>
                   <Label>Type</Label>
                   <Select
+                    disabled={formDisabled}
                     value={form.vesselType || '__empty__'}
                     onValueChange={(v) => updateField('vesselType', v)}
                   >
@@ -2265,6 +2273,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                 <div className='space-y-1'>
                   <Label>ICD Transfer</Label>
                   <Select
+                    disabled={formDisabled}
                     value={form.icdTransfer || '__empty__'}
                     onValueChange={(v) => updateField('icdTransfer', v)}
                   >
@@ -2278,9 +2287,19 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   </Select>
                 </div>
 
-                <div className='space-y-1 md:col-span-3'>
+                <div className='space-y-1'>
+                  <Label>Carrying Date</Label>
+                  <Input
+                    type='date'
+                    value={form.carryingDate}
+                    onChange={(e) => updateField('carryingDate', e.target.value)}
+                  />
+                </div>
+
+                <div className='space-y-1 md:col-span-2'>
                   <Label>ICD Transfer Location</Label>
                   <Select
+                    disabled={formDisabled}
                     value={form.icdTransferLocation.trim() ? form.icdTransferLocation : '__none__'}
                     onValueChange={(v) => updateField('icdTransferLocation', v === '__none__' ? '' : v)}
                   >
@@ -2307,6 +2326,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                 <div className='space-y-1'>
                   <Label>Origin Country</Label>
                   <Select
+                    disabled={formDisabled}
                     value={form.originCountry.trim() ? form.originCountry : '__none__'}
                     onValueChange={(v) => {
                       if (v === '__none__') {
@@ -2336,7 +2356,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   <Select
                     value={form.portOfLoading.trim() ? form.portOfLoading : '__none__'}
                     onValueChange={(v) => updateField('portOfLoading', v === '__none__' ? '' : v)}
-                    disabled={!originCountryId}
+                    disabled={formDisabled || !originCountryId}
                   >
                     <SelectTrigger className='w-full'>
                       <SelectValue
@@ -2358,6 +2378,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                 <div className='space-y-1'>
                   <Label>Destination Country</Label>
                   <Select
+                    disabled={formDisabled}
                     value={form.destinationCountry.trim() ? form.destinationCountry : '__none__'}
                     onValueChange={(v) => {
                       if (v === '__none__') {
@@ -2387,7 +2408,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   <Select
                     value={form.portOfDischarge.trim() ? form.portOfDischarge : '__none__'}
                     onValueChange={(v) => updateField('portOfDischarge', v === '__none__' ? '' : v)}
-                    disabled={!destinationCountryId}
+                    disabled={formDisabled || !destinationCountryId}
                   >
                     <SelectTrigger className='w-full'>
                       <SelectValue
@@ -2408,7 +2429,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                 </div>
                 <div className='space-y-1 md:col-span-2 lg:col-span-4'>
                   <Label>Nominated By</Label>
-                  <Select value={form.nominatedBy || '__empty__'} onValueChange={(v) => updateField('nominatedBy', v)}>
+                  <Select disabled={formDisabled} value={form.nominatedBy || '__empty__'} onValueChange={(v) => updateField('nominatedBy', v)}>
                     <SelectTrigger className='w-full'>
                       <SelectValue placeholder='Select' />
                     </SelectTrigger>
@@ -2443,7 +2464,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                 </div>
                 <div className='space-y-1'>
                   <Label>Currency</Label>
-                  <Select value={form.currency || '__empty__'} onValueChange={(v) => updateField('currency', v)}>
+                  <Select disabled={formDisabled} value={form.currency || '__empty__'} onValueChange={(v) => updateField('currency', v)}>
                     <SelectTrigger className='w-full'>
                       <SelectValue placeholder='Select' />
                     </SelectTrigger>
@@ -2491,6 +2512,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                           <TableCell><Input value={row.containerNo} onChange={(e) => updateContainerRow(i, 'containerNo', e.target.value)} /></TableCell>
                           <TableCell className='min-w-[140px]'>
                             <Select
+                              disabled={formDisabled}
                               value={typeSelectValue}
                               onValueChange={(v) =>
                                 updateContainerRow(i, 'type', v === '__none__' ? '' : v)
@@ -2545,6 +2567,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                           <TableCell><Input value={row.chasisNo} onChange={(e) => updateVehicleRow(i, 'chasisNo', e.target.value)} /></TableCell>
                           <TableCell className='min-w-[140px]'>
                             <Select
+                              disabled={formDisabled}
                               value={ccSelectValue}
                               onValueChange={(v) =>
                                 updateVehicleRow(i, 'engineCapacity', v === '__none__' ? '' : v)
@@ -2702,6 +2725,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                         <div className='space-y-1'>
                           <Label>Document Name</Label>
                           <Select
+                            disabled={formDisabled}
                             value={documentName || '__empty__'}
                             onValueChange={(v) =>
                               setDocumentName(v === '__empty__' ? '' : v)
@@ -3099,7 +3123,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                       <Label>Subject:</Label>
                       <Select
                         value={noteSubject || '__empty__'}
-                        disabled={isViewMode}
+                        disabled={formDisabled}
                         onValueChange={(v) =>
                           setNoteSubject(v === '__empty__' ? '' : v)
                         }
