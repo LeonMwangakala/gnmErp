@@ -311,3 +311,87 @@ export function inferStorageFacility(
 export function formatUsd(amount: number): string {
   return `USD ${amount.toFixed(2)}`
 }
+
+export type ContainerDepositStatus = 'none' | 'paid' | 'forfeited' | 'refunded'
+
+export const DEPOSIT_STATUS_LABEL: Record<Exclude<ContainerDepositStatus, 'none'>, string> = {
+  paid: 'Deposit held',
+  forfeited: 'Deposit held — demurrage unpaid',
+  refunded: 'Deposit refunded',
+}
+
+export function parseDepositAmount(value: string): number {
+  const parsed = Number(String(value).replace(/,/g, '').trim())
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+export function hasContainerDeposit(depositAmount: string, depositPaidDate: string): boolean {
+  return parseDepositAmount(depositAmount) > 0 && Boolean(depositPaidDate.trim())
+}
+
+export function canRefundDeposit(
+  demurragePaid: boolean,
+  demurrageOwedUsd: number
+): boolean {
+  return demurragePaid || demurrageOwedUsd <= 0
+}
+
+export function resolveContainerDepositStatus(input: {
+  depositAmount: string
+  depositPaidDate: string
+  demurragePaid: boolean
+  demurrageOwedUsd: number
+  returnedDate: string
+  interchangeDate: string
+  depositRefundedDate: string
+}): ContainerDepositStatus {
+  if (!hasContainerDeposit(input.depositAmount, input.depositPaidDate)) {
+    return 'none'
+  }
+
+  const interchangeRecorded = Boolean(input.interchangeDate.trim())
+  const refundRecorded = Boolean(input.depositRefundedDate.trim())
+  const demurrageCleared = canRefundDeposit(input.demurragePaid, input.demurrageOwedUsd)
+
+  if ((interchangeRecorded || refundRecorded) && demurrageCleared) {
+    return 'refunded'
+  }
+
+  if (
+    input.returnedDate.trim() &&
+    input.demurrageOwedUsd > 0 &&
+    !input.demurragePaid
+  ) {
+    return 'forfeited'
+  }
+
+  return 'paid'
+}
+
+export function summarizeContainerDeposit(input: {
+  depositAmount: string
+  depositPaidDate: string
+  demurragePaid: boolean
+  demurrageOwedUsd: number
+  returnedDate: string
+  interchangeDate: string
+  depositRefundedDate: string
+}): string {
+  const status = resolveContainerDepositStatus(input)
+  const amount = parseDepositAmount(input.depositAmount)
+
+  if (status === 'none') {
+    return 'No deposit recorded — enter amount and paid date after shipping line invoice.'
+  }
+  if (status === 'paid') {
+    return `${formatUsd(amount)} held until container is returned with demurrage settled and interchange issued.`
+  }
+  if (status === 'forfeited') {
+    return `${formatUsd(amount)} held until demurrage is paid — full refund on interchange once demurrage is settled.`
+  }
+  return `${formatUsd(amount)} refunded in full on interchange.`
+}
+
+export function isInterchangeDocumentName(name: string): boolean {
+  return /container\s*interchange|interchange/i.test(name.trim())
+}

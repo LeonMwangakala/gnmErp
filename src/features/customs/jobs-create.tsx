@@ -8,9 +8,16 @@ import { CustomsPage } from './customs-page'
 import { validateCustomsDocumentFile } from './document-upload'
 import {
   calculateContainerCosts,
+  canRefundDeposit,
+  DEPOSIT_STATUS_LABEL,
   formatUsd,
   inferStorageFacility,
+  isInterchangeDocumentName,
   isReleaseOrderDocumentName,
+  parseDepositAmount,
+  resolveContainerDepositStatus,
+  summarizeContainerDeposit,
+  hasContainerDeposit,
   type StorageFacility,
 } from './container-costs'
 import {
@@ -19,7 +26,9 @@ import {
   prependStoredJob,
   type Job,
 } from './jobs-storage'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -109,6 +118,11 @@ type ContainerShipmentRow = {
   perContainerWeight: string
   gateOutDate: string
   returnedDate: string
+  depositAmount: string
+  depositPaidDate: string
+  demurragePaid: boolean
+  interchangeDate: string
+  depositRefundedDate: string
 }
 
 const emptyContainerRow = (): ContainerShipmentRow => ({
@@ -118,6 +132,11 @@ const emptyContainerRow = (): ContainerShipmentRow => ({
   perContainerWeight: '',
   gateOutDate: '',
   returnedDate: '',
+  depositAmount: '',
+  depositPaidDate: '',
+  demurragePaid: false,
+  interchangeDate: '',
+  depositRefundedDate: '',
 })
 
 /** Common engine displacements (CC) for vehicle shipment declarations */
@@ -486,6 +505,8 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
   const [documentsSearch, setDocumentsSearch] = useState('')
   const [releaseOrderContainerNo, setReleaseOrderContainerNo] = useState('')
   const [releaseOrderGateOutDate, setReleaseOrderGateOutDate] = useState('')
+  const [interchangeContainerNo, setInterchangeContainerNo] = useState('')
+  const [interchangeDate, setInterchangeDate] = useState('')
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const [documentName, setDocumentName] = useState('')
   const [documentNameOther, setDocumentNameOther] = useState('')
@@ -600,6 +621,11 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
 
   const isReleaseOrderUpload = useMemo(
     () => isReleaseOrderDocumentName(documentName || documentNameOther),
+    [documentName, documentNameOther]
+  )
+
+  const isInterchangeUpload = useMemo(
+    () => isInterchangeDocumentName(documentName || documentNameOther),
     [documentName, documentNameOther]
   )
 
@@ -1096,6 +1122,11 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   perContainerWeight: String(row.per_container_weight || ''),
                   gateOutDate: String(row.gate_out_date || ''),
                   returnedDate: String(row.returned_date || ''),
+                  depositAmount: String(row.deposit_amount ?? ''),
+                  depositPaidDate: String(row.deposit_paid_date || ''),
+                  demurragePaid: Boolean(row.demurrage_paid),
+                  interchangeDate: String(row.interchange_date || ''),
+                  depositRefundedDate: String(row.deposit_refunded_date || ''),
                 }))
               : prev.containerShipment,
           vehicleShipment:
@@ -1232,6 +1263,52 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
       ...p,
       containerShipment: p.containerShipment.map((r, i) => (i === index ? { ...r, [field]: value } : r)),
     }))
+
+  const handleDemurragePaidChange = (index: number, checked: boolean) => {
+    setForm((p) => ({
+      ...p,
+      containerShipment: p.containerShipment.map((row, i) => {
+        if (i !== index) return row
+        const demurrageOwed = containerCostSummaries[i]?.demurrage.totalUsd ?? 0
+        const next: ContainerShipmentRow = { ...row, demurragePaid: checked }
+        if (
+          checked &&
+          row.interchangeDate.trim() &&
+          canRefundDeposit(true, demurrageOwed) &&
+          !row.depositRefundedDate.trim()
+        ) {
+          next.depositRefundedDate = row.interchangeDate
+        }
+        if (!checked) {
+          next.depositRefundedDate = ''
+        }
+        return next
+      }),
+    }))
+  }
+
+  const applyInterchangeToContainer = (containerIndex: number, interchangeOn: string) => {
+    const row = form.containerShipment[containerIndex]
+    const demurrageOwed = containerCostSummaries[containerIndex]?.demurrage.totalUsd ?? 0
+    const refundNow = canRefundDeposit(row.demurragePaid, demurrageOwed)
+    setForm((p) => ({
+      ...p,
+      containerShipment: p.containerShipment.map((r, i) =>
+        i === containerIndex
+          ? {
+              ...r,
+              interchangeDate: interchangeOn,
+              depositRefundedDate: refundNow ? interchangeOn : r.depositRefundedDate,
+            }
+          : r
+      ),
+    }))
+    if (refundNow) {
+      toast.success('Interchange recorded — deposit refunded in full')
+    } else {
+      toast.warning('Interchange recorded — deposit stays held until demurrage is paid')
+    }
+  }
   const updateVehicleRow = (index: number, field: keyof JobForm['vehicleShipment'][number], value: string) =>
     setForm((p) => ({ ...p, vehicleShipment: p.vehicleShipment.map((r, i) => (i === index ? { ...r, [field]: value } : r)) }))
   const updateLooseCargoRow = (index: number, field: keyof JobForm['looseCargoShipment'][number], value: string) =>
@@ -1294,6 +1371,8 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
     setDocumentsSearch('')
     setReleaseOrderContainerNo('')
     setReleaseOrderGateOutDate('')
+    setInterchangeContainerNo('')
+    setInterchangeDate('')
   }
 
   const handleDocumentFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
@@ -1349,6 +1428,33 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
       updateContainerRow(containerIndex, 'gateOutDate', releaseOrderGateOutDate)
     }
 
+    if (isInterchangeDocumentName(resolvedName)) {
+      const containerNo = interchangeContainerNo.trim()
+      if (!containerNo) {
+        toast.error('Select the container for this interchange')
+        return
+      }
+      if (!interchangeDate) {
+        toast.error('Enter the interchange date')
+        return
+      }
+      const containerIndex = form.containerShipment.findIndex(
+        (row) => row.containerNo.trim().toUpperCase() === containerNo.toUpperCase()
+      )
+      if (containerIndex < 0) {
+        toast.error('Selected container was not found on this job')
+        return
+      }
+      if (!hasContainerDeposit(
+        form.containerShipment[containerIndex].depositAmount,
+        form.containerShipment[containerIndex].depositPaidDate
+      )) {
+        toast.error('Record deposit amount and paid date on the container before uploading interchange')
+        return
+      }
+      applyInterchangeToContainer(containerIndex, interchangeDate)
+    }
+
     const fileSizeKb = Math.max(1, Math.round(selectedFile.size / 1024))
     const now = new Date()
 
@@ -1369,6 +1475,8 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
     setSelectedFile(null)
     setReleaseOrderContainerNo('')
     setReleaseOrderGateOutDate('')
+    setInterchangeContainerNo('')
+    setInterchangeDate('')
   }
 
   const resolveJobId = () => currentJobId ?? editingJobId
@@ -1718,14 +1826,32 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
       created_by_id: loggedInUser?.id || (form.createdById ? Number(form.createdById) : null),
     }
 
-    const containerShipment = form.containerShipment.map((row) => ({
-      container_no: row.containerNo || null,
-      type: row.type || null,
-      seal_no: row.sealNo || null,
-      per_container_weight: row.perContainerWeight || null,
-      gate_out_date: row.gateOutDate || null,
-      returned_date: row.returnedDate || null,
-    }))
+    const containerShipment = form.containerShipment.map((row, index) => {
+      const demurrageOwed = containerCostSummaries[index]?.demurrage.totalUsd ?? 0
+      const depositStatus = resolveContainerDepositStatus({
+        depositAmount: row.depositAmount,
+        depositPaidDate: row.depositPaidDate,
+        demurragePaid: row.demurragePaid,
+        demurrageOwedUsd: demurrageOwed,
+        returnedDate: row.returnedDate,
+        interchangeDate: row.interchangeDate,
+        depositRefundedDate: row.depositRefundedDate,
+      })
+      return {
+        container_no: row.containerNo || null,
+        type: row.type || null,
+        seal_no: row.sealNo || null,
+        per_container_weight: row.perContainerWeight || null,
+        gate_out_date: row.gateOutDate || null,
+        returned_date: row.returnedDate || null,
+        deposit_amount: parseDepositAmount(row.depositAmount) || null,
+        deposit_paid_date: row.depositPaidDate || null,
+        demurrage_paid: row.demurragePaid,
+        interchange_date: row.interchangeDate || null,
+        deposit_refunded_date: row.depositRefundedDate || null,
+        deposit_status: depositStatus === 'none' ? null : depositStatus,
+      }
+    })
 
     const vehicleShipment = form.vehicleShipment.map((row) => ({
       chasis_no: row.chasisNo || null,
@@ -2693,6 +2819,104 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   </div>
                   </fieldset>
 
+                  {form.containerShipment.some((row) => row.containerNo.trim()) ? (
+                    <div className='mt-3 space-y-2'>
+                      <p className='text-sm font-medium text-amber-800'>Shipping line deposit (per container)</p>
+                      <p className='text-xs text-muted-foreground'>
+                        Amount varies by shipping line. Deposit is refunded in full on interchange once demurrage is paid.
+                      </p>
+                      <div className='overflow-x-auto rounded-md border'>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Container</TableHead>
+                              <TableHead>Deposit (USD)</TableHead>
+                              <TableHead>Deposit paid</TableHead>
+                              <TableHead>Demurrage paid</TableHead>
+                              <TableHead>Interchange</TableHead>
+                              <TableHead>Refund date</TableHead>
+                              <TableHead>Status</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {form.containerShipment.map((row, i) => {
+                              if (!row.containerNo.trim()) return null
+                              const demurrageOwed = containerCostSummaries[i]?.demurrage.totalUsd ?? 0
+                              const depositStatus = resolveContainerDepositStatus({
+                                depositAmount: row.depositAmount,
+                                depositPaidDate: row.depositPaidDate,
+                                demurragePaid: row.demurragePaid,
+                                demurrageOwedUsd: demurrageOwed,
+                                returnedDate: row.returnedDate,
+                                interchangeDate: row.interchangeDate,
+                                depositRefundedDate: row.depositRefundedDate,
+                              })
+                              return (
+                                <TableRow key={`dep-${i}`}>
+                                  <TableCell className='font-medium'>{row.containerNo}</TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type='number'
+                                      min={0}
+                                      step='0.01'
+                                      className='min-w-[100px]'
+                                      value={row.depositAmount}
+                                      disabled={formDisabled}
+                                      onChange={(e) => updateContainerRow(i, 'depositAmount', e.target.value)}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type='date'
+                                      value={row.depositPaidDate}
+                                      disabled={formDisabled}
+                                      onChange={(e) => updateContainerRow(i, 'depositPaidDate', e.target.value)}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className='flex items-center gap-2'>
+                                      <Checkbox
+                                        checked={row.demurragePaid}
+                                        disabled={formDisabled}
+                                        onCheckedChange={(v) => handleDemurragePaidChange(i, v === true)}
+                                      />
+                                      <span className='text-xs text-muted-foreground'>Paid</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type='date'
+                                      value={row.interchangeDate}
+                                      disabled={formDisabled}
+                                      onChange={(e) => updateContainerRow(i, 'interchangeDate', e.target.value)}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type='date'
+                                      value={row.depositRefundedDate}
+                                      disabled={formDisabled}
+                                      onChange={(e) => updateContainerRow(i, 'depositRefundedDate', e.target.value)}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    {depositStatus === 'none' ? (
+                                      <span className='text-xs text-muted-foreground'>—</span>
+                                    ) : (
+                                      <Badge variant={depositStatus === 'refunded' ? 'default' : depositStatus === 'forfeited' ? 'destructive' : 'secondary'}>
+                                        {DEPOSIT_STATUS_LABEL[depositStatus]}
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  ) : null}
+
                   {form.containerShipment.some((row) => row.containerNo.trim() || row.type.trim()) ? (
                     <div className='mt-3 space-y-2'>
                       <p className='text-sm font-medium text-amber-800'>Estimated container charges</p>
@@ -2719,6 +2943,18 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                                 {formatUsd(costs.storage.totalUsd)}
                               </p>
                               <p className='text-xs text-muted-foreground'>{costs.storage.summary}</p>
+                              <p className='mt-2'>
+                                <span className='font-medium'>Deposit:</span>{' '}
+                                {summarizeContainerDeposit({
+                                  depositAmount: row.depositAmount,
+                                  depositPaidDate: row.depositPaidDate,
+                                  demurragePaid: row.demurragePaid,
+                                  demurrageOwedUsd: costs.demurrage.totalUsd,
+                                  returnedDate: row.returnedDate,
+                                  interchangeDate: row.interchangeDate,
+                                  depositRefundedDate: row.depositRefundedDate,
+                                })}
+                              </p>
                             </div>
                           )
                         })}
@@ -2983,6 +3219,50 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                               type='date'
                               value={releaseOrderGateOutDate}
                               onChange={(e) => setReleaseOrderGateOutDate(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {isInterchangeUpload ? (
+                        <div className='grid grid-cols-1 gap-3 rounded-md border border-sky-200 bg-sky-50/80 p-3 md:grid-cols-2'>
+                          <div className='space-y-1 md:col-span-2'>
+                            <p className='text-sm font-medium text-sky-900'>Container interchange</p>
+                            <p className='text-xs text-sky-800'>
+                              Full deposit is refunded when interchange is recorded and demurrage is paid.
+                            </p>
+                          </div>
+                          <div className='space-y-1'>
+                            <Label>Container</Label>
+                            <Select
+                              disabled={formDisabled}
+                              value={interchangeContainerNo || '__empty__'}
+                              onValueChange={(v) =>
+                                setInterchangeContainerNo(v === '__empty__' ? '' : v)
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder='Select container' />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value='__empty__'>Select container</SelectItem>
+                                {form.containerShipment
+                                  .filter((row) => row.containerNo.trim())
+                                  .map((row) => (
+                                    <SelectItem key={`ic-${row.containerNo}`} value={row.containerNo}>
+                                      {row.containerNo}
+                                      {row.type ? ` (${row.type})` : ''}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className='space-y-1'>
+                            <Label>Interchange date</Label>
+                            <Input
+                              type='date'
+                              value={interchangeDate}
+                              onChange={(e) => setInterchangeDate(e.target.value)}
                             />
                           </div>
                         </div>

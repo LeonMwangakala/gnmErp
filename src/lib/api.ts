@@ -2286,6 +2286,7 @@ export const FALLBACK_JOB_DOCUMENT_TYPES: ReadonlyArray<{
   { name: 'ICD INVOICE', stage: 'PORT' },
   { name: 'ICD RECEIPT', stage: 'PORT' },
   { name: 'RELEASE ORDER', stage: 'PORT' },
+  { name: 'CONTAINER INTERCHANGE', stage: 'SHIPPING_LINE' },
   { name: 'CORRIDOR LEVY INVOICE', stage: 'PORT' },
 ]
 
