@@ -7,6 +7,13 @@ import * as XLSX from 'xlsx'
 import { CustomsPage } from './customs-page'
 import { validateCustomsDocumentFile } from './document-upload'
 import {
+  calculateContainerCosts,
+  formatUsd,
+  inferStorageFacility,
+  isReleaseOrderDocumentName,
+  type StorageFacility,
+} from './container-costs'
+import {
   createInitialJobStageAssignments,
   createInitialJobStageProgress,
   prependStoredJob,
@@ -95,6 +102,24 @@ const CONTAINER_TYPE_OPTIONS = [
   '40DV',
 ] as const
 
+type ContainerShipmentRow = {
+  containerNo: string
+  type: string
+  sealNo: string
+  perContainerWeight: string
+  gateOutDate: string
+  returnedDate: string
+}
+
+const emptyContainerRow = (): ContainerShipmentRow => ({
+  containerNo: '',
+  type: '',
+  sealNo: '',
+  perContainerWeight: '',
+  gateOutDate: '',
+  returnedDate: '',
+})
+
 /** Common engine displacements (CC) for vehicle shipment declarations */
 const ENGINE_CAPACITY_CC_OPTIONS = [
   '660 CC',
@@ -166,6 +191,7 @@ type JobForm = {
   vesselBerthedAt: string
   icdTransfer: string
   icdTransferLocation: string
+  storageFacility: StorageFacility | ''
   originCountry: string
   destinationCountry: string
   portOfLoading: string
@@ -180,7 +206,7 @@ type JobForm = {
   fobValue: string
   preAssessmentDate: string
   finalAssessmentDate: string
-  containerShipment: Array<{ containerNo: string; type: string; sealNo: string; perContainerWeight: string }>
+  containerShipment: Array<ContainerShipmentRow>
   vehicleShipment: Array<{
     chasisNo: string
     engineCapacity: string
@@ -278,6 +304,7 @@ const initialForm: JobForm = {
   vesselBerthedAt: '',
   icdTransfer: '',
   icdTransferLocation: '',
+  storageFacility: '',
   originCountry: '',
   destinationCountry: '',
   portOfLoading: '',
@@ -292,7 +319,7 @@ const initialForm: JobForm = {
   fobValue: '',
   preAssessmentDate: '',
   finalAssessmentDate: '',
-  containerShipment: [{ containerNo: '', type: '', sealNo: '', perContainerWeight: '' }],
+  containerShipment: [emptyContainerRow()],
   vehicleShipment: [{
     chasisNo: '', engineCapacity: '', cbm: '', berthingDate: '', customReleaseDate: '', driverCellNo: '',
     dateOfDeparture: '', dateOfArrivalAtBorder: '', dateOfDepartAtBorder: '', dateOfDelivery: '',
@@ -457,6 +484,8 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
     'PERISHABLE',
   ])
   const [documentsSearch, setDocumentsSearch] = useState('')
+  const [releaseOrderContainerNo, setReleaseOrderContainerNo] = useState('')
+  const [releaseOrderGateOutDate, setReleaseOrderGateOutDate] = useState('')
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const [documentName, setDocumentName] = useState('')
   const [documentNameOther, setDocumentNameOther] = useState('')
@@ -543,6 +572,36 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerOption | null>(null)
   const [selectedFileManager, setSelectedFileManager] = useState<FileManagerOption | null>(null)
   const [fileManagerSeedOptions, setFileManagerSeedOptions] = useState<FileManagerOption[]>([])
+
+  const resolvedStorageFacility = useMemo(
+    () => inferStorageFacility(form.icdTransfer, form.storageFacility || null),
+    [form.icdTransfer, form.storageFacility]
+  )
+
+  const containerCostSummaries = useMemo(
+    () =>
+      form.containerShipment.map((row) =>
+        calculateContainerCosts({
+          containerType: row.type,
+          dischargeDate: form.dischargeDate,
+          carryingDate: form.carryingDate,
+          storageFacility: resolvedStorageFacility,
+          gateOutDate: row.gateOutDate,
+          returnedDate: row.returnedDate,
+        })
+      ),
+    [
+      form.containerShipment,
+      form.dischargeDate,
+      form.carryingDate,
+      resolvedStorageFacility,
+    ]
+  )
+
+  const isReleaseOrderUpload = useMemo(
+    () => isReleaseOrderDocumentName(documentName || documentNameOther),
+    [documentName, documentNameOther]
+  )
 
   const updateField = <K extends keyof JobForm>(key: K, value: JobForm[K]) => setForm((p) => ({ ...p, [key]: value }))
 
@@ -1009,6 +1068,11 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
           vesselBerthedAt: String(lineVesselDetails.vessel_berthed_at || ''),
           icdTransfer: String(lineVesselDetails.icd_transfer || ''),
           icdTransferLocation: String(lineVesselDetails.icd_transfer_location || ''),
+          storageFacility: (() => {
+            const raw = String(lineVesselDetails.storage_facility || '').toLowerCase()
+            if (raw === 'icd' || raw === 'port') return raw as StorageFacility
+            return ''
+          })(),
           originCountry: String(shipmentDetails.origin_country || ''),
           destinationCountry: String(shipmentDetails.destination_country || ''),
           portOfLoading: String(shipmentDetails.port_of_loading || ''),
@@ -1030,6 +1094,8 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   type: String(row.type || ''),
                   sealNo: String(row.seal_no || ''),
                   perContainerWeight: String(row.per_container_weight || ''),
+                  gateOutDate: String(row.gate_out_date || ''),
+                  returnedDate: String(row.returned_date || ''),
                 }))
               : prev.containerShipment,
           vehicleShipment:
@@ -1153,12 +1219,19 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
   const toggleShipmentSection = (section: 'container' | 'vehicle' | 'looseCargo') =>
     setOpenShipmentSections((p) => ({ ...p, [section]: !p[section] }))
 
-  const addContainerRow = () => setForm((p) => ({ ...p, containerShipment: [...p.containerShipment, { containerNo: '', type: '', sealNo: '', perContainerWeight: '' }] }))
+  const addContainerRow = () => setForm((p) => ({ ...p, containerShipment: [...p.containerShipment, emptyContainerRow()] }))
   const addVehicleRow = () => setForm((p) => ({ ...p, vehicleShipment: [...p.vehicleShipment, { chasisNo: '', engineCapacity: '', cbm: '', berthingDate: '', customReleaseDate: '', driverCellNo: '', dateOfDeparture: '', dateOfArrivalAtBorder: '', dateOfDepartAtBorder: '', dateOfDelivery: '' }] }))
   const addLooseCargoRow = () => setForm((p) => ({ ...p, looseCargoShipment: [...p.looseCargoShipment, { truckNo: '', trailerNo: '', transporter: '', licenceNo: 'NOT AVAILABLE', driverName: '', truckRegCard: '', trailerRegCard: '' }] }))
 
-  const updateContainerRow = (index: number, field: 'containerNo' | 'type' | 'sealNo' | 'perContainerWeight', value: string) =>
-    setForm((p) => ({ ...p, containerShipment: p.containerShipment.map((r, i) => (i === index ? { ...r, [field]: value } : r)) }))
+  const updateContainerRow = <K extends keyof ContainerShipmentRow>(
+    index: number,
+    field: K,
+    value: ContainerShipmentRow[K]
+  ) =>
+    setForm((p) => ({
+      ...p,
+      containerShipment: p.containerShipment.map((r, i) => (i === index ? { ...r, [field]: value } : r)),
+    }))
   const updateVehicleRow = (index: number, field: keyof JobForm['vehicleShipment'][number], value: string) =>
     setForm((p) => ({ ...p, vehicleShipment: p.vehicleShipment.map((r, i) => (i === index ? { ...r, [field]: value } : r)) }))
   const updateLooseCargoRow = (index: number, field: keyof JobForm['looseCargoShipment'][number], value: string) =>
@@ -1219,6 +1292,8 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
     setSelectedFile(null)
     setPendingUploads([])
     setDocumentsSearch('')
+    setReleaseOrderContainerNo('')
+    setReleaseOrderGateOutDate('')
   }
 
   const handleDocumentFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
@@ -1254,6 +1329,26 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
       return
     }
 
+    if (isReleaseOrderDocumentName(resolvedName)) {
+      const containerNo = releaseOrderContainerNo.trim()
+      if (!containerNo) {
+        toast.error('Select the container for this release order')
+        return
+      }
+      if (!releaseOrderGateOutDate) {
+        toast.error('Enter the container gate out date')
+        return
+      }
+      const containerIndex = form.containerShipment.findIndex(
+        (row) => row.containerNo.trim().toUpperCase() === containerNo.toUpperCase()
+      )
+      if (containerIndex < 0) {
+        toast.error('Selected container was not found on this job')
+        return
+      }
+      updateContainerRow(containerIndex, 'gateOutDate', releaseOrderGateOutDate)
+    }
+
     const fileSizeKb = Math.max(1, Math.round(selectedFile.size / 1024))
     const now = new Date()
 
@@ -1272,6 +1367,8 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
     setDocumentName('')
     setDocumentNameOther('')
     setSelectedFile(null)
+    setReleaseOrderContainerNo('')
+    setReleaseOrderGateOutDate('')
   }
 
   const resolveJobId = () => currentJobId ?? editingJobId
@@ -1587,6 +1684,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
       vessel_berthed_at: form.vesselBerthedAt || null,
       icd_transfer: form.icdTransfer || null,
       icd_transfer_location: form.icdTransferLocation || null,
+      storage_facility: resolvedStorageFacility,
     }
 
     const shipmentDetails = {
@@ -1625,6 +1723,8 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
       type: row.type || null,
       seal_no: row.sealNo || null,
       per_container_weight: row.perContainerWeight || null,
+      gate_out_date: row.gateOutDate || null,
+      returned_date: row.returnedDate || null,
     }))
 
     const vehicleShipment = form.vehicleShipment.map((row) => ({
@@ -2316,6 +2416,26 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className='space-y-1 md:col-span-2'>
+                  <Label>Storage Location (charges)</Label>
+                  <Select
+                    disabled={formDisabled}
+                    value={form.storageFacility || resolvedStorageFacility}
+                    onValueChange={(v) => updateField('storageFacility', v as StorageFacility)}
+                  >
+                    <SelectTrigger className='w-full'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='icd'>ICD (7-day grace)</SelectItem>
+                      <SelectItem value='port'>Port — TPA / DP World (5-day grace)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className='text-xs text-muted-foreground'>
+                    Used with Carrying Date for storage accrual. Defaults from ICD transfer when not set.
+                  </p>
+                </div>
               </div>
               </fieldset>
             </TabsContent>
@@ -2499,8 +2619,20 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   <Button type='button' size='icon' className='h-7 w-7' disabled={formDisabled} onClick={addContainerRow}><Plus className='h-4 w-4' /></Button>
                 </div>
                 {openShipmentSections.container && (
+                  <>
                   <fieldset disabled={formDisabled} className='min-w-0 border-0 p-0 m-0'>
-                  <Table><TableHeader><TableRow><TableHead>Container No.</TableHead><TableHead>Type</TableHead><TableHead>Seal No.</TableHead><TableHead>Per Container Weight</TableHead></TableRow></TableHeader>
+                  <div className='overflow-x-auto rounded-md border'>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Container No.</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Seal No.</TableHead>
+                        <TableHead>Weight</TableHead>
+                        <TableHead>Gate Out</TableHead>
+                        <TableHead>Returned</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>{form.containerShipment.map((row, i) => {
                       const typeTrimmed = row.type.trim()
                       const typeSelectValue = typeTrimmed ? typeTrimmed : '__none__'
@@ -2538,11 +2670,65 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                           </TableCell>
                           <TableCell><Input value={row.sealNo} onChange={(e) => updateContainerRow(i, 'sealNo', e.target.value)} /></TableCell>
                           <TableCell><Input value={row.perContainerWeight} onChange={(e) => updateContainerRow(i, 'perContainerWeight', e.target.value)} /></TableCell>
+                          <TableCell>
+                            <Input
+                              type='date'
+                              value={row.gateOutDate}
+                              onChange={(e) => updateContainerRow(i, 'gateOutDate', e.target.value)}
+                              title='Set when release order is issued and container gates out'
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type='date'
+                              value={row.returnedDate}
+                              onChange={(e) => updateContainerRow(i, 'returnedDate', e.target.value)}
+                              title='Stops demurrage accrual when container is returned'
+                            />
+                          </TableCell>
                         </TableRow>
                       )
                     })}</TableBody>
                   </Table>
+                  </div>
                   </fieldset>
+
+                  {form.containerShipment.some((row) => row.containerNo.trim() || row.type.trim()) ? (
+                    <div className='mt-3 space-y-2'>
+                      <p className='text-sm font-medium text-amber-800'>Estimated container charges</p>
+                      <div className='grid gap-2 md:grid-cols-2'>
+                        {form.containerShipment.map((row, i) => {
+                          const costs = containerCostSummaries[i]
+                          if (!row.containerNo.trim() && !row.type.trim()) return null
+                          const label = row.containerNo.trim() || `Container ${i + 1}`
+                          return (
+                            <div key={`cost-${i}`} className='rounded-md border bg-muted/20 p-3 text-sm'>
+                              <p className='font-medium'>
+                                {label}
+                                <span className='ml-2 text-xs font-normal text-muted-foreground'>
+                                  ({costs.sizeClass})
+                                </span>
+                              </p>
+                              <p className='mt-2'>
+                                <span className='font-medium'>Demurrage:</span>{' '}
+                                {formatUsd(costs.demurrage.totalUsd)}
+                              </p>
+                              <p className='text-xs text-muted-foreground'>{costs.demurrage.summary}</p>
+                              <p className='mt-2'>
+                                <span className='font-medium'>Storage:</span>{' '}
+                                {formatUsd(costs.storage.totalUsd)}
+                              </p>
+                              <p className='text-xs text-muted-foreground'>{costs.storage.summary}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <p className='text-xs text-muted-foreground'>
+                        Demurrage uses Discharge Date (14-day free time). Storage uses Carrying Date and stops on gate out (release order).
+                      </p>
+                    </div>
+                  ) : null}
+                  </>
                 )}
               </div>
 
@@ -2757,6 +2943,50 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                           />
                         </div>
                       </div>
+
+                      {isReleaseOrderUpload ? (
+                        <div className='grid grid-cols-1 gap-3 rounded-md border border-amber-200 bg-amber-50/80 p-3 md:grid-cols-2'>
+                          <div className='space-y-1 md:col-span-2'>
+                            <p className='text-sm font-medium text-amber-900'>Release order — container gate out</p>
+                            <p className='text-xs text-amber-800'>
+                              Storage charges stop on the gate out date once the container is cleared.
+                            </p>
+                          </div>
+                          <div className='space-y-1'>
+                            <Label>Container</Label>
+                            <Select
+                              disabled={formDisabled}
+                              value={releaseOrderContainerNo || '__empty__'}
+                              onValueChange={(v) =>
+                                setReleaseOrderContainerNo(v === '__empty__' ? '' : v)
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder='Select container' />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value='__empty__'>Select container</SelectItem>
+                                {form.containerShipment
+                                  .filter((row) => row.containerNo.trim())
+                                  .map((row) => (
+                                    <SelectItem key={row.containerNo} value={row.containerNo}>
+                                      {row.containerNo}
+                                      {row.type ? ` (${row.type})` : ''}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className='space-y-1'>
+                            <Label>Gate out date</Label>
+                            <Input
+                              type='date'
+                              value={releaseOrderGateOutDate}
+                              onChange={(e) => setReleaseOrderGateOutDate(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
 
                       <div className='space-y-1'>
                         <Input

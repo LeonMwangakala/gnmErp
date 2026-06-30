@@ -2285,6 +2285,7 @@ export const FALLBACK_JOB_DOCUMENT_TYPES: ReadonlyArray<{
   { name: 'WHARFAGE TISS', stage: 'PORT' },
   { name: 'ICD INVOICE', stage: 'PORT' },
   { name: 'ICD RECEIPT', stage: 'PORT' },
+  { name: 'RELEASE ORDER', stage: 'PORT' },
   { name: 'CORRIDOR LEVY INVOICE', stage: 'PORT' },
 ]
 
