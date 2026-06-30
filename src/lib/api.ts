@@ -2498,27 +2498,69 @@ export const customsVesselApi = {
 export const customsJobApi = {
   listJobs: async (params?: {
     search?: string
+    tab?: string
     per_page?: number
     page?: number
+    sort_by?: string
+    sort_dir?: 'asc' | 'desc'
+    date_from?: string
+    date_to?: string
+    customer?: string
+    vessel?: string
+    shipping_line?: string
+    icd?: string
+    workflow_status?: string
+    file_number?: string
+    bill_of_lading?: string
+    export?: boolean
   }): Promise<{
     data: any[]
+    summary: {
+      all: number
+      discharged: number
+      carrying: number
+      arrived: number
+      not_arrived: number
+    }
     pagination: {
       current_page: number
       last_page: number
       per_page: number
       total: number
+      from?: number | null
+      to?: number | null
     }
   }> => {
     const response = await api.get('/customs/jobs', { params })
     return {
       data: response.data?.data || [],
+      summary: response.data?.summary || {
+        all: 0,
+        discharged: 0,
+        carrying: 0,
+        arrived: 0,
+        not_arrived: 0,
+      },
       pagination: response.data?.pagination || {
         current_page: 1,
         last_page: 1,
-        per_page: params?.per_page || 50,
+        per_page: params?.per_page || 25,
         total: Array.isArray(response.data?.data) ? response.data.data.length : 0,
       },
     }
+  },
+  updateWorkflowStatus: async (
+    id: number,
+    payload: {
+      workflow_status: 'DISCHARGED' | 'CARRYING' | 'ARRIVED'
+      arrival_date?: string | null
+      expected_arrival?: string | null
+      current_location?: string | null
+      workflow_remarks?: string | null
+    }
+  ): Promise<any> => {
+    const response = await api.post(`/customs/jobs/${id}/workflow-status`, payload)
+    return response.data
   },
   getJob: async (id: number): Promise<any> => {
     const response = await api.get(`/customs/jobs/${id}`)

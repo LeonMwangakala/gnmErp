@@ -210,6 +210,10 @@ type JobForm = {
   vesselBerthedAt: string
   icdTransfer: string
   icdTransferLocation: string
+  expectedArrival: string
+  currentLocation: string
+  warehouse: string
+  workflowRemarks: string
   storageFacility: StorageFacility | ''
   originCountry: string
   destinationCountry: string
@@ -323,6 +327,10 @@ const initialForm: JobForm = {
   vesselBerthedAt: '',
   icdTransfer: '',
   icdTransferLocation: '',
+  expectedArrival: '',
+  currentLocation: '',
+  warehouse: '',
+  workflowRemarks: '',
   storageFacility: '',
   originCountry: '',
   destinationCountry: '',
@@ -1094,6 +1102,10 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
           vesselBerthedAt: String(lineVesselDetails.vessel_berthed_at || ''),
           icdTransfer: String(lineVesselDetails.icd_transfer || ''),
           icdTransferLocation: String(lineVesselDetails.icd_transfer_location || ''),
+          expectedArrival: String(lineVesselDetails.expected_arrival || ''),
+          currentLocation: String(lineVesselDetails.current_location || ''),
+          warehouse: String(lineVesselDetails.warehouse || ''),
+          workflowRemarks: String(lineVesselDetails.workflow_remarks || ''),
           storageFacility: (() => {
             const raw = String(lineVesselDetails.storage_facility || '').toLowerCase()
             if (raw === 'icd' || raw === 'port') return raw as StorageFacility
@@ -1792,6 +1804,10 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
       vessel_berthed_at: form.vesselBerthedAt || null,
       icd_transfer: form.icdTransfer || null,
       icd_transfer_location: form.icdTransferLocation || null,
+      expected_arrival: form.expectedArrival || null,
+      current_location: form.currentLocation || null,
+      warehouse: form.warehouse || null,
+      workflow_remarks: form.workflowRemarks || null,
       storage_facility: resolvedStorageFacility,
     }
 
@@ -2543,6 +2559,40 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
                   </Select>
                 </div>
 
+                <div className='space-y-1'>
+                  <Label>Expected Arrival</Label>
+                  <Input
+                    type='date'
+                    value={form.expectedArrival}
+                    onChange={(e) => updateField('expectedArrival', e.target.value)}
+                  />
+                </div>
+
+                <div className='space-y-1'>
+                  <Label>Current Location</Label>
+                  <Input
+                    value={form.currentLocation}
+                    onChange={(e) => updateField('currentLocation', e.target.value)}
+                    placeholder='GPS or last known location'
+                  />
+                </div>
+
+                <div className='space-y-1'>
+                  <Label>Warehouse</Label>
+                  <Input
+                    value={form.warehouse}
+                    onChange={(e) => updateField('warehouse', e.target.value)}
+                  />
+                </div>
+
+                <div className='space-y-1 md:col-span-2'>
+                  <Label>Transport Remarks</Label>
+                  <Input
+                    value={form.workflowRemarks}
+                    onChange={(e) => updateField('workflowRemarks', e.target.value)}
+                  />
+                </div>
+
                 <div className='space-y-1 md:col-span-2'>
                   <Label>Storage Location (charges)</Label>
                   <Select
@@ -2737,7 +2787,7 @@ export function CustomsCreateJob({ embedded }: CustomsCreateJobProps = {}) {
               </div>
               </fieldset>
 
-              <div className='rounded-md border p-3'>
+              <div className='mt-6 rounded-md border p-3'>
                 <div className='mb-2 flex items-center justify-between'>
                   <button type='button' className='flex items-center gap-1 font-semibold text-amber-700' onClick={() => toggleShipmentSection('container')}>
                     {openShipmentSections.container ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />} Container Shipment
