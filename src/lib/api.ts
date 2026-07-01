@@ -1438,6 +1438,52 @@ export const paymentApi = {
     return response.data
   },
 
+  getCmtsSyncSummary: async (params?: {
+    date_from?: string
+    date_to?: string
+  }): Promise<{
+    failed_count: number
+    pending_count: number
+  }> => {
+    const response = await api.get('/payments/cmts-sync-summary', { params })
+    const body = response.data as {
+      status?: number
+      message?: string
+      data?: { failed_count?: number; pending_count?: number }
+    }
+    if (body?.status === 200 && body.data) {
+      return {
+        failed_count: Number(body.data.failed_count ?? 0),
+        pending_count: Number(body.data.pending_count ?? 0),
+      }
+    }
+    throw new Error(String(body?.message || 'Failed to load CMTS sync summary'))
+  },
+
+  syncFailedPaymentsToCmts: async (params?: {
+    include_pending?: boolean
+    date_from?: string
+    date_to?: string
+    limit?: number
+  }): Promise<{
+    status: number
+    message?: string
+    data?: {
+      attempted: number
+      succeeded: number
+      failed: number
+      results: Array<{
+        payment_id: number
+        invoice_number: string | null
+        ok: boolean
+        message: string
+      }>
+    }
+  }> => {
+    const response = await api.post('/payments/sync-cmts-failed', params ?? {})
+    return response.data
+  },
+
   getPaymentFormData: async () => {
     const response = await api.get('/payment/form-data')
     return response.data.data || { currencies: [], accounts: [], invoices: [] }

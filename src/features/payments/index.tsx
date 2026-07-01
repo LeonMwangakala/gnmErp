@@ -14,7 +14,9 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Table,
   TableBody,
@@ -454,6 +456,11 @@ export function Payments() {
   const [isFixing, setIsFixing] = useState(false)
   const [isUpdatingCreatedByPaymentId, setIsUpdatingCreatedByPaymentId] = useState<number | null>(null)
   const [isSyncingPaymentId, setIsSyncingPaymentId] = useState<number | null>(null)
+  const [isBulkSyncModalOpen, setIsBulkSyncModalOpen] = useState(false)
+  const [isBulkSyncing, setIsBulkSyncing] = useState(false)
+  const [isLoadingCmtsSyncSummary, setIsLoadingCmtsSyncSummary] = useState(false)
+  const [includePendingCmtsSync, setIncludePendingCmtsSync] = useState(false)
+  const [cmtsSyncSummary, setCmtsSyncSummary] = useState({ failed_count: 0, pending_count: 0 })
   const [isDeletingPaymentId, setIsDeletingPaymentId] = useState<number | null>(null)
   const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null)
   const [viewPayment, setViewPayment] = useState<Payment | null>(null)
@@ -549,6 +556,32 @@ export function Payments() {
       cancelled = true
     }
   }, [cashierModalPayment?.id])
+
+  const loadCmtsSyncSummary = async () => {
+    try {
+      setIsLoadingCmtsSyncSummary(true)
+      const summary = await paymentApi.getCmtsSyncSummary()
+      setCmtsSyncSummary(summary)
+    } catch {
+      setCmtsSyncSummary({ failed_count: 0, pending_count: 0 })
+    } finally {
+      setIsLoadingCmtsSyncSummary(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadCmtsSyncSummary()
+  }, [])
+
+  useEffect(() => {
+    if (isBulkSyncModalOpen) {
+      void loadCmtsSyncSummary()
+    }
+  }, [isBulkSyncModalOpen])
+
+  const cmtsRetryCount = includePendingCmtsSync
+    ? cmtsSyncSummary.failed_count + cmtsSyncSummary.pending_count
+    : cmtsSyncSummary.failed_count
 
   const fetchPayments = async (
     page?: number,
@@ -824,10 +857,48 @@ export function Payments() {
         toast.error(response?.message || 'CMTS sync failed.')
       }
       fetchPayments(pagination.current_page, pagination.per_page, search)
+      void loadCmtsSyncSummary()
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'CMTS sync failed.')
     } finally {
       setIsSyncingPaymentId(null)
+    }
+  }
+
+  const handleBulkSyncFailedToCmts = async () => {
+    if (cmtsRetryCount <= 0) {
+      toast.info('No payments need CMTS sync retry.')
+      return
+    }
+
+    try {
+      setIsBulkSyncing(true)
+      const response = await paymentApi.syncFailedPaymentsToCmts({
+        include_pending: includePendingCmtsSync,
+        limit: 200,
+      })
+      const data = response?.data
+      const attempted = data?.attempted ?? 0
+      const succeeded = data?.succeeded ?? 0
+      const failed = data?.failed ?? 0
+
+      if (response?.status === 200) {
+        toast.success(response?.message || `Synced ${succeeded} payment(s) to CMTS.`)
+        setIsBulkSyncModalOpen(false)
+      } else if (attempted > 0 && succeeded > 0) {
+        toast.warning(
+          response?.message || `Partial sync: ${succeeded} succeeded, ${failed} failed.`
+        )
+      } else {
+        toast.error(response?.message || 'Bulk CMTS sync failed.')
+      }
+
+      fetchPayments(pagination.current_page, pagination.per_page, search)
+      void loadCmtsSyncSummary()
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Bulk CMTS sync failed.')
+    } finally {
+      setIsBulkSyncing(false)
     }
   }
 
@@ -895,6 +966,22 @@ export function Payments() {
                 <Download className='mr-2 h-4 w-4' />
                 Export
               </Button>
+              <Button
+                type='button'
+                variant={cmtsSyncSummary.failed_count > 0 ? 'destructive' : 'outline'}
+                onClick={() => setIsBulkSyncModalOpen(true)}
+                disabled={isLoadingCmtsSyncSummary && cmtsSyncSummary.failed_count === 0}
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isLoadingCmtsSyncSummary ? 'animate-spin' : ''}`}
+                />
+                Sync failed CMTS
+                {cmtsSyncSummary.failed_count > 0 ? (
+                  <Badge variant='secondary' className='ml-2 bg-background/20 text-inherit'>
+                    {cmtsSyncSummary.failed_count}
+                  </Badge>
+                ) : null}
+              </Button>
             <Button onClick={() => setIsAddModalOpen(true)}>
               <Plus className='mr-2 h-4 w-4' />
               Payment
@@ -914,6 +1001,11 @@ export function Payments() {
                   ({pagination.from}-{pagination.to} of {pagination.total})
                 </span>
               )}
+              {cmtsSyncSummary.failed_count > 0 ? (
+                <span className='ml-2 text-destructive'>
+                  · {cmtsSyncSummary.failed_count} CMTS sync failed
+                </span>
+              ) : null}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1162,6 +1254,7 @@ export function Payments() {
         onSuccess={() => {
           // Refresh payments after a successful create
           fetchPayments(1, pagination.per_page, search)
+          void loadCmtsSyncSummary()
         }}
       />
 
@@ -1200,6 +1293,80 @@ export function Payments() {
               {isExporting ? 'Exporting...' : 'Export'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isBulkSyncModalOpen} onOpenChange={setIsBulkSyncModalOpen}>
+        <DialogContent className='w-[92vw] max-w-md'>
+          <DialogHeader>
+            <DialogTitle>Sync failed CMTS payments</DialogTitle>
+            <DialogDescription>
+              Retry pushing invoice payments to CMTS so loan dispatch reports reflect paid
+              invoices. Processes up to 200 payments per run, oldest first.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='space-y-4'>
+            {isLoadingCmtsSyncSummary ? (
+              <div className='flex items-center gap-2 text-sm text-muted-foreground'>
+                <Loader2 className='h-4 w-4 animate-spin' />
+                Loading sync status…
+              </div>
+            ) : (
+              <div className='rounded-md border bg-muted/30 p-3 text-sm space-y-1'>
+                <p>
+                  <span className='font-medium text-destructive'>{cmtsSyncSummary.failed_count}</span>{' '}
+                  failed sync{cmtsSyncSummary.failed_count === 1 ? '' : 's'}
+                </p>
+                <p className='text-muted-foreground'>
+                  {cmtsSyncSummary.pending_count} pending / never confirmed
+                </p>
+              </div>
+            )}
+
+            <div className='flex items-start gap-2'>
+              <Checkbox
+                id='include-pending-cmts-sync'
+                checked={includePendingCmtsSync}
+                onCheckedChange={(checked) => setIncludePendingCmtsSync(checked === true)}
+                disabled={isBulkSyncing}
+              />
+              <Label htmlFor='include-pending-cmts-sync' className='text-sm leading-snug cursor-pointer'>
+                Also retry pending payments (not only failed)
+              </Label>
+            </div>
+
+            <p className='text-xs text-muted-foreground'>
+              {cmtsRetryCount > 0
+                ? `${cmtsRetryCount} payment(s) will be retried in this run.`
+                : 'Nothing to retry with the current options.'}
+            </p>
+          </div>
+
+          <DialogFooter className='gap-2 sm:gap-0'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => setIsBulkSyncModalOpen(false)}
+              disabled={isBulkSyncing}
+            >
+              Cancel
+            </Button>
+            <Button
+              type='button'
+              onClick={() => void handleBulkSyncFailedToCmts()}
+              disabled={isBulkSyncing || isLoadingCmtsSyncSummary || cmtsRetryCount <= 0}
+            >
+              {isBulkSyncing ? (
+                <>
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  Syncing…
+                </>
+              ) : (
+                `Sync ${cmtsRetryCount > 0 ? cmtsRetryCount : ''} payment${cmtsRetryCount === 1 ? '' : 's'}`
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
