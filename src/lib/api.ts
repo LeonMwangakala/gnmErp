@@ -683,7 +683,11 @@ export interface GoodsDispatchedReportRow {
   bill_id: number | null
   bill_amount?: number | null
   bill_discount_amount?: number | null
+  /** Gross minus approved discount (net payable) */
+  bill_net_amount?: number | null
   bill_paid_amount?: number | null
+  /** Outstanding after discount and payments; 0 when fully settled */
+  bill_payment_shortfall?: number | null
   bill_fully_paid: boolean
   bill_balance: number | null
   bill_status: string | null
@@ -902,7 +906,9 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
     const bal = r.bill_balance
     const billAmountRaw = r.bill_amount ?? r.billAmount
     const billDiscountRaw = r.bill_discount_amount ?? r.billDiscountAmount
+    const billNetRaw = r.bill_net_amount ?? r.billNetAmount
     const billPaidRaw = r.bill_paid_amount ?? r.billPaidAmount
+    const billShortfallRaw = r.bill_payment_shortfall ?? r.billPaymentShortfall
     const cPkgs = r.consignment_pkgs
     const cCbm = r.consignment_cbm
     const invoice_no =
@@ -999,10 +1005,18 @@ function normalizeGoodsDispatchedReportData(data: Record<string, unknown>): Good
         billDiscountRaw == null || billDiscountRaw === '' || !Number.isFinite(Number(billDiscountRaw))
           ? null
           : Number(billDiscountRaw),
+      bill_net_amount:
+        billNetRaw == null || billNetRaw === '' || !Number.isFinite(Number(billNetRaw))
+          ? null
+          : Number(billNetRaw),
       bill_paid_amount:
         billPaidRaw == null || billPaidRaw === '' || !Number.isFinite(Number(billPaidRaw))
           ? null
           : Number(billPaidRaw),
+      bill_payment_shortfall:
+        billShortfallRaw == null || billShortfallRaw === '' || !Number.isFinite(Number(billShortfallRaw))
+          ? null
+          : Number(billShortfallRaw),
       bill_fully_paid,
       bill_balance:
         bal == null || bal === '' || !Number.isFinite(Number(bal)) ? null : Number(bal),

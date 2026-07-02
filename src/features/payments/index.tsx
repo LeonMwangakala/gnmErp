@@ -1297,7 +1297,7 @@ export function Payments() {
       </Dialog>
 
       <Dialog open={isBulkSyncModalOpen} onOpenChange={setIsBulkSyncModalOpen}>
-        <DialogContent className='w-[92vw] max-w-md'>
+        <DialogContent className='w-[92vw] max-w-md pb-8'>
           <DialogHeader>
             <DialogTitle>Sync failed CMTS payments</DialogTitle>
             <DialogDescription>
@@ -1343,7 +1343,7 @@ export function Payments() {
             </p>
           </div>
 
-          <DialogFooter className='gap-2 sm:gap-0'>
+          <DialogFooter className='gap-3 pt-4 pb-2'>
             <Button
               type='button'
               variant='outline'
@@ -1363,7 +1363,7 @@ export function Payments() {
                   Syncing…
                 </>
               ) : (
-                `Sync ${cmtsRetryCount > 0 ? cmtsRetryCount : ''} payment${cmtsRetryCount === 1 ? '' : 's'}`
+                'Sync'
               )}
             </Button>
           </DialogFooter>

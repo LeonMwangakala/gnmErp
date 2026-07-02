@@ -419,9 +419,10 @@ function downloadLoanBalanceReportCsv(data: GoodsDispatchedReportData) {
       'Goods Pkgs',
       'Invoice No',
       'Invoice Amount',
-      'Discount Amount',
-      'Paid Amount',
-      'Balance',
+      'Discount',
+      'Net Payable',
+      'Paid Balance',
+      'Outstanding',
     ].join(','),
     ...data.rows.map((r) =>
       [
@@ -432,6 +433,11 @@ function downloadLoanBalanceReportCsv(data: GoodsDispatchedReportData) {
         escapeCsvCell(r.invoice_no ?? ''),
         r.bill_amount != null ? String(r.bill_amount) : '',
         r.bill_discount_amount != null ? String(r.bill_discount_amount) : '',
+        r.bill_net_amount != null
+          ? String(r.bill_net_amount)
+          : r.bill_amount != null && r.bill_discount_amount != null
+            ? String(r.bill_amount - r.bill_discount_amount)
+            : '',
         r.bill_paid_amount != null ? String(r.bill_paid_amount) : '',
         r.bill_balance != null ? String(r.bill_balance) : '',
       ].join(',')
@@ -458,7 +464,7 @@ function printLoanBalanceReportAsPdf(data: GoodsDispatchedReportData) {
   const rowHtml = data.rows
     .map(
       (r) =>
-        `<tr><td>${escapeHtml(formatGoodsDispatchedAt(r.dispatched_at))}</td><td>${escapeHtml(r.customer_name || '—')}</td><td>${escapeHtml(r.container_no ?? '—')}</td><td class="num">${r.pkgs != null ? escapeHtml(String(r.pkgs)) : '—'}</td><td>${escapeHtml(r.invoice_no ?? '—')}</td><td class="num">${r.bill_amount != null ? escapeHtml(String(r.bill_amount)) : '—'}</td><td class="num">${r.bill_discount_amount != null ? escapeHtml(String(r.bill_discount_amount)) : '—'}</td><td class="num">${r.bill_paid_amount != null ? escapeHtml(String(r.bill_paid_amount)) : '—'}</td><td class="num">${r.bill_balance != null ? escapeHtml(String(r.bill_balance)) : '—'}</td></tr>`
+        `<tr><td>${escapeHtml(formatGoodsDispatchedAt(r.dispatched_at))}</td><td>${escapeHtml(r.customer_name || '—')}</td><td>${escapeHtml(r.container_no ?? '—')}</td><td class="num">${r.pkgs != null ? escapeHtml(String(r.pkgs)) : '—'}</td><td>${escapeHtml(r.invoice_no ?? '—')}</td><td class="num">${r.bill_amount != null ? escapeHtml(String(r.bill_amount)) : '—'}</td><td class="num">${r.bill_discount_amount != null ? escapeHtml(String(r.bill_discount_amount)) : '—'}</td><td class="num">${r.bill_net_amount != null ? escapeHtml(String(r.bill_net_amount)) : r.bill_amount != null && r.bill_discount_amount != null ? escapeHtml(String(r.bill_amount - r.bill_discount_amount)) : '—'}</td><td class="num">${r.bill_paid_amount != null ? escapeHtml(String(r.bill_paid_amount)) : '—'}</td><td class="num">${r.bill_balance != null ? escapeHtml(String(r.bill_balance)) : '—'}</td></tr>`
     )
     .join('')
   w.document.write(`<!DOCTYPE html><html><head><title>Loan balance</title>
@@ -473,8 +479,8 @@ td.num{text-align:right;}
 </style></head><body>
 <h1>Loan balance</h1>
 <div class="meta">${escapeHtml(data.date_from)} &ndash; ${escapeHtml(data.date_to)}${paymentLabel ? `<br/>Payment: ${escapeHtml(paymentLabel)}` : ''}</div>
-<table><thead><tr><th>Date</th><th>Customer</th><th>Container</th><th>Pkgs</th><th>Invoice</th><th>Invoice amount</th><th>Discount</th><th>Paid</th><th>Balance</th></tr></thead>
-<tbody>${rowHtml || '<tr><td colspan="9">No rows</td></tr>'}</tbody></table>
+<table><thead><tr><th>Date</th><th>Customer</th><th>Container</th><th>Pkgs</th><th>Invoice</th><th>Invoice amount</th><th>Discount</th><th>Net payable</th><th>Paid balance</th><th>Outstanding</th></tr></thead>
+<tbody>${rowHtml || '<tr><td colspan="10">No rows</td></tr>'}</tbody></table>
 <p class="meta">${data.summary.row_count} row(s)</p>
 <script>window.onload=function(){window.print();}</script>
 </body></html>`)
@@ -961,7 +967,7 @@ const REPORTS: ReportDefinition[] = [
     key: 'loan-balance',
     title: 'Loan balance',
     description:
-      'Loan dispatch balances by dispatch date with invoice amount, paid amount, and outstanding balance.',
+      'Outstanding loan dispatch balances by dispatch date: invoice amount, discount, net payable, paid balance, and remaining balance. Filter by customer or payment status.',
   },
   {
     key: 'authorized-pending-dispatch',
@@ -1655,7 +1661,7 @@ export function Reports() {
           dateFrom,
           dateTo,
           releaseFilter: isLoan ? 'loan' : isCash ? 'cash' : 'all',
-          paidFilter: 'all',
+          paidFilter: type === 'loan-balance' ? 'unpaid' : 'all',
           customerName: '',
           customerCompany: '',
         }
@@ -2785,6 +2791,24 @@ export function Reports() {
                 Credit dispatch · invoice now paid in full{' '}
                 {goodsDispatchedReportData.summary.credit_dispatch_paid_rows} · still outstanding{' '}
                 {goodsDispatchedReportData.summary.credit_dispatch_unpaid_rows}
+                {selectedReport?.key === 'loan-balance' ? (
+                  <>
+                    <br />
+                    Outstanding balance total:{' '}
+                    {goodsDispatchedReportData.summary.loan_outstanding_balance_total.toLocaleString(
+                      undefined,
+                      { maximumFractionDigits: 2 }
+                    )}{' '}
+                    USD · {goodsDispatchedReportData.summary.loan_outstanding_bill_count} bill(s)
+                    {goodsDispatchedReportData.summary.loan_rows_without_bill > 0 ? (
+                      <>
+                        {' '}
+                        · {goodsDispatchedReportData.summary.loan_rows_without_bill} line(s) with no
+                        invoice
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
                 {goodsDispatchedReportData.report_kind === 'authorized_pending' ? (
                   <>
                     <br />
@@ -2810,15 +2834,16 @@ export function Reports() {
                               <TableHead className='min-w-[100px]'>Goods Pkgs</TableHead>
                               <TableHead className='min-w-[120px]'>Invoice No</TableHead>
                               <TableHead className='min-w-[120px] text-right'>Invoice Amount</TableHead>
-                              <TableHead className='min-w-[120px] text-right'>Discount Amount</TableHead>
-                              <TableHead className='min-w-[120px] text-right'>Paid Amount</TableHead>
-                              <TableHead className='min-w-[120px] text-right'>Balance</TableHead>
+                              <TableHead className='min-w-[120px] text-right'>Discount</TableHead>
+                              <TableHead className='min-w-[120px] text-right'>Net Payable</TableHead>
+                              <TableHead className='min-w-[120px] text-right'>Paid Balance</TableHead>
+                              <TableHead className='min-w-[120px] text-right'>Outstanding</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {goodsDispatchedReportData.rows.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={9} className='text-center text-muted-foreground'>
+                                <TableCell colSpan={10} className='text-center text-muted-foreground'>
                                   No loan balance rows in this range.
                                 </TableCell>
                               </TableRow>
@@ -2839,6 +2864,13 @@ export function Reports() {
                                   </TableCell>
                                   <TableCell className='text-right tabular-nums'>
                                     {r.bill_discount_amount != null ? r.bill_discount_amount : '—'}
+                                  </TableCell>
+                                  <TableCell className='text-right tabular-nums'>
+                                    {r.bill_net_amount != null
+                                      ? r.bill_net_amount
+                                      : r.bill_amount != null && r.bill_discount_amount != null
+                                        ? r.bill_amount - r.bill_discount_amount
+                                        : '—'}
                                   </TableCell>
                                   <TableCell className='text-right tabular-nums'>
                                     {r.bill_paid_amount != null ? r.bill_paid_amount : '—'}
@@ -2966,6 +2998,20 @@ export function Reports() {
                               <TableCell className='align-top whitespace-normal text-sm'>
                                 <div className='font-medium leading-snug'>{r.credit_dispatch_note}</div>
                                 <div className='mt-2 tabular-nums'>Invoice: {r.invoice_no ?? '—'}</div>
+                                {r.bill_amount != null ? (
+                                  <div className='mt-1 tabular-nums text-xs text-muted-foreground'>
+                                    Gross {r.bill_amount}
+                                    {r.bill_discount_amount != null && r.bill_discount_amount > 0
+                                      ? ` · Disc ${r.bill_discount_amount}`
+                                      : ''}
+                                    {r.bill_net_amount != null
+                                      ? ` · Net ${r.bill_net_amount}`
+                                      : r.bill_amount != null && r.bill_discount_amount != null
+                                        ? ` · Net ${r.bill_amount - r.bill_discount_amount}`
+                                        : ''}
+                                    {r.bill_paid_amount != null ? ` · Paid ${r.bill_paid_amount}` : ''}
+                                  </div>
+                                ) : null}
                                 <div className='mt-1'>
                                   Paid in full:{' '}
                                   <span className='font-medium'>
@@ -2973,7 +3019,7 @@ export function Reports() {
                                   </span>
                                 </div>
                                 <div className='mt-0.5 tabular-nums text-muted-foreground'>
-                                  Balance: {r.bill_balance != null ? r.bill_balance : '—'}
+                                  Outstanding: {r.bill_balance != null ? r.bill_balance : '—'}
                                 </div>
                                 {r.bill_status ? (
                                   <div className='mt-1 text-xs text-muted-foreground'>

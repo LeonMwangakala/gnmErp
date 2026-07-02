@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  Filter,
   Pencil,
   Plus,
   Printer,
@@ -181,6 +182,7 @@ export function CustomsJobs() {
   })
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<JobListItem | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [statusTarget, setStatusTarget] = useState<JobListItem | null>(null)
@@ -444,11 +446,17 @@ export function CustomsJobs() {
     )
   }
 
+  const rowSerialNumber = (index: number) =>
+    pagination.from != null
+      ? pagination.from + index
+      : (pagination.current_page - 1) * pagination.per_page + index + 1
+
   const renderAllJobsTable = () => (
     <div className='overflow-x-auto rounded-md border'>
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className='w-12'>S/N</TableHead>
             <SortableHead label='Job No' column='job_no' sort={sort} onSort={handleSort} />
             <SortableHead label='Customer' column='customer' sort={sort} onSort={handleSort} />
             <SortableHead label='Bill of Lading' column='bill_of_lading' sort={sort} onSort={handleSort} />
@@ -465,8 +473,9 @@ export function CustomsJobs() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <TableRow key={row.id}>
+              <TableCell className='tabular-nums text-muted-foreground'>{rowSerialNumber(index)}</TableCell>
               <TableCell className='font-medium whitespace-nowrap'>{row.job_no}</TableCell>
               <TableCell className='min-w-[140px]'>{row.customer_name}</TableCell>
               <TableCell>{row.bill_of_lading || '—'}</TableCell>
@@ -492,6 +501,7 @@ export function CustomsJobs() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className='w-12'>S/N</TableHead>
             <SortableHead label='Job No' column='job_no' sort={sort} onSort={handleSort} />
             <SortableHead label='Customer' column='customer' sort={sort} onSort={handleSort} />
             <SortableHead label='Vessel' column='vessel' sort={sort} onSort={handleSort} />
@@ -506,8 +516,9 @@ export function CustomsJobs() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <TableRow key={row.id}>
+              <TableCell className='tabular-nums text-muted-foreground'>{rowSerialNumber(index)}</TableCell>
               <TableCell className='font-medium'>{row.job_no}</TableCell>
               <TableCell>{row.customer_name}</TableCell>
               <TableCell>{row.vessel || '—'}</TableCell>
@@ -531,6 +542,7 @@ export function CustomsJobs() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className='w-12'>S/N</TableHead>
             <SortableHead label='Job No' column='job_no' sort={sort} onSort={handleSort} />
             <SortableHead label='Customer' column='customer' sort={sort} onSort={handleSort} />
             <SortableHead label='Truck' column='truck_number' sort={sort} onSort={handleSort} />
@@ -545,8 +557,9 @@ export function CustomsJobs() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <TableRow key={row.id}>
+              <TableCell className='tabular-nums text-muted-foreground'>{rowSerialNumber(index)}</TableCell>
               <TableCell className='font-medium'>{row.job_no}</TableCell>
               <TableCell>{row.customer_name}</TableCell>
               <TableCell>{row.truck_number || '—'}</TableCell>
@@ -570,6 +583,7 @@ export function CustomsJobs() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className='w-12'>S/N</TableHead>
             <SortableHead label='Job No' column='job_no' sort={sort} onSort={handleSort} />
             <SortableHead label='Customer' column='customer' sort={sort} onSort={handleSort} />
             <SortableHead label='Arrival Date' column='arrival_date' sort={sort} onSort={handleSort} />
@@ -582,8 +596,9 @@ export function CustomsJobs() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <TableRow key={row.id}>
+              <TableCell className='tabular-nums text-muted-foreground'>{rowSerialNumber(index)}</TableCell>
               <TableCell className='font-medium'>{row.job_no}</TableCell>
               <TableCell>{row.customer_name}</TableCell>
               <TableCell>{formatListDate(row.arrival_date)}</TableCell>
@@ -605,6 +620,7 @@ export function CustomsJobs() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className='w-12'>S/N</TableHead>
             <SortableHead label='Job No' column='job_no' sort={sort} onSort={handleSort} />
             <SortableHead label='Customer' column='customer' sort={sort} onSort={handleSort} />
             <SortableHead label='Truck' column='truck_number' sort={sort} onSort={handleSort} />
@@ -619,8 +635,9 @@ export function CustomsJobs() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <TableRow key={row.id} className={row.is_overdue ? 'bg-red-50/80 hover:bg-red-50' : undefined}>
+              <TableCell className='tabular-nums text-muted-foreground'>{rowSerialNumber(index)}</TableCell>
               <TableCell className='font-medium'>{row.job_no}</TableCell>
               <TableCell>{row.customer_name}</TableCell>
               <TableCell>{row.truck_number || '—'}</TableCell>
@@ -699,6 +716,14 @@ export function CustomsJobs() {
                   <DropdownMenuItem onClick={() => void handleExport('pdf')}>PDF</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <Button
+                type='button'
+                variant={showFilters ? 'secondary' : 'outline'}
+                onClick={() => setShowFilters((prev) => !prev)}
+              >
+                <Filter className='mr-2 h-4 w-4' />
+                Filters
+              </Button>
               <Button type='button' onClick={() => void navigate({ to: '/customs/jobs/create' })}>
                 <Plus className='mr-2 h-4 w-4' />
                 Create Job
@@ -707,6 +732,7 @@ export function CustomsJobs() {
           </div>
         </CardHeader>
         <CardContent className='space-y-4'>
+          {showFilters ? (
           <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
             <div className='relative md:col-span-2 xl:col-span-4'>
               <Search className='absolute left-2 top-2.5 h-4 w-4 text-muted-foreground' />
@@ -765,6 +791,7 @@ export function CustomsJobs() {
               <Input value={filters.bill_of_lading} onChange={(e) => updateFilter('bill_of_lading', e.target.value)} />
             </div>
           </div>
+          ) : null}
 
           <Tabs value={activeTab} onValueChange={handleTabChange}>
             <TabsList className='flex h-auto flex-wrap'>

@@ -604,9 +604,20 @@ function LoanDispatchTable({ rows }: { rows: GoodsDispatchedReportRow[] }) {
             </TableCell>
             <TableCell className='align-top text-sm'>
               <div>{r.invoice_no || '—'}</div>
+              {r.bill_net_amount != null || r.bill_paid_amount != null ? (
+                <div className='mt-1 tabular-nums text-xs text-muted-foreground'>
+                  {r.bill_net_amount != null ? <>Net {r.bill_net_amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</> : null}
+                  {r.bill_paid_amount != null ? (
+                    <>
+                      {r.bill_net_amount != null ? ' · ' : ''}
+                      Paid {r.bill_paid_amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
               {r.bill_balance != null ? (
                 <div className='mt-1 tabular-nums text-muted-foreground'>
-                  Balance:{' '}
+                  Outstanding:{' '}
                   {r.bill_balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} USD
                 </div>
               ) : null}
